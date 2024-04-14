@@ -1,29 +1,35 @@
 local http = require("http")
 local html = require("html")
 
+-- get mirror
 local PYTHON_URL = "https://www.python.org/ftp/python/"
+local VFOX_PYTHON_MIRROR = os.getenv("VFOX_PYTHON_MIRROR")
+if VFOX_PYTHON_MIRROR then
+    PYTHON_URL = VFOX_PYTHON_MIRROR
+    os.setenv("PYTHON_BUILD_MIRROR_URL_SKIP_CHECKSUM", 1)
+    os.setenv("PYTHON_BUILD_MIRROR_URL", PYTHON_URL)
+end
 
-local DOWNLOAD_SOURCE = {
-    --- TODO support zip or web-based installers
-    WEB_BASED = "https://www.python.org/ftp/python/%s/python-%s%s-webinstall.exe",
-    ZIP = "https://www.python.org/ftp/python/%s/python-%s-embed-%s.zip",
-    MSI = "",
-    --- Currently only exe installers are supported
-    EXE = "https://www.python.org/ftp/python/%s/python-%s%s.exe",
-    SOURCE = "https://www.python.org/ftp/python/%s/Python-%s.tar.xz"
+-- request headers
+local REQUEST_HEADERS = {
+    ["User-Agent"] = "vfox"
 }
 
-function getMirror()
-    local mirror = os.getenv("VFOX_PYTHON_MIRROR")
-    if mirror == nil then
-        return "https://www.python.org/ftp/python/"
-    end
-    return mirror
-end
+-- download source
+local DOWNLOAD_SOURCE = {
+    --- TODO support zip or web-based installers
+    WEB_BASED = PYTHON_URL .. "%s/python-%s%s-webinstall.exe",
+    ZIP = PYTHON_URL .. "%s/python-%s-embed-%s.zip",
+    MSI = "",
+    --- Currently only exe installers are supported
+    EXE = PYTHON_URL .. "%s/python-%s%s.exe",
+    SOURCE = PYTHON_URL .. "%s/Python-%s.tar.xz"
+}
 
 function checkIsReleaseVersion(version)
     local resp, err = http.head({
-        url = DOWNLOAD_SOURCE.SOURCE:format(version, version)
+        url = DOWNLOAD_SOURCE.SOURCE:format(version, version),
+        headers = REQUEST_HEADERS
     })
     if err ~= nil or resp.status_code ~= 200 then
         return false
@@ -80,7 +86,8 @@ function checkAvailableReleaseForWindows(version)
     --- TODO support zip or web-based installers
     local url = DOWNLOAD_SOURCE.EXE:format(version, version, archType)
     local resp, err = http.head({
-        url = url
+        url = url,
+        headers = REQUEST_HEADERS
     })
     if err ~= nil or resp.status_code ~= 200 then
         error("No available installer found for current version")
@@ -89,7 +96,8 @@ function checkAvailableReleaseForWindows(version)
 end
 function parseVersion()
     local resp, err = http.get({
-        url = PYTHON_URL
+        url = PYTHON_URL,
+        headers = REQUEST_HEADERS
     })
     if err ~= nil or resp.status_code ~= 200 then
         error("paring release info failed." .. err)
