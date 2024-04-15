@@ -26,6 +26,7 @@ PLUGIN.minRuntimeVersion = "0.3.0"
 PLUGIN.notes = {
     "Mirror Setting:",
     "You can use VFOX_PYTHON_MIRROR environment variable to set mirror.",
+    "eg: `export VFOX_PYTHON_MIRROR=https://mirrors.huaweicloud.com/python/`",
     " ",
     "Others:",
     "For Windows, only support >=3.5.0, but no restrictions for unix-like."
