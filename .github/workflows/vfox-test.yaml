@@ -1,0 +1,118 @@
+name: vfox-test
+
+on:
+  workflow_call:
+  workflow_dispatch:
+  pull_request:
+    types: ["opened", "reopened", "synchronize"]
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  test-on-linux:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python-version: [3.12.2]
+        mirror: ["", "https://mirrors.huaweicloud.com/python/"]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Compress build files
+        uses: thedoctor0/zip-release@0.7.6
+        with:
+          type: "zip"
+          directory: "./"
+          filename: "release.zip"
+          exclusions: "*.git* manifest.json"
+
+      - name: Install vfox
+        shell: bash
+        run: |
+          curl -sSL https://raw.githubusercontent.com/version-fox/vfox/main/install.sh | bash
+          vfox --version
+
+      - name: Install plugin
+        run: |
+          vfox add --source ./release.zip
+
+      - name: Install Python ${{ matrix.python-version }}
+        env:
+          VFOX_PYTHON_MIRROR: ${{ matrix.mirror }}
+        run: |
+          eval "$(vfox activate bash)"
+          vfox install python@${{ matrix.python-version }}
+          vfox use -g python@${{ matrix.python-version }}
+          vfox current
+
+      - name: Check python ${{ matrix.python-version }}
+        run: |
+          eval "$(vfox activate bash)"
+          python_version=$(python -c 'import sys;print(sys.version, sys.path)')
+          echo $python_version
+
+          if [[ ! $python_version == ${{ matrix.python-version }}* ]]; then
+              exit 1
+          fi
+
+  test-on-windows:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [windows-latest]
+        python-version: [3.12.2]
+        mirror: [""]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Compress build files
+        uses: thedoctor0/zip-release@0.7.6
+        with:
+          type: "zip"
+          directory: "./"
+          filename: "release.zip"
+          exclusions: "*.git* manifest.json"
+
+      - name: Install vfox
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          iex "& {$(irm get.scoop.sh)} -RunAsAdmin"
+          Join-Path (Resolve-Path ~).Path "scoop\shims" >> $Env:GITHUB_PATH
+          scoop install vfox
+          vfox --version
+
+      - name: Install plugin
+        if: runner.os == 'Windows'
+        run: |
+          Invoke-Expression "$(vfox activate pwsh)"
+          vfox add --source ./release.zip
+
+      - name: Install Python ${{ matrix.python-version }}
+        if: runner.os == 'Windows'
+        env:
+          VFOX_PYTHON_MIRROR: ${{ matrix.mirror }}
+        run: |
+          Invoke-Expression "$(vfox activate pwsh)"
+          vfox install python@${{ matrix.python-version }}
+          vfox use -g python@${{ matrix.python-version }}
+          vfox current
+
+      - name: Check python ${{ matrix.python-version }}
+        if: runner.os == 'Windows'
+        run: |
+          Invoke-Expression "$(vfox activate pwsh)"
+          $python_version = $(python -c 'import sys;print(sys.version, sys.path)')
+          Write-Output $python_version
+
+          if ($python_version -notlike "${{ matrix.python-version }}*") {
+              exit 1
+          }
