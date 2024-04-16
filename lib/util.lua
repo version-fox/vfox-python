@@ -39,10 +39,31 @@ end
 function windowsCompile(ctx)
     local sdkInfo = ctx.sdkInfo['python']
     local path = sdkInfo.path
-    local filename = sdkInfo.note
+    local version = sdkInfo.version
+    local url, filename = checkAvailableReleaseForWindows(version)
+    
     --- Attention system difference
     local qInstallFile = path .. "\\" .. filename
     local qInstallPath = path
+
+    print("Downloading installer")
+    print("from:\t" .. url)
+    print("to:\t" .. qInstallFile)
+    local resp, err = http.get({
+        url = url,
+        headers = REQUEST_HEADERS
+    })
+
+    if err ~= nil or resp.status_code ~= 200 then
+        error("Downloading installer failed")
+    else
+        local file = io.open(qInstallFile, "w")
+        file:write(resp.body)
+        local size = file:seek("end")
+        file:close()
+        print("size:\t" .. size .. " bytes")
+    end
+
     --local exitCode = os.execute('msiexec /quiet /a "' .. qInstallFile .. '" TargetDir="' .. qInstallPath .. '"')
     print("Installing python, please wait patiently for a while, about two minutes.")
     local exitCode = os.execute(qInstallFile .. ' /quiet InstallAllUsers=0 PrependPath=0 TargetDir=' .. qInstallPath)
