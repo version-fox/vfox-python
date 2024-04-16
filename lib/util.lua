@@ -44,6 +44,7 @@ function windowsCompile(ctx)
     
     --- Attention system difference
     local qInstallFile = path .. "\\" .. filename
+    local qInstallLog = path .. "\\install.log"
     local qInstallPath = path
 
     print("Downloading installer")
@@ -66,12 +67,24 @@ function windowsCompile(ctx)
 
     --local exitCode = os.execute('msiexec /quiet /a "' .. qInstallFile .. '" TargetDir="' .. qInstallPath .. '"')
     print("Installing python, please wait patiently for a while, about two minutes.")
-    local exitCode = os.execute(qInstallFile .. ' /quiet InstallAllUsers=0 PrependPath=0 TargetDir=' .. qInstallPath)
+    local exitCode = os.execute(qInstallFile .. ' /quiet InstallAllUsers=0 PrependPath=0 TargetDir=' .. qInstallPath .. ' /log ' .. qInstallLog)
     if exitCode ~= 0 then
-        error("error installing python")
+        -- show install log
+        local logFile = io.open(qInstallLog, "r")
+        if logFile then
+            local contents = logFile:read("*a")
+            logFile:close()
+            print("=====================================")
+            print(qInstallLog)
+            print(contents)
+            print("=====================================")
+            print("Please uninstall python manually and try again.")
+        end
+        error("Error installing python, exitCode=" .. exitCode )
+    else
+        os.remove(qInstallLog)
+        os.remove(qInstallFile)
     end
-    print("Cleaning up ...")
-    os.remove(qInstallFile)
 end
 function linuxCompile(ctx)
     local sdkInfo = ctx.sdkInfo['python']
