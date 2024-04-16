@@ -67,7 +67,7 @@ jobs:
       matrix:
         os: [windows-latest]
         python-version: [3.12.2]
-        mirror: [""]
+        mirror: ["", "https://mirrors.huaweicloud.com/python/"]
 
     steps:
       - name: Checkout

@@ -8,16 +8,8 @@ function PLUGIN:PreInstall(ctx)
         error("The current version is not released")
         return
     end
-    if OS_TYPE == "windows" then
-        local url, filename = checkAvailableReleaseForWindows(version)
-        return {
-            version = version,
-            url = url,
-            note = filename
-        }
-    else
-        return {
-            version = version,
-        }
-    end
+    
+    return {
+       version = version,
+    }
 end
