@@ -36,18 +36,20 @@ function checkIsReleaseVersion(version)
     end
     return true
 end
+
 function windowsCompile(ctx)
     local sdkInfo = ctx.sdkInfo['python']
     local path = sdkInfo.path
     local version = sdkInfo.version
-    local url, filename = checkAvailableReleaseForWindows(version)
-    
+    local url, filename = getReleaseForWindows(version)
+
     --- Attention system difference
     local qInstallFile = path .. "\\" .. filename
-    local qInstallLog = path .. "\\install.log"
     local qInstallPath = path
+    local msiPath = path .. '\\AttachedContainer'
 
-    print("Downloading installer")
+    -- download
+    print("Downloading installer...")
     print("from:\t" .. url)
     print("to:\t" .. qInstallFile)
     local resp, err = http.get({
@@ -65,27 +67,95 @@ function windowsCompile(ctx)
         print("size:\t" .. size .. " bytes")
     end
 
-    --local exitCode = os.execute('msiexec /quiet /a "' .. qInstallFile .. '" TargetDir="' .. qInstallPath .. '"')
-    print("Installing python, please wait patiently for a while, about two minutes.")
-    local exitCode = os.execute(qInstallFile .. ' /quiet InstallAllUsers=0 PrependPath=0 TargetDir=' .. qInstallPath .. ' /log ' .. qInstallLog)
+    -- Extract
+    print("Extracting installer...")
+    local wixBin = RUNTIME.pluginDirPath .. '\\bin\\WiX\\dark.exe'
+    local command = wixBin .. " -x " .. qInstallPath .. '\\ ' .. qInstallFile .. ' > NUL'
+    local exitCode = os.execute(command)
     if exitCode ~= 0 then
-        -- show install log
-        local logFile = io.open(qInstallLog, "r")
-        if logFile then
-            local contents = logFile:read("*a")
-            logFile:close()
-            print("=====================================")
-            print(qInstallLog)
-            print(contents)
-            print("=====================================")
-            print("Please uninstall python manually and try again.")
-        end
-        error("Error installing python, exitCode=" .. exitCode )
-    else
-        os.remove(qInstallLog)
-        os.remove(qInstallFile)
+        error("Extract failed")
     end
+
+    -- Cleaning up ...
+    print("Cleaning installer...")
+    os.remove(qInstallFile)
+    local files = {'appendpath.msi', 'launcher.msi', 'path.msi', 'pip.msi'}
+    for _, file in ipairs(files) do
+        os.remove(msiPath .. '\\' .. file)
+    end
+
+    -- Install msi
+    print("Installing python...")
+    local files = io.popen("dir /b " .. msiPath):lines()
+    for file in files do
+        if file:match("%.msi$") then
+            local command = "msiexec /quiet /a " .. msiPath .. '\\' .. file .. " TargetDir=" .. qInstallPath
+            local exitCode = os.execute(command)
+            if exitCode ~= 0 then
+                error("Install msi failed: " .. file)
+            end
+            os.remove(qInstallPath .. '\\' .. file)
+        end
+    end
+
+    -- Install pip
+    print("Installing pip...")
+    local ensurepipPath = qInstallPath .. "\\Lib\\ensurepip\\__init__.py"
+    local file = io.open(ensurepipPath, "r")
+    if file then
+        local command = qInstallPath .. '\\python -E -s -m ensurepip -U --default-pip > NUL'
+        local exitCode = os.execute(command)
+        if exitCode ~= 0 then
+            error("Install pip failed. exit " .. exitCode)
+        end
+    end
+
+    -- Define paths for executables based on installation path
+    local pythonExePath = qInstallPath .. "\\python.exe"
+    local pythonwExePath = qInstallPath .. "\\pythonw.exe"
+    local venvlauncherExePath = qInstallPath .. "\\Lib\\venv\\scripts\\nt\\python.exe"
+
+    local pattern = "(%d+)%.(%d+)"
+    local major, minor = string.match(version, pattern)
+    local majorMinor = major .. minor
+    local majorDotMinor = major .. "." .. minor
+
+    -- Copy Python executables with versioned names
+    -- python.exe
+    local files = {qInstallPath .. "\\python" .. major .. ".exe", qInstallPath .. "\\python" .. majorMinor .. ".exe",
+                   qInstallPath .. "\\python" .. majorDotMinor .. ".exe"}
+    for _, file in ipairs(files) do
+        local command = 'copy /y ' .. pythonExePath .. ' ' .. file .. ' > NUL'
+        os.execute(command)
+    end
+
+    -- pythonw.exe
+    local files = {qInstallPath .. "\\pythonw" .. major .. ".exe", qInstallPath .. "\\pythonw" .. majorMinor .. ".exe",
+                   qInstallPath .. "\\pythonw" .. majorDotMinor .. ".exe"}
+    for _, file in ipairs(files) do
+        local command = 'copy /y ' .. pythonwExePath .. ' ' .. file .. ' > NUL'
+        os.execute(command)
+    end
+
+    -- Check if venvlauncher exists
+    local file = io.open(venvlauncherExePath, "r")
+    if file then
+        io.close(file)
+        -- python.exe
+        local files = {qInstallPath .. "\\Lib\\venv\\scripts\\nt\\python" .. major .. ".exe",
+                       qInstallPath .. "\\Lib\\venv\\scripts\\nt\\python" .. majorMinor .. ".exe",
+                       qInstallPath .. "\\Lib\\venv\\scripts\\nt\\python" .. majorDotMinor .. ".exe",
+                       qInstallPath .. "\\Lib\\venv\\scripts\\nt\\pythonw" .. major .. ".exe",
+                       qInstallPath .. "\\Lib\\venv\\scripts\\nt\\pythonw" .. majorMinor .. ".exe",
+                       qInstallPath .. "\\Lib\\venv\\scripts\\nt\\pythonw" .. majorDotMinor .. ".exe"}
+        for _, file in ipairs(files) do
+            local command = 'copy /y ' .. venvlauncherExePath .. ' ' .. file .. ' > NUL'
+            os.execute(command)
+        end
+    end
+
 end
+
 function linuxCompile(ctx)
     local sdkInfo = ctx.sdkInfo['python']
     local path = sdkInfo.path
@@ -109,7 +179,7 @@ function linuxCompile(ctx)
         error("remove build tool failed")
     end
 end
-function checkAvailableReleaseForWindows(version)
+function getReleaseForWindows(version)
     local archType = RUNTIME.archType
     if archType == "386" then
         archType = ""
@@ -147,13 +217,13 @@ function parseVersion()
                 if compare_versions(vn, "3.5.0") >= 0 then
                     table.insert(result, {
                         version = string.sub(href, 1, -2),
-                        note = "",
+                        note = ""
                     })
                 end
             else
                 table.insert(result, {
                     version = vn,
-                    note = "",
+                    note = ""
                 })
             end
         end
