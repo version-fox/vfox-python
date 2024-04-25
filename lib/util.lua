@@ -52,19 +52,13 @@ function windowsCompile(ctx)
     print("Downloading installer...")
     print("from:\t" .. url)
     print("to:\t" .. qInstallFile)
-    local resp, err = http.get({
+    local err = http.download_file({
         url = url,
         headers = REQUEST_HEADERS
-    })
+    }, qInstallFile)
 
-    if err ~= nil or resp.status_code ~= 200 then
+    if err ~= nil then
         error("Downloading installer failed")
-    else
-        local file = io.open(qInstallFile, "w")
-        file:write(resp.body)
-        local size = file:seek("end")
-        file:close()
-        print("size:\t" .. size .. " bytes")
     end
 
     -- Extract
