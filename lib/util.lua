@@ -97,6 +97,7 @@ function windowsCompile(ctx)
     local ensurepipPath = qInstallPath .. "\\Lib\\ensurepip\\__init__.py"
     local file = io.open(ensurepipPath, "r")
     if file then
+        io.close(file)
         local command = qInstallPath .. '\\python -E -s -m ensurepip -U --default-pip > NUL'
         local exitCode = os.execute(command)
         if exitCode ~= 0 then
