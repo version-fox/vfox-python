@@ -17,32 +17,89 @@ local REQUEST_HEADERS = {
 
 -- download source
 local DOWNLOAD_SOURCE = {
-    --- TODO support zip or web-based installers
-    WEB_BASED = PYTHON_URL .. "%s/python-%s%s-webinstall.exe",
-    ZIP = PYTHON_URL .. "%s/python-%s-embed-%s.zip",
-    MSI = "",
-    --- Currently only exe installers are supported
+    MSI = PYTHON_URL .. "%s/python-%s.%s.msi",
     EXE = PYTHON_URL .. "%s/python-%s%s.exe",
-    SOURCE = PYTHON_URL .. "%s/Python-%s.tar.xz"
+    SOURCE = PYTHON_URL .. "%s/Python-%s.tar",
 }
 
 function checkIsReleaseVersion(version)
     local resp, err = http.head({
-        url = DOWNLOAD_SOURCE.SOURCE:format(version, version),
+        url = DOWNLOAD_SOURCE.SOURCE:format(version, version) .. '.xz',
         headers = REQUEST_HEADERS
     })
-    if err ~= nil or resp.status_code ~= 200 then
-        return false
+    if err == nil and resp.status_code == 200 then
+        return true
     end
-    return true
+
+    local resp, err = http.head({
+        url = DOWNLOAD_SOURCE.SOURCE:format(version, version) .. '.bz2',
+        headers = REQUEST_HEADERS
+    })
+    if err == nil and resp.status_code == 200 then
+        return true
+    end
+
+    return false
 end
 
-function windowsCompile(ctx)
+function windowsInstall(ctx)
     local sdkInfo = ctx.sdkInfo['python']
     local path = sdkInfo.path
     local version = sdkInfo.version
-    local url, filename = getReleaseForWindows(version)
+    local url = getReleaseForWindows(version)
+    local filename = url:match("[^/\\]+$")
+    if string.sub(filename, -3) == "msi" then
+        windowsInstallMsi(path, url, version, filename)
+    elseif string.sub(filename, -3) == "exe" then
+        windowsInstallExe(path, url, version, filename)
+    end
 
+end
+
+function windowsInstallMsi(path, url, version, filename)
+    -- WARNNING: 
+    -- The msi installer for python 2.x must be downloaded to another directory
+    -- it cannot be installed in the current directory.
+    local qInstallFile = RUNTIME.pluginDirPath .. "\\" .. filename
+    local qInstallPath = path
+
+    -- download
+    print("Downloading installer...")
+    print("from:\t" .. url)
+    print("to:\t" .. qInstallFile)
+    local err = http.download_file({
+        url = url,
+        headers = REQUEST_HEADERS
+    }, qInstallFile)
+
+    if err ~= nil then
+        error("Downloading installer failed")
+    end
+
+    -- Install msi
+    print("Installing python...")
+    local command = 'msiexec /quiet /a ' .. qInstallFile .. ' TargetDir=' .. qInstallPath
+    local exitCode = os.execute(command)
+    os.remove(qInstallFile)
+    if exitCode ~= 0 then
+        error("Install msi failed: " .. qInstallFile)
+    end
+
+    -- Install pip
+    local ensurepipPath = qInstallPath .. "\\Lib\\ensurepip\\__init__.py"
+    local file = io.open(ensurepipPath, "r")
+    if file then
+        io.close(file)
+        print("Installing pip...")
+        local command = qInstallPath .. '\\python -E -s -m ensurepip -U --default-pip > NUL'
+        local exitCode = os.execute(command)
+        if exitCode ~= 0 then
+            error("Install pip failed. exit " .. exitCode)
+        end
+    end
+end
+
+function windowsInstallExe(path, url, version, filename)
     --- Attention system difference
     local qInstallFile = path .. "\\" .. filename
     local qInstallPath = path
@@ -178,20 +235,29 @@ function getReleaseForWindows(version)
     local archType = RUNTIME.archType
     if archType == "386" then
         archType = ""
-    else
-        archType = "-" .. archType
     end
-    --- Currently only exe installers are supported
-    --- TODO support zip or web-based installers
-    local url = DOWNLOAD_SOURCE.EXE:format(version, version, archType)
+
+    -- try get exe file
+    local url = DOWNLOAD_SOURCE.EXE:format(version, version, '-' .. archType)
     local resp, err = http.head({
         url = url,
         headers = REQUEST_HEADERS
     })
-    if err ~= nil or resp.status_code ~= 200 then
-        error("No available installer found for current version")
+    if err == nil and resp.status_code == 200 then
+        return url
     end
-    return url, "python-" .. version .. archType .. ".exe"
+
+    -- try get msi file
+    local url = DOWNLOAD_SOURCE.MSI:format(version, version, archType)
+    local resp, err = http.head({
+        url = url,
+        headers = REQUEST_HEADERS
+    })
+    if err == nil and resp.status_code == 200 then
+        return url
+    end
+    print("url:\t" .. url)
+    error("No available installer found for current version")
 end
 function parseVersion()
     local resp, err = http.get({
@@ -209,7 +275,7 @@ function parseVersion()
         if sn and es then
             local vn = string.sub(href, 1, -2)
             if RUNTIME.osType == "windows" then
-                if compare_versions(vn, "3.5.0") >= 0 then
+                if compare_versions(vn, "2.5.0") >= 0 then
                     table.insert(result, {
                         version = string.sub(href, 1, -2),
                         note = ""

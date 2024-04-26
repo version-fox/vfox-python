@@ -1,7 +1,7 @@
 require("util")
 function PLUGIN:PostInstall(ctx)
     if OS_TYPE == "windows" then
-        return windowsCompile(ctx)
+        return windowsInstall(ctx)
     else
         return linuxCompile(ctx)
     end
