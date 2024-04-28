@@ -5,7 +5,7 @@ PLUGIN = {}
 --- Plugin name
 PLUGIN.name = "python"
 --- Plugin version
-PLUGIN.version = "0.2.0"
+PLUGIN.version = "0.3.0"
 --- Plugin homepage
 PLUGIN.homepage = "https://github.com/version-fox/vfox-python"
 --- Plugin license, please choose a correct license according to your needs.
@@ -28,6 +28,4 @@ PLUGIN.notes = {
     "You can use VFOX_PYTHON_MIRROR environment variable to set mirror.",
     "eg: `export VFOX_PYTHON_MIRROR=https://mirrors.huaweicloud.com/python/`",
     " ",
-    "Others:",
-    "For Windows, only support >=3.5.0, but no restrictions for unix-like."
 }
