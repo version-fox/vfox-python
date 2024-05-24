@@ -214,7 +214,7 @@ function linuxCompile(ctx)
     local version = sdkInfo.version
     local pyenv_url = "https://github.com/pyenv/pyenv.git"
     local dest_pyenv_path = ctx.rootPath .. "/pyenv"
-    local status = os.execute("git clone " .. pyenv_url .. " " .. dest_pyenv_path)
+    local status = os.execute("git clone --depth 1 " .. pyenv_url .. " " .. dest_pyenv_path)
     if status ~= 0 then
         error("git clone failed")
     end
