@@ -211,13 +211,19 @@ function windowsInstallExe(path, url, version, filename)
 
 end
 
+local pyenvBranch = ""
+
 function linuxCompile(ctx)
     local sdkInfo = ctx.sdkInfo['python']
     local path = sdkInfo.path
     local version = sdkInfo.version
     local pyenv_url = "https://github.com/pyenv/pyenv.git"
     local dest_pyenv_path = ctx.rootPath .. "/pyenv"
-    local status = os.execute("git clone --depth 1 " .. pyenv_url .. " " .. dest_pyenv_path)
+    local branch = ""
+    if pyenvBranch ~= "" then
+        branch = "--branch " .. pyenvBranch
+    end
+    local status = os.execute("git -c advice.detachedHead=false clone --depth 1 " .. branch .. " "  .. pyenv_url .. " " .. dest_pyenv_path)
     if status ~= 0 then
         error("git clone failed")
     end
@@ -343,6 +349,10 @@ function parseVersionFromPyenv()
     local jsonObj = json.decode(resp.body)
 
     local tagName = jsonObj.tagName;
+    if tagName then
+        pyenvBranch = tagName;
+    end
+
     local versions = jsonObj.versions;
     
     local numericVersions = {}
