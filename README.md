@@ -1,6 +1,6 @@
 # vfox-python
-Python plugin for [vfox](https://vfox.lhan.me/).
 
+Python plugin for [vfox](https://vfox.lhan.me/).
 
 ## Install
 
@@ -9,6 +9,8 @@ After installing [vfox](https://github.com/version-fox/vfox), install the plugin
 ```bash
 vfox add python
 ```
+
+if you want install the free-threaded mode of python, you can select the version ends with `t`, like `v3.14.0a4t`.
 
 ## Mirror
 
