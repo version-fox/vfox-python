@@ -1,5 +1,6 @@
 local http = require("http")
 local html = require("html")
+local json = require("json")
 
 -- get mirror
 local PYTHON_URL = "https://www.python.org/ftp/python/"
@@ -9,6 +10,8 @@ if VFOX_PYTHON_MIRROR then
     os.setenv("PYTHON_BUILD_MIRROR_URL_SKIP_CHECKSUM", 1)
     os.setenv("PYTHON_BUILD_MIRROR_URL", PYTHON_URL)
 end
+
+local version_vault_url = "https://version-vault.cdn.dog/pyenv-versions"
 
 -- request headers
 local REQUEST_HEADERS = {
@@ -231,6 +234,7 @@ function linuxCompile(ctx)
         error("remove build tool failed")
     end
 end
+
 function getReleaseForWindows(version)
     local archType = RUNTIME.archType
     if archType == "386" then
@@ -259,7 +263,14 @@ function getReleaseForWindows(version)
     print("url:\t" .. url)
     error("No available installer found for current version")
 end
+
+function fixHeaders() 
+    REQUEST_HEADERS["User-Agent"] = "vfox v" .. RUNTIME.version;
+end
+
 function parseVersion()
+    fixHeaders()
+
     local resp, err = http.get({
         url = PYTHON_URL,
         headers = REQUEST_HEADERS
@@ -317,4 +328,55 @@ function compare_versions(v1, v2)
     end
 
     return 0
+end
+
+function parseVersionFromPyenv()
+    fixHeaders()
+    local resp, err = http.get({
+        url = version_vault_url,
+        headers = REQUEST_HEADERS
+    })
+    if err ~= nil or resp.status_code ~= 200 then
+        error("paring release info failed." .. err)
+    end
+    local result = {}
+    local jsonObj = json.decode(resp.body)
+
+    local tagName = jsonObj.tagName;
+    local versions = jsonObj.versions;
+    
+    local numericVersions = {}
+    local namedVersions = {}
+    
+    for _, version in ipairs(versions) do
+        if string.match(version, "^%d") then
+            table.insert(numericVersions, version)
+        else
+            table.insert(namedVersions, version)
+        end
+    end
+    
+    table.sort(numericVersions, function(a, b)
+        return compare_versions(a, b) > 0
+    end)
+    
+    table.sort(namedVersions, function(a, b)
+        return compare_versions(a, b) > 0
+    end)
+    
+    for _, version in ipairs(numericVersions) do
+        table.insert(result, {
+            version = version,
+            note = ""
+        })
+    end
+    
+    for _, version in ipairs(namedVersions) do
+        table.insert(result, {
+            version = version,
+            note = ""
+        })
+    end
+    
+    return result
 end
