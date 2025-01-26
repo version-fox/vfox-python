@@ -35,7 +35,9 @@ jobs:
       - name: Install vfox
         shell: bash
         run: |
-          curl -sSL https://raw.githubusercontent.com/version-fox/vfox/main/install.sh | bash
+          for i in {1..10}; do
+            curl -sSL https://raw.githubusercontent.com/version-fox/vfox/main/install.sh | bash && break || sleep 5;
+          done
           vfox --version
 
       - name: Install plugin
