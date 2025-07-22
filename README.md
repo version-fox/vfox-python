@@ -1,6 +1,6 @@
 # vfox-python
 
-Python plugin for [vfox](https://vfox.lhan.me/).
+Python plugin for [vfox](https://vfox.dev/).
 
 ## Install
 
