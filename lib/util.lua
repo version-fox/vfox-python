@@ -11,7 +11,7 @@ if VFOX_PYTHON_MIRROR then
     os.setenv("PYTHON_BUILD_MIRROR_URL", PYTHON_URL)
 end
 
-local version_vault_url = "https://version-vault.cdn.dog/pyenv-versions"
+local version_vault_url = "https://version-vault.cdn.dog/python/pyenv"
 
 -- request headers
 local REQUEST_HEADERS = {
