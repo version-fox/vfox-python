@@ -6,7 +6,7 @@ function PLUGIN:PreInstall(ctx)
         version = self:Available({})[1].version
     end
 
-    if OS_TYPE == "windows" and not checkIsReleaseVersion(version) then
+    if OS_TYPE == "windows" and not useUvBuild() and not checkIsReleaseVersion(version) then
         error("The current version is not released")
         return
     end

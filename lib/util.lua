@@ -12,11 +12,14 @@ if VFOX_PYTHON_MIRROR then
 end
 
 local version_vault_url = "https://vault.vfox.dev/python/pyenv"
+local uv_build_vault_url = "https://vault.vfox.dev/python/uv-build"
 
 -- request headers
 local REQUEST_HEADERS = {
     ["User-Agent"] = "vfox"
 }
+
+local UV_BUILD_ENV = "VFOX_PYTHON_USE_UV_BUILD"
 
 -- download source
 local DOWNLOAD_SOURCE = {
@@ -213,6 +216,133 @@ end
 
 local pyenvBranch = ""
 
+function useUvBuild()
+    local value = os.getenv(UV_BUILD_ENV)
+    if value == nil then
+        return false
+    end
+    value = string.lower(value)
+    return value == "1" or value == "true" or value == "yes" or value == "on"
+end
+
+local function shellQuote(value)
+    if RUNTIME.osType == "windows" or OS_TYPE == "windows" then
+        if string.find(value, '"', 1, true) then
+            error("Path contains unsupported quote character: " .. value)
+        end
+        return '"' .. value .. '"'
+    end
+
+    return "'" .. string.gsub(value, "'", "'\\''") .. "'"
+end
+
+local function startsWith(value, prefix)
+    return string.sub(value, 1, string.len(prefix)) == prefix
+end
+
+local function runtimeOs()
+    local osType = RUNTIME.osType or OS_TYPE
+    osType = string.lower(osType or "")
+    if osType == "darwin" or osType == "macos" then
+        return "darwin"
+    elseif osType == "windows" then
+        return "windows"
+    elseif osType == "linux" then
+        return "linux"
+    end
+    return osType
+end
+
+local function runtimeArch()
+    local archType = string.lower(RUNTIME.archType or "")
+    if archType == "amd64" or archType == "x64" or archType == "x86_64" then
+        return "x86_64"
+    elseif archType == "arm64" or archType == "aarch64" then
+        return "aarch64"
+    elseif archType == "armv7" or archType == "armv7l" then
+        return "armv7"
+    elseif archType == "386" or archType == "i386" or archType == "x86" then
+        return "x86"
+    end
+    return archType
+end
+
+local function runtimeLibc(osType)
+    local configuredLibc = os.getenv("VFOX_PYTHON_UV_LIBC")
+    if configuredLibc and configuredLibc ~= "" then
+        return configuredLibc
+    end
+
+    if osType ~= "linux" then
+        return "none"
+    end
+
+    local handle = io.popen("ldd --version 2>&1")
+    if handle then
+        local output = handle:read("*a") or ""
+        handle:close()
+        if string.find(string.lower(output), "musl", 1, true) then
+            return "musl"
+        end
+    end
+
+    return "gnu"
+end
+
+local function buildUvBuildUrl()
+    local osType = runtimeOs()
+    local archType = runtimeArch()
+    local libc = runtimeLibc(osType)
+    local query = "?os=" .. osType .. "&arch=" .. archType .. "&libc=" .. libc
+    return uv_build_vault_url .. query
+end
+
+local function uvBuildVersion(build)
+    if build.variant == "freethreaded" then
+        return build.version .. "t"
+    end
+    return build.version
+end
+
+local function isSupportedUvBuild(build)
+    if build.name ~= "cpython" then
+        return false
+    end
+    if build.arch and build.arch.variant ~= nil then
+        return false
+    end
+    if build.variant ~= nil and build.variant ~= "freethreaded" then
+        return false
+    end
+    if build.url == nil or not startsWith(build.url, "https://github.com/astral-sh/python-build-standalone/releases/download/") then
+        return false
+    end
+    return true
+end
+
+local function getUvBuilds()
+    fixHeaders()
+    local resp, err = http.get({
+        url = buildUvBuildUrl(),
+        headers = REQUEST_HEADERS
+    })
+    if err ~= nil or resp.status_code ~= 200 then
+        error("paring uv-build release info failed." .. (err or ""))
+    end
+
+    local jsonObj = json.decode(resp.body)
+    return jsonObj.versions or {}
+end
+
+local function findUvBuild(version)
+    for _, build in ipairs(getUvBuilds()) do
+        if isSupportedUvBuild(build) and uvBuildVersion(build) == version then
+            return build
+        end
+    end
+    error("No uv-build prebuilt Python found for current platform and version: " .. version)
+end
+
 function linuxCompile(ctx)
     local sdkInfo = ctx.sdkInfo['python']
     local path = sdkInfo.path
@@ -243,6 +373,39 @@ function linuxCompile(ctx)
     if status ~= 0 then
         error("remove build tool failed")
     end
+end
+
+function uvBuildInstall(ctx)
+    local sdkInfo = ctx.sdkInfo['python']
+    local path = sdkInfo.path
+    local version = sdkInfo.version
+    local build = findUvBuild(version)
+    local archivePath = path .. "/python-uv-build.tar"
+
+    print("Downloading Python uv-build archive...")
+    print("from:\t" .. build.url)
+    print("to:\t" .. archivePath)
+    local err = http.download_file({
+        url = build.url,
+        headers = REQUEST_HEADERS
+    }, archivePath)
+
+    if err ~= nil then
+        error("Downloading uv-build archive failed")
+    end
+
+    print("Extracting Python uv-build archive...")
+    local status = os.execute("tar -xf " .. shellQuote(archivePath) .. " --strip-components=1 -C " .. shellQuote(path))
+    os.remove(archivePath)
+    if status ~= 0 then
+        error("Extract uv-build archive failed")
+    end
+
+    if OS_TYPE ~= "windows" then
+        fixShebangLines(path)
+    end
+
+    print("Install Python uv-build success!")
 end
 
 function getReleaseForWindows(version)
@@ -395,6 +558,24 @@ function parseVersionFromPyenv()
         })
     end
 
+    return result
+end
+
+function parseVersionFromUvBuild()
+    local result = {}
+    local seen = {}
+    for _, build in ipairs(getUvBuilds()) do
+        if isSupportedUvBuild(build) then
+            local version = uvBuildVersion(build)
+            if not seen[version] then
+                table.insert(result, {
+                    version = version,
+                    note = ""
+                })
+                seen[version] = true
+            end
+        end
+    end
     return result
 end
 
