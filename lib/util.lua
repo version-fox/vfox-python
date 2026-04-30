@@ -13,7 +13,6 @@ end
 
 local version_vault_url = "https://vault.vfox.dev/python/pyenv"
 local uv_build_vault_url = "https://vault.vfox.dev/python/uv-build"
-local UV_BUILD_DOWNLOAD_PREFIX = "https://github.com/astral-sh/python-build-standalone/releases/download/"
 
 -- request headers
 local REQUEST_HEADERS = {
@@ -21,6 +20,7 @@ local REQUEST_HEADERS = {
 }
 
 local UV_BUILD_ENV = "VFOX_PYTHON_USE_UV_BUILD"
+local UV_BUILD_MIRROR_ENV = "VFOX_PYTHON_UV_BUILD_MIRROR"
 
 -- download source
 local DOWNLOAD_SOURCE = {
@@ -245,6 +245,14 @@ local function startsWith(value, prefix)
     return string.sub(value, 1, string.len(prefix)) == prefix
 end
 
+local function trimTrailingSlash(value)
+    return string.gsub(value, "/+$", "")
+end
+
+local function isHttpsUrl(value)
+    return type(value) == "string" and startsWith(value, "https://") and not string.find(value, "[\r\n%z]")
+end
+
 local function startsWithPath(value, prefix)
     if value == prefix then
         return true
@@ -337,10 +345,27 @@ local function isSupportedUvBuild(build)
     if build.variant ~= nil and build.variant ~= "freethreaded" then
         return false
     end
-    if build.url == nil or not startsWith(build.url, UV_BUILD_DOWNLOAD_PREFIX) then
+    if not isHttpsUrl(build.url) then
         return false
     end
     return true
+end
+
+local function uvBuildDownloadUrl(build)
+    local mirror = os.getenv(UV_BUILD_MIRROR_ENV)
+    if mirror == nil or mirror == "" then
+        return build.url
+    end
+    if not isHttpsUrl(mirror) then
+        error(UV_BUILD_MIRROR_ENV .. " must be an https URL")
+    end
+
+    local release, filename = string.match(build.url, "/releases/download/([^/]+)/([^/]+)$")
+    if release == nil or filename == nil then
+        error("Unable to rewrite uv-build download URL for mirror: " .. build.url)
+    end
+
+    return trimTrailingSlash(mirror) .. "/" .. release .. "/" .. filename
 end
 
 local function getUvBuilds(osType, archType, libc)
@@ -428,6 +453,7 @@ function uvBuildInstall(ctx)
     local path = sdkInfo.path
     local version = sdkInfo.version
     local build = findUvBuild(version)
+    local downloadUrl = uvBuildDownloadUrl(build)
     local archivePath = path .. "/python-uv-build.tar"
 
     if not ctx.rootPath or ctx.rootPath == "" then
@@ -438,10 +464,10 @@ function uvBuildInstall(ctx)
     end
 
     print("Downloading Python uv-build archive...")
-    print("from:\t" .. build.url)
+    print("from:\t" .. downloadUrl)
     print("to:\t" .. archivePath)
     local err = http.download_file({
-        url = build.url,
+        url = downloadUrl,
         headers = REQUEST_HEADERS
     }, archivePath)
 

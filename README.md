@@ -28,3 +28,10 @@ vfox vault uv-build endpoint instead of building from pyenv/python-build.
 
 On Linux, libc is detected automatically. Set `VFOX_PYTHON_UV_LIBC=gnu` or
 `VFOX_PYTHON_UV_LIBC=musl` to override detection.
+
+Set `VFOX_PYTHON_UV_BUILD_MIRROR` to download uv-build archives from a mirror.
+For example:
+
+```bash
+export VFOX_PYTHON_UV_BUILD_MIRROR=https://registry.npmmirror.com/-/binary/python-build-standalone/
+```
