@@ -343,6 +343,28 @@ local function findUvBuild(version)
     error("No uv-build prebuilt Python found for current platform and version: " .. version)
 end
 
+local function pathExists(path)
+    local file = io.open(path, "r")
+    if file then
+        file:close()
+        return true
+    end
+    return false
+end
+
+function resolvePythonInstallPath(installPath, version)
+    if pathExists(installPath .. "/bin") or pathExists(installPath .. "\\python.exe") then
+        return installPath
+    end
+
+    local uvBuildPath = installPath .. "/python-" .. version
+    if pathExists(uvBuildPath .. "/bin") or pathExists(uvBuildPath .. "\\python.exe") then
+        return uvBuildPath
+    end
+
+    return installPath
+end
+
 function linuxCompile(ctx)
     local sdkInfo = ctx.sdkInfo['python']
     local path = sdkInfo.path

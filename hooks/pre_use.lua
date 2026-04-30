@@ -34,7 +34,7 @@ function PLUGIN:PreUse(ctx)
         }
     end
 
-    local installPath = targetVersion.path
+    local installPath = resolvePythonInstallPath(targetVersion.path, version)
     print("Checking Python installation at: " .. installPath)
 
     -- Perform health check
