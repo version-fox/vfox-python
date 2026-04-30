@@ -29,5 +29,6 @@ PLUGIN.notes = {
     "eg: `export VFOX_PYTHON_MIRROR=https://mirrors.huaweicloud.com/python/`",
     "Set `VFOX_PYTHON_USE_UV_BUILD=1` to use prebuilt Python archives from uv-build.",
     "Set `VFOX_PYTHON_UV_LIBC=gnu|musl` to override Linux libc detection.",
+    "Set `VFOX_PYTHON_UV_BUILD_MIRROR` to mirror uv-build archive downloads.",
     " ",
 }
