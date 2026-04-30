@@ -229,9 +229,6 @@ local function shellQuote(value)
     if string.find(value, "[\r\n%z]") then
         error("Path contains unsupported control character: " .. value)
     end
-    if string.find(value, "%.%.", 1, true) then
-        error("Path contains unsupported traversal segment: " .. value)
-    end
 
     if RUNTIME.osType == "windows" or OS_TYPE == "windows" then
         if string.find(value, '"', 1, true) then
@@ -245,6 +242,14 @@ end
 
 local function startsWith(value, prefix)
     return string.sub(value, 1, string.len(prefix)) == prefix
+end
+
+local function startsWithPath(value, prefix)
+    if value == prefix then
+        return true
+    end
+    local nextChar = string.sub(value, string.len(prefix) + 1, string.len(prefix) + 1)
+    return startsWith(value, prefix) and (nextChar == "/" or nextChar == "\\")
 end
 
 local function runtimeOs()
@@ -291,6 +296,8 @@ local function runtimeLibc(osType)
         if string.find(string.lower(output), "musl", 1, true) then
             return "musl"
         end
+    else
+        print("Could not run ldd to detect libc, defaulting to glibc")
     end
 
     return "gnu"
@@ -334,7 +341,7 @@ local function getUvBuilds()
         headers = REQUEST_HEADERS
     })
     if err ~= nil or resp.status_code ~= 200 then
-        error("parsing uv-build release info failed." .. (err or ""))
+        error("parsing uv-build release info failed: " .. (err or ""))
     end
 
     local jsonObj = json.decode(resp.body)
@@ -411,6 +418,10 @@ function uvBuildInstall(ctx)
     local build = findUvBuild(version)
     local archivePath = path .. "/python-uv-build.tar"
 
+    if ctx.rootPath and not startsWithPath(path, ctx.rootPath) then
+        error("Install path is outside the expected vfox root path: " .. path)
+    end
+
     print("Downloading Python uv-build archive...")
     print("from:\t" .. build.url)
     print("to:\t" .. archivePath)
@@ -430,8 +441,13 @@ function uvBuildInstall(ctx)
         error("Extract uv-build archive failed")
     end
 
+    local extractedPath = resolvePythonInstallPath(path, version)
+    if not pathExists(extractedPath .. "/bin/python") and not pathExists(extractedPath .. "\\python.exe") then
+        error("Extracted uv-build archive does not contain a Python executable")
+    end
+
     if OS_TYPE ~= "windows" then
-        fixShebangLines(path)
+        fixShebangLines(extractedPath)
     end
 
     print("Install Python uv-build success!")
