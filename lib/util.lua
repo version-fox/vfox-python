@@ -231,6 +231,9 @@ local function shellQuote(value)
     if string.find(value, "[\r\n%z]") then
         error("Path contains unsupported control character: " .. value)
     end
+    if string.find(value, "%.%.") then
+        error("Path contains unsupported traversal segment: " .. value)
+    end
     if string.find(value, "[^%w%._%-%+/\\:]") then
         error("Path contains unsupported shell character: " .. value)
     end
@@ -313,11 +316,18 @@ local function runtimeLibc(osType)
         print("Warning: Could not run ldd while detecting libc")
     end
 
-    local muslCheck = io.popen("find /lib /usr/lib -name 'libc.musl-*.so.*' -print -quit 2>/dev/null")
-    if muslCheck then
-        local output = muslCheck:read("*a") or ""
-        muslCheck:close()
-        if output ~= "" then
+    local muslLibs = {
+        "/lib/ld-musl-x86_64.so.1",
+        "/lib/ld-musl-aarch64.so.1",
+        "/lib/ld-musl-armhf.so.1",
+        "/usr/lib/libc.musl-x86_64.so.1",
+        "/usr/lib/libc.musl-aarch64.so.1",
+        "/usr/lib/libc.musl-armhf.so.1"
+    }
+    for _, muslLib in ipairs(muslLibs) do
+        local file = io.open(muslLib, "r")
+        if file then
+            file:close()
             return "musl"
         end
     end
@@ -499,6 +509,10 @@ function uvBuildInstall(ctx)
     end
 
     print("Extracting Python uv-build archive...")
+    local tarStatus = os.execute("tar --version > /dev/null 2>&1")
+    if tarStatus ~= 0 then
+        error("Failed to extract uv-build archive because tar is not available")
+    end
     local status = os.execute("tar -xf " .. shellQuote(archivePath) .. " --strip-components=1 -C " .. shellQuote(path))
     if status ~= 0 then
         error("Failed to extract uv-build archive. Status: " .. status .. ". Ensure tar is available, the archive is valid, and disk permissions/space are sufficient")
