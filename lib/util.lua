@@ -297,7 +297,7 @@ local function runtimeLibc(osType)
             return "musl"
         end
     else
-        print("Could not run ldd to detect libc, defaulting to gnu")
+        print("Warning: Could not detect libc with ldd, using gnu as default")
     end
 
     return "gnu"
@@ -341,7 +341,8 @@ local function getUvBuilds()
         headers = REQUEST_HEADERS
     })
     if err ~= nil or resp.status_code ~= 200 then
-        error("parsing uv-build release info failed: " .. (err or ""))
+        local statusCode = resp and resp.status_code or "none"
+        error("parsing uv-build release info failed. Status: " .. statusCode .. ", Error: " .. (err or "none"))
     end
 
     local jsonObj = json.decode(resp.body)
@@ -354,7 +355,8 @@ local function findUvBuild(version)
             return build
         end
     end
-    error("No uv-build prebuilt Python found for current platform and version: " .. version)
+    local osType = runtimeOs()
+    error("No uv-build prebuilt Python found for version " .. version .. " on " .. osType .. "/" .. runtimeArch() .. "/" .. runtimeLibc(osType))
 end
 
 local function pathExists(path)
@@ -439,12 +441,12 @@ function uvBuildInstall(ctx)
     local status = os.execute("tar -xf " .. shellQuote(archivePath) .. " --strip-components=1 -C " .. shellQuote(path))
     os.remove(archivePath)
     if status ~= 0 then
-        error("Extract uv-build archive failed; expected an archive with one top-level payload directory")
+        error("Failed to extract uv-build archive. Ensure tar is available and the archive is valid")
     end
 
     local extractedPath = resolvePythonInstallPath(path, version)
     if not pathExists(extractedPath .. "/bin/python") and not pathExists(extractedPath .. "\\python.exe") then
-        error("Extracted uv-build archive does not contain a Python executable")
+        error("Extracted uv-build archive does not contain a Python executable at expected location: " .. extractedPath)
     end
 
     if OS_TYPE ~= "windows" then
