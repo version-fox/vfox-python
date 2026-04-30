@@ -231,7 +231,7 @@ local function shellQuote(value)
     if string.find(value, "[\r\n%z]") then
         error("Path contains unsupported control character: " .. value)
     end
-    if string.find(value, "[^%w%._%-%+/\\: ]") then
+    if string.find(value, "[^%w%._%-%+/\\:]") then
         error("Path contains unsupported shell character: " .. value)
     end
 
@@ -309,9 +309,11 @@ local function runtimeLibc(osType)
         if string.find(string.lower(output), "musl", 1, true) then
             return "musl"
         end
+    else
+        print("Warning: Could not run ldd while detecting libc")
     end
 
-    local muslCheck = io.popen("ls /lib/libc.musl-*.so.* /usr/lib/libc.musl-*.so.* 2>/dev/null")
+    local muslCheck = io.popen("find /lib /usr/lib -name 'libc.musl-*.so.*' -print -quit 2>/dev/null")
     if muslCheck then
         local output = muslCheck:read("*a") or ""
         muslCheck:close()
@@ -383,7 +385,7 @@ local function uvBuildDownloadUrl(build)
 
     local release, filename = string.match(build.url, UV_BUILD_GITHUB_RELEASE_PATTERN)
     if release == nil or filename == nil then
-        error("Unable to rewrite uv-build download URL for mirror: " .. build.url)
+        error("Unable to rewrite uv-build download URL for mirror; expected a GitHub release download URL: " .. build.url)
     end
 
     return trimTrailingSlash(mirror) .. "/" .. release .. "/" .. filename
@@ -499,7 +501,7 @@ function uvBuildInstall(ctx)
     print("Extracting Python uv-build archive...")
     local status = os.execute("tar -xf " .. shellQuote(archivePath) .. " --strip-components=1 -C " .. shellQuote(path))
     if status ~= 0 then
-        error("Failed to extract uv-build archive. Status: " .. status .. ". Ensure tar is available and the archive is valid")
+        error("Failed to extract uv-build archive. Status: " .. status .. ". Ensure tar is available, the archive is valid, and disk permissions/space are sufficient")
     end
     os.remove(archivePath)
 
