@@ -13,6 +13,7 @@ end
 
 local version_vault_url = "https://vault.vfox.dev/python/pyenv"
 local uv_build_vault_url = "https://vault.vfox.dev/python/uv-build"
+local UV_BUILD_DOWNLOAD_PREFIX = "https://github.com/astral-sh/python-build-standalone/releases/download/"
 
 -- request headers
 local REQUEST_HEADERS = {
@@ -303,10 +304,15 @@ local function runtimeLibc(osType)
     return "gnu"
 end
 
-local function buildUvBuildUrl()
+local function getUvBuildPlatform()
     local osType = runtimeOs()
-    local archType = runtimeArch()
-    local libc = runtimeLibc(osType)
+    return osType, runtimeArch(), runtimeLibc(osType)
+end
+
+local function buildUvBuildUrl(osType, archType, libc)
+    if osType == nil or archType == nil or libc == nil then
+        osType, archType, libc = getUvBuildPlatform()
+    end
     local query = "?os=" .. osType .. "&arch=" .. archType .. "&libc=" .. libc
     return uv_build_vault_url .. query
 end
@@ -331,16 +337,16 @@ local function isSupportedUvBuild(build)
     if build.variant ~= nil and build.variant ~= "freethreaded" then
         return false
     end
-    if build.url == nil or not startsWith(build.url, "https://github.com/astral-sh/python-build-standalone/releases/download/") then
+    if build.url == nil or not startsWith(build.url, UV_BUILD_DOWNLOAD_PREFIX) then
         return false
     end
     return true
 end
 
-local function getUvBuilds()
+local function getUvBuilds(osType, archType, libc)
     fixHeaders()
     local resp, err = http.get({
-        url = buildUvBuildUrl(),
+        url = buildUvBuildUrl(osType, archType, libc),
         headers = REQUEST_HEADERS
     })
     if err ~= nil or resp.status_code ~= 200 then
@@ -353,13 +359,13 @@ local function getUvBuilds()
 end
 
 local function findUvBuild(version)
-    for _, build in ipairs(getUvBuilds()) do
+    local osType, archType, libc = getUvBuildPlatform()
+    for _, build in ipairs(getUvBuilds(osType, archType, libc)) do
         if isSupportedUvBuild(build) and uvBuildVersion(build) == version then
             return build
         end
     end
-    local osType = runtimeOs()
-    error("No uv-build prebuilt Python found for version " .. version .. " on " .. osType .. "/" .. runtimeArch() .. "/" .. runtimeLibc(osType))
+    error("No uv-build prebuilt Python found for version " .. version .. " on " .. osType .. "/" .. archType .. "/" .. libc)
 end
 
 local function pathExists(path)
@@ -446,7 +452,7 @@ function uvBuildInstall(ctx)
     print("Extracting Python uv-build archive...")
     local status = os.execute("tar -xf " .. shellQuote(archivePath) .. " --strip-components=1 -C " .. shellQuote(path))
     if status ~= 0 then
-        error("Failed to extract uv-build archive. Ensure tar is available and the archive is valid")
+        error("Failed to extract uv-build archive. Status: " .. status .. ". Ensure tar is available and the archive is valid")
     end
     os.remove(archivePath)
 
