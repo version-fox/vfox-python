@@ -28,5 +28,6 @@ PLUGIN.notes = {
     "You can use VFOX_PYTHON_MIRROR environment variable to set mirror.",
     "eg: `export VFOX_PYTHON_MIRROR=https://mirrors.huaweicloud.com/python/`",
     "Set `VFOX_PYTHON_USE_UV_BUILD=1` to use prebuilt Python archives from uv-build.",
+    "Set `VFOX_PYTHON_UV_LIBC=gnu|musl` to override Linux libc detection.",
     " ",
 }

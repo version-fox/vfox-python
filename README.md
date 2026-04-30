@@ -25,3 +25,6 @@ export VFOX_PYTHON_MIRROR=https://mirrors.huaweicloud.com/python/
 
 Set `VFOX_PYTHON_USE_UV_BUILD=1` to install prebuilt Python archives from the
 vfox vault uv-build endpoint instead of building from pyenv/python-build.
+
+On Linux, libc is detected automatically. Set `VFOX_PYTHON_UV_LIBC=gnu` or
+`VFOX_PYTHON_UV_LIBC=musl` to override detection.
