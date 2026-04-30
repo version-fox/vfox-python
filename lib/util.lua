@@ -226,6 +226,13 @@ function useUvBuild()
 end
 
 local function shellQuote(value)
+    if string.find(value, "[\r\n%z]") then
+        error("Path contains unsupported control character: " .. value)
+    end
+    if string.find(value, "%.%.", 1, true) then
+        error("Path contains unsupported traversal segment: " .. value)
+    end
+
     if RUNTIME.osType == "windows" or OS_TYPE == "windows" then
         if string.find(value, '"', 1, true) then
             error("Path contains unsupported quote character: " .. value)
@@ -327,7 +334,7 @@ local function getUvBuilds()
         headers = REQUEST_HEADERS
     })
     if err ~= nil or resp.status_code ~= 200 then
-        error("paring uv-build release info failed." .. (err or ""))
+        error("parsing uv-build release info failed." .. (err or ""))
     end
 
     local jsonObj = json.decode(resp.body)
