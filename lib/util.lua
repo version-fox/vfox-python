@@ -13,6 +13,7 @@ end
 
 local version_vault_url = "https://vault.vfox.dev/python/pyenv"
 local uv_build_vault_url = "https://vault.vfox.dev/python/uv-build"
+local UV_BUILD_GITHUB_RELEASE_PATTERN = "/releases/download/([^/]+)/([^/]+)$"
 
 -- request headers
 local REQUEST_HEADERS = {
@@ -230,6 +231,9 @@ local function shellQuote(value)
     if string.find(value, "[\r\n%z]") then
         error("Path contains unsupported control character: " .. value)
     end
+    if string.find(value, "[^%w%._%-%+/\\: ]") then
+        error("Path contains unsupported shell character: " .. value)
+    end
 
     if RUNTIME.osType == "windows" or OS_TYPE == "windows" then
         if string.find(value, '"', 1, true) then
@@ -305,10 +309,27 @@ local function runtimeLibc(osType)
         if string.find(string.lower(output), "musl", 1, true) then
             return "musl"
         end
-    else
-        print("Warning: Could not detect libc with ldd, using gnu as default. Set VFOX_PYTHON_UV_LIBC to override.")
     end
 
+    local muslCheck = io.popen("ls /lib/libc.musl-*.so.* /usr/lib/libc.musl-*.so.* 2>/dev/null")
+    if muslCheck then
+        local output = muslCheck:read("*a") or ""
+        muslCheck:close()
+        if output ~= "" then
+            return "musl"
+        end
+    end
+
+    local gnuCheck = io.popen("getconf GNU_LIBC_VERSION 2>/dev/null")
+    if gnuCheck then
+        local output = gnuCheck:read("*a") or ""
+        gnuCheck:close()
+        if output ~= "" then
+            return "gnu"
+        end
+    end
+
+    print("Warning: Could not detect libc, using gnu as default. Set VFOX_PYTHON_UV_LIBC to override.")
     return "gnu"
 end
 
@@ -360,7 +381,7 @@ local function uvBuildDownloadUrl(build)
         error(UV_BUILD_MIRROR_ENV .. " must be an https URL")
     end
 
-    local release, filename = string.match(build.url, "/releases/download/([^/]+)/([^/]+)$")
+    local release, filename = string.match(build.url, UV_BUILD_GITHUB_RELEASE_PATTERN)
     if release == nil or filename == nil then
         error("Unable to rewrite uv-build download URL for mirror: " .. build.url)
     end
