@@ -20,7 +20,7 @@ local REQUEST_HEADERS = {
 
 -- download source
 local DOWNLOAD_SOURCE = {
-    MSI = PYTHON_URL .. "%s/python-%s.%s.msi",
+    MSI = PYTHON_URL .. "%s/python-%s%s.msi",
     EXE = PYTHON_URL .. "%s/python-%s%s.exe",
     SOURCE = PYTHON_URL .. "%s/Python-%s.tar",
 }
@@ -247,12 +247,15 @@ end
 
 function getReleaseForWindows(version)
     local archType = RUNTIME.archType
-    if archType == "386" then
-        archType = ""
+    local exeArchSuffix = ""
+    local msiArchSuffix = ""
+    if archType ~= "386" then
+        exeArchSuffix = "-" .. archType
+        msiArchSuffix = "." .. archType
     end
 
     -- try get exe file
-    local url = DOWNLOAD_SOURCE.EXE:format(version, version, '-' .. archType)
+    local url = DOWNLOAD_SOURCE.EXE:format(version, version, exeArchSuffix)
     local resp, err = http.head({
         url = url,
         headers = REQUEST_HEADERS
@@ -262,7 +265,7 @@ function getReleaseForWindows(version)
     end
 
     -- try get msi file
-    local url = DOWNLOAD_SOURCE.MSI:format(version, version, archType)
+    local url = DOWNLOAD_SOURCE.MSI:format(version, version, msiArchSuffix)
     local resp, err = http.head({
         url = url,
         headers = REQUEST_HEADERS
