@@ -231,11 +231,8 @@ local function shellQuote(value)
     if string.find(value, "[\r\n%z]") then
         error("Path contains unsupported control character: " .. value)
     end
-    if string.find(value, "%.%.") then
+    if string.find(value, "%.%.%/") or string.find(value, "%.%.\\") then
         error("Path contains unsupported traversal segment: " .. value)
-    end
-    if string.find(value, "[^%w%._%-%+/\\:]") then
-        error("Path contains unsupported shell character: " .. value)
     end
 
     if RUNTIME.osType == "windows" or OS_TYPE == "windows" then
@@ -509,10 +506,6 @@ function uvBuildInstall(ctx)
     end
 
     print("Extracting Python uv-build archive...")
-    local tarStatus = os.execute("tar --version > /dev/null 2>&1")
-    if tarStatus ~= 0 then
-        error("Failed to extract uv-build archive because tar is not available")
-    end
     local status = os.execute("tar -xf " .. shellQuote(archivePath) .. " --strip-components=1 -C " .. shellQuote(path))
     if status ~= 0 then
         error("Failed to extract uv-build archive. Status: " .. status .. ". Ensure tar is available, the archive is valid, and disk permissions/space are sufficient")
