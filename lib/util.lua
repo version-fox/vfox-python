@@ -297,7 +297,7 @@ local function runtimeLibc(osType)
             return "musl"
         end
     else
-        print("Warning: Could not detect libc with ldd, using gnu as default")
+        print("Warning: Could not detect libc with ldd, using gnu as default. Set VFOX_PYTHON_UV_LIBC to override.")
     end
 
     return "gnu"
@@ -320,6 +320,9 @@ end
 
 local function isSupportedUvBuild(build)
     if build.name ~= "cpython" then
+        return false
+    end
+    if build.version == nil then
         return false
     end
     if build.arch and build.arch.variant ~= nil then
@@ -421,7 +424,10 @@ function uvBuildInstall(ctx)
     local build = findUvBuild(version)
     local archivePath = path .. "/python-uv-build.tar"
 
-    if ctx.rootPath and not startsWithPath(path, ctx.rootPath) then
+    if not ctx.rootPath or ctx.rootPath == "" then
+        error("vfox root path is required for uv-build installation")
+    end
+    if not startsWithPath(path, ctx.rootPath) then
         error("Install path is outside the expected vfox root path: " .. path)
     end
 
@@ -439,10 +445,10 @@ function uvBuildInstall(ctx)
 
     print("Extracting Python uv-build archive...")
     local status = os.execute("tar -xf " .. shellQuote(archivePath) .. " --strip-components=1 -C " .. shellQuote(path))
-    os.remove(archivePath)
     if status ~= 0 then
         error("Failed to extract uv-build archive. Ensure tar is available and the archive is valid")
     end
+    os.remove(archivePath)
 
     local extractedPath = resolvePythonInstallPath(path, version)
     if not pathExists(extractedPath .. "/bin/python") and not pathExists(extractedPath .. "\\python.exe") then
