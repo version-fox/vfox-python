@@ -20,3 +20,8 @@ is `https://www.python.org/ftp/python/`.
 ```bash
 export VFOX_PYTHON_MIRROR=https://mirrors.huaweicloud.com/python/
 ```
+
+## uv-build
+
+Set `VFOX_PYTHON_USE_UV_BUILD=1` to install prebuilt Python archives from the
+vfox vault uv-build endpoint instead of building from pyenv/python-build.
