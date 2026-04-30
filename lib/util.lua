@@ -297,7 +297,7 @@ local function runtimeLibc(osType)
             return "musl"
         end
     else
-        print("Could not run ldd to detect libc, defaulting to glibc")
+        print("Could not run ldd to detect libc, defaulting to gnu")
     end
 
     return "gnu"
@@ -371,6 +371,7 @@ function resolvePythonInstallPath(installPath, version)
         return installPath
     end
 
+    -- vfox stores SDK payloads under python-<version>; uv-build archives unpack into that payload directory.
     local uvBuildPath = installPath .. "/python-" .. version
     if pathExists(uvBuildPath .. "/bin") or pathExists(uvBuildPath .. "\\python.exe") then
         return uvBuildPath
@@ -438,7 +439,7 @@ function uvBuildInstall(ctx)
     local status = os.execute("tar -xf " .. shellQuote(archivePath) .. " --strip-components=1 -C " .. shellQuote(path))
     os.remove(archivePath)
     if status ~= 0 then
-        error("Extract uv-build archive failed")
+        error("Extract uv-build archive failed; expected an archive with one top-level payload directory")
     end
 
     local extractedPath = resolvePythonInstallPath(path, version)
