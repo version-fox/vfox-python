@@ -21,6 +21,7 @@ local REQUEST_HEADERS = {
     ["User-Agent"] = "vfox"
 }
 
+-- vfox adds both the install root and install root\Scripts to PATH on Windows.
 local WINDOWS_PIP_SHIM_CONTENT = "@echo off\r\n\"%~dp0..\\python.exe\" -m pip %*\r\n"
 
 local UV_BUILD_ENV = "VFOX_PYTHON_USE_UV_BUILD"
@@ -591,15 +592,14 @@ end
 
 local function createWindowsPipShim(installPath, version)
     local major, minor = string.match(version, "^(%d+)%.(%d+)")
+    if major == nil or minor == nil then
+        error("Cannot create pip shim for unexpected Python version: " .. version)
+    end
     local scriptsPath = installPath .. "\\Scripts"
     ensureWindowsDirectory(scriptsPath)
 
     local shims = { "pip.cmd", "pip3.cmd" }
-    if major ~= nil and minor ~= nil then
-        table.insert(shims, "pip" .. major .. "." .. minor .. ".cmd")
-    else
-        print("Warning: unable to create versioned pip shim for unexpected Python version: " .. version)
-    end
+    table.insert(shims, "pip" .. major .. "." .. minor .. ".cmd")
     for _, shim in ipairs(shims) do
         writeWindowsFile(scriptsPath .. "\\" .. shim, WINDOWS_PIP_SHIM_CONTENT)
     end
@@ -614,6 +614,7 @@ local function ensureWindowsUvBuildPip(path, version)
     if not pathExists(pythonExe) then
         error("Cannot install pip: python.exe was not found at " .. pythonExe)
     end
+    -- If Scripts does not exist yet, pathExists returns false and setup continues.
     if pathExists(path .. "\\Scripts\\pip.exe") or pathExists(path .. "\\Scripts\\pip.cmd") then
         return
     end
