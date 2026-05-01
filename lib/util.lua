@@ -241,12 +241,19 @@ local function containsTraversalSegment(value)
     return false
 end
 
-local function findControlCharacter(value)
-    return string.find(value, "%c")
+local function findUnsupportedControlCharacter(value)
+    local controlCharStart = nil
+    for _, char in ipairs({ "\r", "\n", string.char(0) }) do
+        local position = string.find(value, char, 1, true)
+        if position and (controlCharStart == nil or position < controlCharStart) then
+            controlCharStart = position
+        end
+    end
+    return controlCharStart
 end
 
 local function shellQuote(value)
-    local controlCharStart = findControlCharacter(value)
+    local controlCharStart = findUnsupportedControlCharacter(value)
     if controlCharStart then
         error("Path contains unsupported control character at position " .. controlCharStart)
     end
@@ -265,7 +272,7 @@ local function shellQuote(value)
 end
 
 local function powerShellQuote(value)
-    local controlCharStart = findControlCharacter(value)
+    local controlCharStart = findUnsupportedControlCharacter(value)
     if controlCharStart then
         error("PowerShell argument contains unsupported control character at position " .. controlCharStart)
     end
@@ -274,7 +281,7 @@ local function powerShellQuote(value)
     end
     -- The generated script is passed to powershell through cmd as a double-quoted -Command argument.
     if string.find(value, '"', 1, true) then
-        error("PowerShell argument contains unsupported quote character: " .. value)
+        error("PowerShell argument contains double quote which conflicts with -Command wrapper: " .. value)
     end
     -- PowerShell single-quoted strings escape embedded single quotes by doubling them.
     return "'" .. string.gsub(value, "'", "''") .. "'"
