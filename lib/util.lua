@@ -355,7 +355,10 @@ local function buildUvBuildUrl(osType, archType, libc)
     if osType == nil or archType == nil or libc == nil then
         osType, archType, libc = getUvBuildPlatform()
     end
-    local query = "?os=" .. osType .. "&arch=" .. archType .. "&libc=" .. libc
+    local query = "?os=" .. osType .. "&arch=" .. archType
+    if libc ~= nil and libc ~= "" and libc ~= "none" then
+        query = query .. "&libc=" .. libc
+    end
     return uv_build_vault_url .. query
 end
 
@@ -572,6 +575,44 @@ local function pathExists(path)
     return false
 end
 
+local function ensureWindowsUvBuildPip(path)
+    if RUNTIME.osType ~= "windows" and OS_TYPE ~= "windows" then
+        return
+    end
+
+    local pythonExe = path .. "\\python.exe"
+    if not pathExists(pythonExe) or pathExists(path .. "\\Scripts\\pip.exe") then
+        return
+    end
+
+    if not pathExists(path .. "\\Lib\\ensurepip\\__init__.py") then
+        print("Warning: uv-build Python does not include ensurepip; pip was not installed.")
+        return
+    end
+
+    print("Installing pip...")
+    local command = shellQuote(pythonExe) .. " -E -s -m ensurepip -U --default-pip > NUL"
+    local exitCode = os.execute(command)
+    if not commandSucceeded(exitCode) then
+        error("Install pip failed. exit " .. tostring(exitCode))
+    end
+
+    if pathExists(path .. "\\Scripts\\pip.exe") then
+        return
+    end
+
+    command = shellQuote(pythonExe) .. " -E -s -m pip install --force-reinstall --no-index --find-links " ..
+        shellQuote(path .. "\\Lib\\ensurepip\\_bundled") .. " pip > NUL"
+    exitCode = os.execute(command)
+    if not commandSucceeded(exitCode) then
+        error("Install pip script failed. exit " .. tostring(exitCode))
+    end
+
+    if not pathExists(path .. "\\Scripts\\pip.exe") then
+        error("Install pip script failed: pip.exe was not created")
+    end
+end
+
 function resolvePythonInstallPath(installPath, version)
     if pathExists(installPath .. "/bin") or pathExists(installPath .. "\\python.exe") then
         return installPath
@@ -657,6 +698,8 @@ function uvBuildInstall(ctx)
 
     if OS_TYPE ~= "windows" then
         fixShebangLines(extractedPath)
+    else
+        ensureWindowsUvBuildPip(extractedPath)
     end
 
     print("Install Python uv-build success!")
