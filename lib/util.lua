@@ -267,6 +267,10 @@ local function trimTrailingSlash(value)
     return string.gsub(value, "/+$", "")
 end
 
+local function isEmptyString(value)
+    return value == nil or value == ""
+end
+
 local function isHttpsUrl(value)
     return type(value) == "string" and startsWith(value, "https://") and not string.find(value, "[\r\n%z]")
 end
@@ -581,7 +585,7 @@ function resolvePythonInstallPath(installPath, version)
 end
 
 function uvBuildPreInstall(version)
-    local ok, uvBuildPackage = pcall(function()
+    local ok, value = pcall(function()
         local build = findUvBuild(version)
         return {
             version = version,
@@ -592,12 +596,14 @@ function uvBuildPreInstall(version)
         }
     end)
     if not ok then
-        error("uv-build PreInstall failed: " .. tostring(uvBuildPackage))
+        local err = value
+        error("uv-build PreInstall failed: " .. tostring(err))
     end
+    local uvBuildPackage = value
     if uvBuildPackage == nil then
         error("uv-build PreInstall did not provide install metadata")
     end
-    if uvBuildPackage.url == nil or uvBuildPackage.url == "" or uvBuildPackage.sha256 == nil or uvBuildPackage.sha256 == "" then
+    if isEmptyString(uvBuildPackage.url) or isEmptyString(uvBuildPackage.sha256) then
         error("uv-build PreInstall did not provide required url and sha256 fields")
     end
     return uvBuildPackage
