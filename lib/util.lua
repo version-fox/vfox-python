@@ -21,7 +21,7 @@ local REQUEST_HEADERS = {
     ["User-Agent"] = "vfox"
 }
 
--- vfox adds both the install root and install root\Scripts to PATH on Windows.
+-- pip.cmd lives under Scripts, so %~dp0..\python.exe resolves to the install root's python.exe.
 local WINDOWS_PIP_SHIM_CONTENT = "@echo off\r\n\"%~dp0..\\python.exe\" -m pip %*\r\n"
 
 local UV_BUILD_ENV = "VFOX_PYTHON_USE_UV_BUILD"
@@ -577,7 +577,7 @@ local function ensureWindowsDirectory(path)
     local command = powerShellCommand("New-Item -ItemType Directory -Force -Path " .. powerShellQuote(path) .. " | Out-Null")
     local exitCode = os.execute(command)
     if not commandSucceeded(exitCode) then
-        error("Failed to create directory: " .. path .. ". Command: " .. command .. ". Exit code: " .. tostring(exitCode))
+        error("Failed to create directory: " .. path .. ". Exit code: " .. tostring(exitCode))
     end
 end
 
@@ -599,6 +599,10 @@ local function createWindowsPipShim(scriptsPath)
     end
 end
 
+local function windowsPipCommandExists(scriptsPath)
+    return pathExists(scriptsPath .. "\\pip.exe") or pathExists(scriptsPath .. "\\pip.cmd")
+end
+
 local function ensureWindowsUvBuildPip(path)
     if runtimeOs() ~= "windows" then
         return
@@ -610,7 +614,7 @@ local function ensureWindowsUvBuildPip(path)
         error("Cannot install pip: python.exe was not found at " .. pythonExe)
     end
     -- If Scripts does not exist yet, pathExists returns false and setup continues.
-    if pathExists(scriptsPath .. "\\pip.exe") or pathExists(scriptsPath .. "\\pip.cmd") then
+    if windowsPipCommandExists(scriptsPath) then
         return
     end
 
@@ -626,7 +630,7 @@ local function ensureWindowsUvBuildPip(path)
         error("ensurepip failed while installing pip. Exit code: " .. tostring(exitCode))
     end
 
-    if pathExists(scriptsPath .. "\\pip.exe") then
+    if windowsPipCommandExists(scriptsPath) then
         return
     end
 
@@ -646,7 +650,7 @@ local function ensureWindowsUvBuildPip(path)
         error("pip module is not available after installation attempts. Exit code: " .. tostring(exitCode))
     end
 
-    if not pathExists(scriptsPath .. "\\pip.exe") then
+    if not windowsPipCommandExists(scriptsPath) then
         createWindowsPipShim(scriptsPath)
     end
 end
