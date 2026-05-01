@@ -14,9 +14,7 @@ end
 local version_vault_url = "https://vault.vfox.dev/python/pyenv"
 local uv_build_vault_url = "https://vault.vfox.dev/python/uv-build"
 local UV_BUILD_GITHUB_RELEASE_PATTERN = "/releases/download/([^/]+)/([^/]+)$"
-local SHA256_HEX_LENGTH = 64
 local URL_ENCODED_DOT = "%%2[eE]"
-local POWERSHELL_GET_FILE_HASH_SCRIPT = "& { param([string]$p) (Get-FileHash -LiteralPath $p -Algorithm SHA256).Hash }"
 
 -- request headers
 local REQUEST_HEADERS = {
@@ -269,19 +267,6 @@ local function trimTrailingSlash(value)
     return string.gsub(value, "/+$", "")
 end
 
-local function extractSha256Hex(output)
-    local normalizedOutput = string.gsub(string.lower(output), "%s+", "")
-    if string.match(normalizedOutput, "^[0-9a-f]+$") and string.len(normalizedOutput) == SHA256_HEX_LENGTH then
-        return normalizedOutput
-    end
-    return nil
-end
-
-local function buildWindowsSha256Command(path)
-    return string.format("powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command %s %s",
-        shellQuote(POWERSHELL_GET_FILE_HASH_SCRIPT), shellQuote(path))
-end
-
 local function isHttpsUrl(value)
     return type(value) == "string" and startsWith(value, "https://") and not string.find(value, "[\r\n%z]")
 end
@@ -476,61 +461,6 @@ local function uvBuildAssetPriority(build)
     return 90
 end
 
-local function verifyUvBuildArchive(path, sha256)
-    if sha256 == nil then
-        return
-    end
-
-    print("Verifying Python uv-build archive sha256...")
-    local expectedSha256 = string.lower(sha256)
-
-    local status
-    if RUNTIME.osType == "windows" or OS_TYPE == "windows" then
-        local command = buildWindowsSha256Command(path)
-        local handle = io.popen(command)
-        if handle == nil then
-            error("Unable to verify uv-build archive sha256 for " .. path .. ": powershell Get-FileHash command could not be started")
-        end
-
-        local output = handle:read("*a")
-        handle:close()
-        if output == nil then
-            error("Unable to verify uv-build archive sha256 for " .. path .. ": failed to read Get-FileHash output")
-        end
-        local actualSha256 = extractSha256Hex(output)
-        if actualSha256 == expectedSha256 then
-            return
-        end
-        error("uv-build archive sha256 verification failed. Expected: " .. expectedSha256 .. ", Actual: " .. (actualSha256 or "not found"))
-    else
-        local command = nil
-        local hasSha256sum = io.popen("command -v sha256sum 2>/dev/null")
-        local sha256sumPath = hasSha256sum and hasSha256sum:read("*l") or nil
-        if hasSha256sum then
-            hasSha256sum:close()
-        end
-
-        local hasShasum = io.popen("command -v shasum 2>/dev/null")
-        local shasumPath = hasShasum and hasShasum:read("*l") or nil
-        if hasShasum then
-            hasShasum:close()
-        end
-
-        if sha256sumPath and sha256sumPath ~= "" then
-            command = "printf '%s  %s\n' " .. shellQuote(expectedSha256) .. " " .. shellQuote(path) .. " | sha256sum -c -"
-        elseif shasumPath and shasumPath ~= "" then
-            command = "printf '%s  %s\n' " .. shellQuote(expectedSha256) .. " " .. shellQuote(path) .. " | shasum -a 256 -c -"
-        else
-            error("Unable to verify uv-build archive sha256: sha256sum or shasum is required")
-        end
-        status = os.execute(command)
-    end
-
-    if not commandSucceeded(status) then
-        error("uv-build archive sha256 verification failed")
-    end
-end
-
 local function uvBuildDownloadUrl(build)
     if not isHttpsUrl(build.url) then
         error("Invalid uv-build download URL")
@@ -550,30 +480,6 @@ local function uvBuildDownloadUrl(build)
     end
 
     return trimTrailingSlash(mirror) .. "/" .. release .. "/" .. filename
-end
-
-local function uvBuildArchivePath(path, build)
-    local filename = build.filename
-    if filename == nil or filename == "" then
-        filename = string.match(build.url, "[^/]+$")
-    end
-    if filename == nil or filename == "" or string.find(filename, "[/\\\r\n%z]") then
-        error("Invalid uv-build archive filename")
-    end
-    return path .. "/" .. filename
-end
-
-local function extractUvBuildArchive(archivePath, path)
-    local filename = string.lower(archivePath)
-    if not isSupportedArchiveName(filename) then
-        error("Unsupported uv-build archive format: " .. archivePath)
-    end
-
-    local archiver = require("vfox.archiver")
-    local err = archiver.decompress(archivePath, path)
-    if err ~= nil then
-        error("Failed to extract uv-build archive: " .. err)
-    end
 end
 
 local function getUvBuilds(osType, archType, libc)
@@ -674,6 +580,17 @@ function resolvePythonInstallPath(installPath, version)
     return installPath
 end
 
+function uvBuildPreInstall(version)
+    local build = findUvBuild(version)
+    return {
+        version = version,
+        url = uvBuildDownloadUrl(build),
+        headers = REQUEST_HEADERS,
+        sha256 = uvBuildSha256(build),
+        note = "uv-build",
+    }
+end
+
 function linuxCompile(ctx)
     local sdkInfo = ctx.sdkInfo['python']
     local path = sdkInfo.path
@@ -710,9 +627,6 @@ function uvBuildInstall(ctx)
     local sdkInfo = ctx.sdkInfo['python']
     local path = sdkInfo.path
     local version = sdkInfo.version
-    local build = findUvBuild(version)
-    local downloadUrl = uvBuildDownloadUrl(build)
-    local archivePath = uvBuildArchivePath(path, build)
 
     if not ctx.rootPath or ctx.rootPath == "" then
         error("vfox root path is required for uv-build installation")
@@ -721,26 +635,9 @@ function uvBuildInstall(ctx)
         error("Install path is outside the expected vfox root path: " .. path)
     end
 
-    print("Downloading Python uv-build archive...")
-    print("from:\t" .. downloadUrl)
-    print("to:\t" .. archivePath)
-    local err = http.download_file({
-        url = downloadUrl,
-        headers = REQUEST_HEADERS
-    }, archivePath)
-
-    if err ~= nil then
-        error("Downloading uv-build archive failed")
-    end
-    verifyUvBuildArchive(archivePath, uvBuildSha256(build))
-
-    print("Extracting Python uv-build archive...")
-    extractUvBuildArchive(archivePath, path)
-    os.remove(archivePath)
-
     local extractedPath = resolvePythonInstallPath(path, version)
     if not pathExists(extractedPath .. "/bin/python") and not pathExists(extractedPath .. "\\python.exe") then
-        error("Extracted uv-build archive does not contain a Python executable at expected location: " .. extractedPath)
+        error("vfox did not unpack a uv-build Python executable at expected location: " .. extractedPath)
     end
 
     if OS_TYPE ~= "windows" then
