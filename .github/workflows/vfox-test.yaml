@@ -149,10 +149,14 @@ jobs:
           VFOX_PYTHON_USE_UV_BUILD: "1"
         run: |
           Invoke-Expression "$(vfox activate pwsh)"
-          $install_output = vfox install python@3.10.20 2>&1
-          $install_output | Write-Output
-          if ($LASTEXITCODE -ne 0 -or ($install_output -join "`n") -ilike "*failed to install python*") {
-              exit 1
+          vfox install python@3.10.20
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
+          $python_exe = Join-Path $HOME ".vfox\cache\python\v-3.10.20\python-3.10.20\python.exe"
+          if (-not (Test-Path $python_exe)) {
+            Write-Error "python@3.10.20 uv-build install did not create $python_exe"
+            exit 1
           }
           vfox use -g python@3.10.20
           vfox current
