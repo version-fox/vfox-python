@@ -453,12 +453,13 @@ local function verifyUvBuildArchive(path, sha256)
     end
 
     print("Verifying Python uv-build archive sha256...")
+    local expectedSha256 = string.lower(sha256)
 
     local status
     if RUNTIME.osType == "windows" or OS_TYPE == "windows" then
         local handle = io.popen("certutil -hashfile " .. shellQuote(path) .. " SHA256")
         if handle == nil then
-            error("Unable to verify uv-build archive sha256: failed to execute certutil command")
+            error("Unable to verify uv-build archive sha256 for " .. path .. ": failed to execute certutil command")
         end
 
         local output = string.lower(handle:read("*a") or "")
@@ -466,7 +467,7 @@ local function verifyUvBuildArchive(path, sha256)
         local hashMatches = false
         for line in string.gmatch(output, "[^\r\n]+") do
             local normalizedLine = string.gsub(line, "%s+", "")
-            if normalizedLine == sha256 then
+            if normalizedLine == expectedSha256 then
                 hashMatches = true
                 break
             end
@@ -490,9 +491,9 @@ local function verifyUvBuildArchive(path, sha256)
         end
 
         if sha256sumPath and sha256sumPath ~= "" then
-            command = "printf '%s  %s\n' " .. shellQuote(sha256) .. " " .. shellQuote(path) .. " | sha256sum -c -"
+            command = "printf '%s  %s\n' " .. shellQuote(expectedSha256) .. " " .. shellQuote(path) .. " | sha256sum -c -"
         elseif shasumPath and shasumPath ~= "" then
-            command = "printf '%s  %s\n' " .. shellQuote(sha256) .. " " .. shellQuote(path) .. " | shasum -a 256 -c -"
+            command = "printf '%s  %s\n' " .. shellQuote(expectedSha256) .. " " .. shellQuote(path) .. " | shasum -a 256 -c -"
         else
             error("Unable to verify uv-build archive sha256: sha256sum or shasum is required")
         end
