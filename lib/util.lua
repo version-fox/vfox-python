@@ -415,15 +415,27 @@ local function uvBuildAssetName(build)
     return ""
 end
 
+local function isSupportedArchiveName(name)
+    return string.sub(name, -7) == ".tar.gz" or
+        string.sub(name, -4) == ".tgz" or
+        string.sub(name, -7) == ".tar.xz" or
+        string.sub(name, -8) == ".tar.bz2" or
+        string.sub(name, -4) == ".zip" or
+        string.sub(name, -3) == ".7z"
+end
+
 local function uvBuildAssetPriority(build)
     local name = uvBuildAssetName(build)
-    if string.find(name, "pgo+lto-full", 1, true) or string.find(name, "pgo%2blto-full", 1, true) then
-        return 10
+    if not isSupportedArchiveName(name) then
+        return 90
     end
     if string.find(name, "install_only_stripped", 1, true) then
-        return 20
+        return 10
     end
     if string.find(name, "install_only", 1, true) then
+        return 20
+    end
+    if string.find(name, "pgo+lto-full", 1, true) or string.find(name, "pgo%2blto-full", 1, true) then
         return 30
     end
     if not string.find(name, "debug", 1, true) then
@@ -491,6 +503,30 @@ local function uvBuildDownloadUrl(build)
     end
 
     return trimTrailingSlash(mirror) .. "/" .. release .. "/" .. filename
+end
+
+local function uvBuildArchivePath(path, build)
+    local filename = build.filename
+    if filename == nil or filename == "" then
+        filename = string.match(build.url, "[^/]+$")
+    end
+    if filename == nil or filename == "" or string.find(filename, "[/\\\r\n%z]") then
+        error("Invalid uv-build archive filename")
+    end
+    return path .. "/" .. filename
+end
+
+local function extractUvBuildArchive(archivePath, path)
+    local filename = string.lower(archivePath)
+    if not isSupportedArchiveName(filename) then
+        error("Unsupported uv-build archive format: " .. archivePath)
+    end
+
+    local archiver = require("vfox.archiver")
+    local err = archiver.decompress(archivePath, path)
+    if err ~= nil then
+        error("Failed to extract uv-build archive: " .. err)
+    end
 end
 
 local function getUvBuilds(osType, archType, libc)
@@ -588,7 +624,7 @@ function uvBuildInstall(ctx)
     local version = sdkInfo.version
     local build = findUvBuild(version)
     local downloadUrl = uvBuildDownloadUrl(build)
-    local archivePath = path .. "/python-uv-build.tar"
+    local archivePath = uvBuildArchivePath(path, build)
 
     if not ctx.rootPath or ctx.rootPath == "" then
         error("vfox root path is required for uv-build installation")
@@ -611,10 +647,7 @@ function uvBuildInstall(ctx)
     verifyUvBuildArchive(archivePath, uvBuildSha256(build))
 
     print("Extracting Python uv-build archive...")
-    local status = os.execute("tar -xf " .. shellQuote(archivePath) .. " --strip-components=1 -C " .. shellQuote(path))
-    if status ~= 0 then
-        error("Failed to extract uv-build archive. Status: " .. status .. ". Ensure tar is available, the archive is valid, and disk permissions/space are sufficient")
-    end
+    extractUvBuildArchive(archivePath, path)
     os.remove(archivePath)
 
     local extractedPath = resolvePythonInstallPath(path, version)
