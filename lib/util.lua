@@ -241,9 +241,14 @@ local function containsTraversalSegment(value)
     return false
 end
 
+local function controlCharacterPosition(value)
+    return string.find(value, "%c")
+end
+
 local function shellQuote(value)
-    if string.find(value, "[\r\n%z]") then
-        error("Path contains unsupported control character: " .. value)
+    local controlCharStart = controlCharacterPosition(value)
+    if controlCharStart then
+        error("Path contains unsupported control character at position " .. controlCharStart)
     end
     if containsTraversalSegment(value) then
         error("Path contains unsupported traversal segment: " .. value)
@@ -260,7 +265,7 @@ local function shellQuote(value)
 end
 
 local function powerShellQuote(value)
-    local controlCharStart = string.find(value, "[\r\n%z]")
+    local controlCharStart = controlCharacterPosition(value)
     if controlCharStart then
         error("PowerShell argument contains unsupported control character at position " .. controlCharStart)
     end
@@ -274,7 +279,7 @@ local function powerShellQuote(value)
 end
 
 local function powerShellCommand(script)
-    return "powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command " .. shellQuote(script)
+    return "powershell -NoProfile -NonInteractive -ExecutionPolicy RemoteSigned -Command " .. shellQuote(script)
 end
 
 local function powerShellPythonCommand(pythonExe, pythonArgs)
