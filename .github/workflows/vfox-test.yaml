@@ -159,9 +159,14 @@ jobs:
           }
           vfox current
           $python_version = $(python -c 'import sys;print(sys.version)')
+          if ($LASTEXITCODE -ne 0) {
+              Write-Error "failed to run python after uv-build install"
+              exit $LASTEXITCODE
+          }
           Write-Output $python_version
 
           if ($python_version -notlike "3.10.20*") {
+              Write-Error "expected uv-build python 3.10.20, got $python_version"
               exit 1
           }
 
