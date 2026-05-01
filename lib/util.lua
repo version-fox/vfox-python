@@ -464,22 +464,18 @@ local function verifyUvBuildArchive(path, sha256)
 
         local output = string.lower(handle:read("*a") or "")
         handle:close()
-        local hashMatches = false
-        local actualSha256 = "none"
+        local actualSha256 = nil
         for line in string.gmatch(output, "[^\r\n]+") do
             local normalizedLine = string.gsub(line, "%s+", "")
             if string.match(normalizedLine, "^[0-9a-f]+$") and string.len(normalizedLine) == 64 then
                 actualSha256 = normalizedLine
-            end
-            if normalizedLine == expectedSha256 then
-                hashMatches = true
                 break
             end
         end
-        if hashMatches then
+        if actualSha256 == expectedSha256 then
             return
         end
-        error("uv-build archive sha256 verification failed. Expected: " .. expectedSha256 .. ", Actual: " .. actualSha256)
+        error("uv-build archive sha256 verification failed. Expected: " .. expectedSha256 .. ", Actual: " .. (actualSha256 or "not found"))
     else
         local command = nil
         local hasSha256sum = io.popen("command -v sha256sum 2>/dev/null")
