@@ -139,3 +139,24 @@ jobs:
           if ($python_version -notlike "${{ matrix.python-version }}*") {
               exit 1
           }
+
+      - name: Install Python 3.10.20 with uv-build
+        if: runner.os == 'Windows' && matrix.mirror == ''
+        env:
+          VFOX_PYTHON_USE_UV_BUILD: "1"
+        run: |
+          Invoke-Expression "$(vfox activate pwsh)"
+          vfox install python@3.10.20
+          vfox use -g python@3.10.20
+          vfox current
+
+      - name: Check uv-build python 3.10.20
+        if: runner.os == 'Windows' && matrix.mirror == ''
+        run: |
+          Invoke-Expression "$(vfox activate pwsh)"
+          $python_version = $(python -c 'import sys;print(sys.version)')
+          Write-Output $python_version
+
+          if ($python_version -notlike "3.10.20*") {
+              exit 1
+          }
