@@ -153,13 +153,17 @@ jobs:
           if ($LASTEXITCODE -ne 0) {
             exit $LASTEXITCODE
           }
-          $python_exe = Join-Path $HOME ".vfox\cache\python\v-3.10.20\python-3.10.20\python.exe"
-          if (-not (Test-Path $python_exe)) {
-            Write-Error "python@3.10.20 uv-build install did not create $python_exe"
-            exit 1
-          }
           vfox use -g python@3.10.20
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
           vfox current
+          $python_version = $(python -c 'import sys;print(sys.version)')
+          Write-Output $python_version
+
+          if ($python_version -notlike "3.10.20*") {
+              exit 1
+          }
 
       - name: Check uv-build python 3.10.20
         if: runner.os == 'Windows' && matrix.mirror == ''
