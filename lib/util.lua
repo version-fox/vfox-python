@@ -605,10 +605,10 @@ function uvBuildPreInstall(version)
         error("uv-build PreInstall did not provide install metadata")
     end
     if isNilOrEmpty(uvBuildPackage.url) then
-        error("uv-build PreInstall url must not be empty")
+        error("uv-build PreInstall failed: url is required")
     end
     if isNilOrEmpty(uvBuildPackage.sha256) then
-        error("uv-build PreInstall sha256 must not be empty")
+        error("uv-build PreInstall failed: sha256 is required")
     end
     return uvBuildPackage
 end
