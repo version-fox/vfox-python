@@ -7,11 +7,11 @@ function PLUGIN:PreInstall(ctx)
     end
 
     if useUvBuild() then
-        local package = uvBuildPreInstall(version)
-        if package == nil or package.url == nil or package.url == "" or package.sha256 == nil or package.sha256 == "" then
+        local uvBuildPackage = uvBuildPreInstall(version)
+        if uvBuildPackage == nil or uvBuildPackage.url == nil or uvBuildPackage.url == "" or uvBuildPackage.sha256 == nil or uvBuildPackage.sha256 == "" then
             error("uv-build PreInstall did not provide required url and sha256 fields")
         end
-        return package
+        return uvBuildPackage
     end
 
     if OS_TYPE == "windows" and not checkIsReleaseVersion(version) then
