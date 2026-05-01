@@ -583,9 +583,9 @@ local function ensureWindowsDirectory(path)
 end
 
 local function writeWindowsFile(path, content)
-    local file = io.open(path, "w")
+    local file, err = io.open(path, "w")
     if not file then
-        error("Failed to write file: " .. path .. ". Check directory permissions and path validity.")
+        error("Failed to write file: " .. path .. ". Error: " .. (err or "unknown"))
     end
     file:write(content)
     file:close()
@@ -594,7 +594,7 @@ end
 local function createWindowsPipShim(scriptsPath)
     ensureWindowsDirectory(scriptsPath)
 
-    -- Match the common pip script entry points created by ensurepip.
+    -- pip and pip3 cover the command names exposed by vfox CI and common Windows usage.
     local shims = { "pip.cmd", "pip3.cmd" }
     for _, shim in ipairs(shims) do
         writeWindowsFile(scriptsPath .. "\\" .. shim, WINDOWS_PIP_SHIM_CONTENT)
@@ -643,7 +643,7 @@ local function ensureWindowsUvBuildPip(path)
     })
     local reinstallExitCode = os.execute(reinstallCommand)
     if not commandSucceeded(reinstallExitCode) then
-        error("pip force-reinstall failed while creating pip scripts. Exit code: " .. tostring(reinstallExitCode))
+        error("pip force-reinstall failed. Exit code: " .. tostring(reinstallExitCode))
     end
 
     local verifyCommand = powerShellPythonCommand(pythonExe, { "-E", "-s", "-m", "pip", "--version" })
