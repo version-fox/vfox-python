@@ -601,7 +601,7 @@ local function createWindowsPipShim(scriptsPath)
     end
 end
 
-local function windowsPipCommandExists(scriptsPath)
+local function isPipCommandAvailable(scriptsPath)
     return pathExists(scriptsPath .. "\\pip.exe") or pathExists(scriptsPath .. "\\pip.cmd")
 end
 
@@ -616,7 +616,7 @@ local function ensureWindowsUvBuildPip(path)
         error("Cannot install pip: python.exe was not found at " .. pythonExe)
     end
     -- If Scripts does not exist yet, pathExists returns false and setup continues.
-    if windowsPipCommandExists(scriptsPath) then
+    if isPipCommandAvailable(scriptsPath) then
         return
     end
 
@@ -632,7 +632,7 @@ local function ensureWindowsUvBuildPip(path)
         error("ensurepip failed while installing pip. Exit code: " .. tostring(exitCode))
     end
 
-    if windowsPipCommandExists(scriptsPath) then
+    if isPipCommandAvailable(scriptsPath) then
         return
     end
 
@@ -643,7 +643,7 @@ local function ensureWindowsUvBuildPip(path)
     })
     local reinstallExitCode = os.execute(reinstallCommand)
     if not commandSucceeded(reinstallExitCode) then
-        error("pip force-reinstall failed. Exit code: " .. tostring(reinstallExitCode))
+        error("pip force-reinstall step failed before shim creation. Exit code: " .. tostring(reinstallExitCode))
     end
 
     local verifyCommand = powerShellPythonCommand(pythonExe, { "-E", "-s", "-m", "pip", "--version" })
@@ -652,7 +652,7 @@ local function ensureWindowsUvBuildPip(path)
         error("pip module is not available after installation attempts. Exit code: " .. tostring(verifyExitCode))
     end
 
-    if not windowsPipCommandExists(scriptsPath) then
+    if not isPipCommandAvailable(scriptsPath) then
         createWindowsPipShim(scriptsPath)
     end
 end
