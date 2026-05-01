@@ -462,11 +462,14 @@ local function verifyUvBuildArchive(path, sha256)
             error("Unable to verify uv-build archive sha256 for " .. path .. ": certutil command could not be started")
         end
 
-        local output = string.lower(handle:read("*a") or "")
+        local output = handle:read("*a")
         handle:close()
+        if output == nil then
+            error("Unable to verify uv-build archive sha256 for " .. path .. ": failed to read certutil output")
+        end
         local actualSha256
         for line in string.gmatch(output, "[^\r\n]+") do
-            local normalizedLine = string.gsub(line, "%s+", "")
+            local normalizedLine = string.gsub(string.lower(line), "%s+", "")
             if string.match(normalizedLine, "^[0-9a-f]+$") and string.len(normalizedLine) == 64 then
                 actualSha256 = normalizedLine
                 break
