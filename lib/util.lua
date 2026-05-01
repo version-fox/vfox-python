@@ -267,7 +267,7 @@ local function trimTrailingSlash(value)
     return string.gsub(value, "/+$", "")
 end
 
-local function isEmptyString(value)
+local function isNilOrEmpty(value)
     return value == nil or value == ""
 end
 
@@ -603,8 +603,8 @@ function uvBuildPreInstall(version)
     if uvBuildPackage == nil then
         error("uv-build PreInstall did not provide install metadata")
     end
-    if isEmptyString(uvBuildPackage.url) or isEmptyString(uvBuildPackage.sha256) then
-        error("uv-build PreInstall did not provide required url and sha256 fields")
+    if isNilOrEmpty(uvBuildPackage.url) or isNilOrEmpty(uvBuildPackage.sha256) then
+        error("uv-build PreInstall url and sha256 must not be empty")
     end
     return uvBuildPackage
 end
