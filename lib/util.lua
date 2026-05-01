@@ -581,14 +581,20 @@ function resolvePythonInstallPath(installPath, version)
 end
 
 function uvBuildPreInstall(version)
-    local build = findUvBuild(version)
-    return {
-        version = version,
-        url = uvBuildDownloadUrl(build),
-        headers = REQUEST_HEADERS,
-        sha256 = uvBuildSha256(build),
-        note = "uv-build",
-    }
+    local ok, result = pcall(function()
+        local build = findUvBuild(version)
+        return {
+            version = version,
+            url = uvBuildDownloadUrl(build),
+            headers = REQUEST_HEADERS,
+            sha256 = uvBuildSha256(build),
+            note = "uv-build",
+        }
+    end)
+    if not ok then
+        error("uv-build PreInstall failed: " .. tostring(result))
+    end
+    return result
 end
 
 function linuxCompile(ctx)
