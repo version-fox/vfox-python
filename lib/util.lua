@@ -586,7 +586,7 @@ local function ensureWindowsUvBuildPip(path)
     end
 
     if not pathExists(path .. "\\Lib\\ensurepip\\__init__.py") then
-        print("Warning: uv-build Python does not include ensurepip; pip was not installed.")
+        print("Warning: uv-build Python does not include ensurepip; skipping pip installation.")
         return
     end
 
@@ -610,7 +610,7 @@ local function ensureWindowsUvBuildPip(path)
     end
 
     if not pathExists(path .. "\\Scripts\\pip.exe") then
-        error("Install pip script failed: pip.exe was not created")
+        error("Failed to install pip: pip.exe was not created after installation attempts")
     end
 end
 
