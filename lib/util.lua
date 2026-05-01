@@ -464,7 +464,7 @@ local function verifyUvBuildArchive(path, sha256)
 
         local output = string.lower(handle:read("*a") or "")
         handle:close()
-        local actualSha256 = nil
+        local actualSha256
         for line in string.gmatch(output, "[^\r\n]+") do
             local normalizedLine = string.gsub(line, "%s+", "")
             if string.match(normalizedLine, "^[0-9a-f]+$") and string.len(normalizedLine) == 64 then
