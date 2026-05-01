@@ -589,7 +589,7 @@ local function ensureWindowsUvBuildPip(path)
     end
 
     if not pathExists(path .. "\\Lib\\ensurepip\\__init__.py") then
-        print("Warning: uv-build Python does not include ensurepip; skipping pip installation, so pip will not be available.")
+        print("Warning: uv-build Python does not include ensurepip; pip will not be available.")
         return
     end
 
@@ -604,9 +604,8 @@ local function ensureWindowsUvBuildPip(path)
         return
     end
 
-    local quotedBundledPath = shellQuote(path .. "\\Lib\\ensurepip\\_bundled")
     command = string.format("%s -E -s -m pip install --force-reinstall --no-index --find-links %s pip",
-        shellQuote(pythonExe), quotedBundledPath)
+        shellQuote(pythonExe), shellQuote(path .. "\\Lib\\ensurepip\\_bundled"))
     exitCode = os.execute(command)
     if not commandSucceeded(exitCode) then
         error("pip force-reinstall failed while creating pip scripts. Exit code: " .. tostring(exitCode))
