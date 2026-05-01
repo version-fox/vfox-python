@@ -259,6 +259,14 @@ local function shellQuote(value)
     return "'" .. string.gsub(value, "'", "'\\''") .. "'"
 end
 
+local function powerShellCommand(script, args)
+    local command = "powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command " .. shellQuote(script)
+    for _, arg in ipairs(args) do
+        command = command .. " " .. shellQuote(arg)
+    end
+    return command
+end
+
 local function startsWith(value, prefix)
     return string.sub(value, 1, string.len(prefix)) == prefix
 end
@@ -548,7 +556,7 @@ local function ensureWindowsUvBuildPip(path)
     end
 
     print("Installing pip for uv-build Python on Windows...")
-    local command = string.format("%s -E -s -m ensurepip -U --default-pip", shellQuote(pythonExe))
+    local command = powerShellCommand("& { & $args[0] -E -s -m ensurepip -U --default-pip }", { pythonExe })
     local exitCode = os.execute(command)
     if not commandSucceeded(exitCode) then
         error("ensurepip failed while installing pip. Exit code: " .. tostring(exitCode))
@@ -558,8 +566,8 @@ local function ensureWindowsUvBuildPip(path)
         return
     end
 
-    command = string.format("%s -E -s -m pip install --force-reinstall --no-index --find-links %s pip",
-        shellQuote(pythonExe), shellQuote(path .. "\\Lib\\ensurepip\\_bundled"))
+    command = powerShellCommand("& { & $args[0] -E -s -m pip install --force-reinstall --no-index --find-links $args[1] pip }",
+        { pythonExe, path .. "\\Lib\\ensurepip\\_bundled" })
     exitCode = os.execute(command)
     if not commandSucceeded(exitCode) then
         error("pip force-reinstall failed while creating pip scripts. Exit code: " .. tostring(exitCode))
