@@ -585,7 +585,7 @@ end
 local function writeWindowsFile(path, content)
     local file = io.open(path, "w")
     if not file then
-        error("Failed to write file: " .. path .. ". Check directory permissions and available disk space.")
+        error("Failed to write file: " .. path .. ". Check directory permissions and path validity.")
     end
     file:write(content)
     file:close()
