@@ -63,6 +63,27 @@ jobs:
               exit 1
           fi
 
+      - name: Install Python 3.10.20 with uv-build
+        if: matrix.mirror == ''
+        env:
+          VFOX_PYTHON_USE_UV_BUILD: "1"
+        run: |
+          eval "$(vfox activate bash)"
+          vfox install python@3.10.20
+          vfox use -g python@3.10.20
+          vfox current
+
+      - name: Check uv-build python 3.10.20
+        if: matrix.mirror == ''
+        run: |
+          eval "$(vfox activate bash)"
+          python_version=$(python -c 'import sys;print(sys.version, sys.path)')
+          echo $python_version
+
+          if [[ ! $python_version == 3.10.20* ]]; then
+              exit 1
+          fi
+
   test-on-windows:
     runs-on: ${{ matrix.os }}
     strategy:
