@@ -260,6 +260,17 @@ local function shellQuote(value)
     return "'" .. string.gsub(value, "'", "'\\''") .. "'"
 end
 
+local function powershellSingleQuotedLiteral(value)
+    if string.find(value, "[\r\n%z]") then
+        error("Path contains unsupported control character: " .. value)
+    end
+    if containsTraversalSegment(value) then
+        error("Path contains unsupported traversal segment: " .. value)
+    end
+
+    return "'" .. string.gsub(value, "'", "''") .. "'"
+end
+
 local function startsWith(value, prefix)
     return string.sub(value, 1, string.len(prefix)) == prefix
 end
@@ -472,9 +483,8 @@ local function verifyUvBuildArchive(path, sha256)
 
     local status
     if RUNTIME.osType == "windows" or OS_TYPE == "windows" then
-        os.setenv("VFOX_PYTHON_HASH_PATH", path)
         local command = "powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command " ..
-            shellQuote("(Get-FileHash -LiteralPath $env:VFOX_PYTHON_HASH_PATH -Algorithm SHA256).Hash")
+            shellQuote("(Get-FileHash -LiteralPath " .. powershellSingleQuotedLiteral(path) .. " -Algorithm SHA256).Hash")
         local handle = io.popen(command)
         if handle == nil then
             error("Unable to verify uv-build archive sha256 for " .. path .. ": powershell Get-FileHash command could not be started")
