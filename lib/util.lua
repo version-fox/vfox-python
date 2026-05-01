@@ -22,6 +22,7 @@ local REQUEST_HEADERS = {
 }
 
 -- pip.cmd lives under Scripts, so %~dp0..\python.exe resolves to the install root's python.exe.
+-- Windows command scripts conventionally use CRLF line endings.
 local WINDOWS_PIP_SHIM_CONTENT = "@echo off\r\n\"%~dp0..\\python.exe\" -m pip %*\r\n"
 
 local UV_BUILD_ENV = "VFOX_PYTHON_USE_UV_BUILD"
@@ -593,6 +594,7 @@ end
 local function createWindowsPipShim(scriptsPath)
     ensureWindowsDirectory(scriptsPath)
 
+    -- Match the common pip script entry points created by ensurepip.
     local shims = { "pip.cmd", "pip3.cmd" }
     for _, shim in ipairs(shims) do
         writeWindowsFile(scriptsPath .. "\\" .. shim, WINDOWS_PIP_SHIM_CONTENT)
