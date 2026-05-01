@@ -581,7 +581,7 @@ function resolvePythonInstallPath(installPath, version)
 end
 
 function uvBuildPreInstall(version)
-    local ok, result = pcall(function()
+    local ok, uvBuildPackage = pcall(function()
         local build = findUvBuild(version)
         return {
             version = version,
@@ -592,12 +592,15 @@ function uvBuildPreInstall(version)
         }
     end)
     if not ok then
-        error("uv-build PreInstall failed: " .. tostring(result))
+        error("uv-build PreInstall failed: " .. tostring(uvBuildPackage))
     end
-    if result == nil or result.url == nil or result.url == "" or result.sha256 == nil or result.sha256 == "" then
+    if uvBuildPackage == nil then
+        error("uv-build PreInstall did not provide install metadata")
+    end
+    if uvBuildPackage.url == nil or uvBuildPackage.url == "" or uvBuildPackage.sha256 == nil or uvBuildPackage.sha256 == "" then
         error("uv-build PreInstall did not provide required url and sha256 fields")
     end
-    return result
+    return uvBuildPackage
 end
 
 function linuxCompile(ctx)
