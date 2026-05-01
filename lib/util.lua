@@ -461,17 +461,18 @@ local function verifyUvBuildArchive(path, sha256)
             error("Unable to verify uv-build archive sha256: certutil is required")
         end
 
-        local output = handle:read("*a")
+        local output = string.lower(handle:read("*a") or "")
         handle:close()
-        if output == nil then
-            error("Unable to verify uv-build archive sha256: failed to read certutil output")
-        end
-        output = string.lower(output)
+        local hashMatches = false
         for line in string.gmatch(output, "[^\r\n]+") do
             local normalizedLine = string.gsub(line, "%s+", "")
             if normalizedLine == sha256 then
-                return
+                hashMatches = true
+                break
             end
+        end
+        if hashMatches then
+            return
         end
         status = 1
     else
