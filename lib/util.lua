@@ -587,6 +587,7 @@ end
 function uvBuildPreInstall(version)
     local ok, value = pcall(function()
         local build = findUvBuild(version)
+        -- Return url/sha256 so vfox core performs download, checksum verification, and archive extraction.
         return {
             version = version,
             url = uvBuildDownloadUrl(build),
@@ -603,8 +604,11 @@ function uvBuildPreInstall(version)
     if uvBuildPackage == nil then
         error("uv-build PreInstall did not provide install metadata")
     end
-    if isNilOrEmpty(uvBuildPackage.url) or isNilOrEmpty(uvBuildPackage.sha256) then
-        error("uv-build PreInstall url and sha256 must not be empty")
+    if isNilOrEmpty(uvBuildPackage.url) then
+        error("uv-build PreInstall url must not be empty")
+    end
+    if isNilOrEmpty(uvBuildPackage.sha256) then
+        error("uv-build PreInstall sha256 must not be empty")
     end
     return uvBuildPackage
 end
