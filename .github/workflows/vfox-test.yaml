@@ -84,6 +84,9 @@ jobs:
               exit 1
           fi
 
+          python -m pip --version
+          pip --version
+
   test-on-windows:
     runs-on: ${{ matrix.os }}
     strategy:
@@ -160,3 +163,6 @@ jobs:
           if ($python_version -notlike "3.10.20*") {
               exit 1
           }
+
+          python -m pip --version
+          pip --version
