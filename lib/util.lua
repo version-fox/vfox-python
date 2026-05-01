@@ -594,7 +594,7 @@ local function ensureWindowsUvBuildPip(path)
     local command = shellQuote(pythonExe) .. " -E -s -m ensurepip -U --default-pip > NUL"
     local exitCode = os.execute(command)
     if not commandSucceeded(exitCode) then
-        error("Install pip failed. exit " .. tostring(exitCode))
+        error("ensurepip failed while installing pip. exit " .. tostring(exitCode))
     end
 
     if pathExists(path .. "\\Scripts\\pip.exe") then
@@ -605,7 +605,7 @@ local function ensureWindowsUvBuildPip(path)
         shellQuote(path .. "\\Lib\\ensurepip\\_bundled") .. " pip > NUL"
     exitCode = os.execute(command)
     if not commandSucceeded(exitCode) then
-        error("Install pip script failed. exit " .. tostring(exitCode))
+        error("pip force-reinstall failed while creating pip scripts. exit " .. tostring(exitCode))
     end
 
     if not pathExists(path .. "\\Scripts\\pip.exe") then
