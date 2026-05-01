@@ -581,7 +581,10 @@ local function ensureWindowsUvBuildPip(path)
     end
 
     local pythonExe = path .. "\\python.exe"
-    if not pathExists(pythonExe) or pathExists(path .. "\\Scripts\\pip.exe") then
+    if not pathExists(pythonExe) then
+        error("Cannot install pip: python.exe was not found at " .. pythonExe)
+    end
+    if pathExists(path .. "\\Scripts\\pip.exe") then
         return
     end
 
@@ -594,7 +597,7 @@ local function ensureWindowsUvBuildPip(path)
     local command = string.format("%s -E -s -m ensurepip -U --default-pip", shellQuote(pythonExe))
     local exitCode = os.execute(command)
     if not commandSucceeded(exitCode) then
-        error("ensurepip failed while installing pip. exit " .. tostring(exitCode))
+        error("ensurepip failed while installing pip. Exit code: " .. tostring(exitCode))
     end
 
     if pathExists(path .. "\\Scripts\\pip.exe") then
@@ -606,7 +609,7 @@ local function ensureWindowsUvBuildPip(path)
         shellQuote(pythonExe), quotedBundledPath)
     exitCode = os.execute(command)
     if not commandSucceeded(exitCode) then
-        error("pip force-reinstall failed while creating pip scripts. exit " .. tostring(exitCode))
+        error("pip force-reinstall failed while creating pip scripts. Exit code: " .. tostring(exitCode))
     end
 
     if not pathExists(path .. "\\Scripts\\pip.exe") then
