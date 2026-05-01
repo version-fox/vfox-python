@@ -257,6 +257,10 @@ local function isHttpsUrl(value)
     return type(value) == "string" and startsWith(value, "https://") and not string.find(value, "[\r\n%z]")
 end
 
+local function commandSucceeded(status)
+    return status == 0 or status == true
+end
+
 local function startsWithPath(value, prefix)
     if value == prefix then
         return true
@@ -356,6 +360,9 @@ local function buildUvBuildUrl(osType, archType, libc)
 end
 
 local function uvBuildVersion(build)
+    if build.display_version ~= nil then
+        return build.display_version
+    end
     if build.variant == "freethreaded" then
         return build.version .. "t"
     end
@@ -363,7 +370,8 @@ local function uvBuildVersion(build)
 end
 
 local function isSupportedUvBuild(build)
-    if build.name ~= "cpython" then
+    local implementation = build.implementation or build.name
+    if implementation ~= "cpython" then
         return false
     end
     if build.version == nil then
@@ -372,13 +380,93 @@ local function isSupportedUvBuild(build)
     if build.arch and build.arch.variant ~= nil then
         return false
     end
-    if build.variant ~= nil and build.variant ~= "freethreaded" then
+    if build.variant ~= nil and build.variant ~= "default" and build.variant ~= "freethreaded" then
         return false
     end
     if not isHttpsUrl(build.url) then
         return false
     end
     return true
+end
+
+local function uvBuildSha256(build)
+    if type(build.asset) ~= "table" or type(build.asset.sha256) ~= "string" then
+        return nil
+    end
+
+    local sha256 = string.lower(build.asset.sha256)
+    if string.match(sha256, "^[0-9a-f]+$") and string.len(sha256) == 64 then
+        return sha256
+    end
+
+    error("Invalid uv-build sha256 for " .. build.url)
+end
+
+local function uvBuildAssetName(build)
+    if type(build.filename) == "string" then
+        return string.lower(build.filename)
+    end
+    if type(build.url) == "string" then
+        return string.lower(build.url)
+    end
+    return ""
+end
+
+local function uvBuildAssetPriority(build)
+    local name = uvBuildAssetName(build)
+    if string.find(name, "pgo+lto-full", 1, true) or string.find(name, "pgo%2blto-full", 1, true) then
+        return 10
+    end
+    if string.find(name, "install_only_stripped", 1, true) then
+        return 20
+    end
+    if string.find(name, "install_only", 1, true) then
+        return 30
+    end
+    if not string.find(name, "debug", 1, true) then
+        return 40
+    end
+    return 90
+end
+
+local function verifyUvBuildArchive(path, sha256)
+    if sha256 == nil then
+        return
+    end
+
+    print("Verifying Python uv-build archive sha256...")
+
+    local status
+    if RUNTIME.osType == "windows" or OS_TYPE == "windows" then
+        local command = 'certutil -hashfile ' .. shellQuote(path) .. ' SHA256 | findstr /i /c:"' .. sha256 .. '" > NUL'
+        status = os.execute(command)
+    else
+        local command = nil
+        local hasSha256sum = io.popen("command -v sha256sum 2>/dev/null")
+        local sha256sumPath = hasSha256sum and hasSha256sum:read("*l") or nil
+        if hasSha256sum then
+            hasSha256sum:close()
+        end
+
+        local hasShasum = io.popen("command -v shasum 2>/dev/null")
+        local shasumPath = hasShasum and hasShasum:read("*l") or nil
+        if hasShasum then
+            hasShasum:close()
+        end
+
+        if sha256sumPath and sha256sumPath ~= "" then
+            command = "printf '%s  %s\n' " .. shellQuote(sha256) .. " " .. shellQuote(path) .. " | sha256sum -c -"
+        elseif shasumPath and shasumPath ~= "" then
+            command = "printf '%s  %s\n' " .. shellQuote(sha256) .. " " .. shellQuote(path) .. " | shasum -a 256 -c -"
+        else
+            error("Unable to verify uv-build archive sha256: sha256sum or shasum is required")
+        end
+        status = os.execute(command)
+    end
+
+    if not commandSucceeded(status) then
+        error("uv-build archive sha256 verification failed")
+    end
 end
 
 local function uvBuildDownloadUrl(build)
@@ -410,15 +498,24 @@ local function getUvBuilds(osType, archType, libc)
     end
 
     local jsonObj = json.decode(resp.body)
-    return jsonObj.versions or {}
+    return jsonObj.items or jsonObj.versions or {}
 end
 
 local function findUvBuild(version)
     local osType, archType, libc = getUvBuildPlatform()
+    local selectedBuild = nil
+    local selectedPriority = nil
     for _, build in ipairs(getUvBuilds(osType, archType, libc)) do
         if isSupportedUvBuild(build) and uvBuildVersion(build) == version then
-            return build
+            local priority = uvBuildAssetPriority(build)
+            if selectedBuild == nil or priority < selectedPriority then
+                selectedBuild = build
+                selectedPriority = priority
+            end
         end
+    end
+    if selectedBuild ~= nil then
+        return selectedBuild
     end
     error("No uv-build prebuilt Python found for version " .. version .. " on " .. osType .. "/" .. archType .. "/" .. libc)
 end
@@ -504,6 +601,7 @@ function uvBuildInstall(ctx)
     if err ~= nil then
         error("Downloading uv-build archive failed")
     end
+    verifyUvBuildArchive(archivePath, uvBuildSha256(build))
 
     print("Extracting Python uv-build archive...")
     local status = os.execute("tar -xf " .. shellQuote(archivePath) .. " --strip-components=1 -C " .. shellQuote(path))
