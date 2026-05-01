@@ -259,12 +259,30 @@ local function shellQuote(value)
     return "'" .. string.gsub(value, "'", "'\\''") .. "'"
 end
 
-local function powerShellCommand(script, args)
-    local command = "powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command " .. shellQuote(script)
-    for _, arg in ipairs(args) do
-        command = command .. " " .. shellQuote(arg)
+local function powerShellQuote(value)
+    if string.find(value, "[\r\n%z]") then
+        error("PowerShell argument contains unsupported control character: " .. value)
     end
+    if containsTraversalSegment(value) then
+        error("PowerShell argument contains unsupported traversal segment: " .. value)
+    end
+    if string.find(value, '"', 1, true) then
+        error("PowerShell argument contains unsupported quote character: " .. value)
+    end
+    return "'" .. string.gsub(value, "'", "''") .. "'"
+end
+
+local function powerShellCommand(script)
+    local command = "powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command " .. shellQuote(script)
     return command
+end
+
+local function powerShellPythonCommand(pythonExe, pythonArgs)
+    local script = "& " .. powerShellQuote(pythonExe)
+    for _, arg in ipairs(pythonArgs) do
+        script = script .. " " .. powerShellQuote(arg)
+    end
+    return powerShellCommand(script)
 end
 
 local function startsWith(value, prefix)
@@ -556,7 +574,7 @@ local function ensureWindowsUvBuildPip(path)
     end
 
     print("Installing pip for uv-build Python on Windows...")
-    local command = powerShellCommand("& { & $args[0] -E -s -m ensurepip -U --default-pip }", { pythonExe })
+    local command = powerShellPythonCommand(pythonExe, { "-E", "-s", "-m", "ensurepip", "-U", "--default-pip" })
     local exitCode = os.execute(command)
     if not commandSucceeded(exitCode) then
         error("ensurepip failed while installing pip. Exit code: " .. tostring(exitCode))
@@ -566,8 +584,10 @@ local function ensureWindowsUvBuildPip(path)
         return
     end
 
-    command = powerShellCommand("& { & $args[0] -E -s -m pip install --force-reinstall --no-index --find-links $args[1] pip }",
-        { pythonExe, path .. "\\Lib\\ensurepip\\_bundled" })
+    command = powerShellPythonCommand(pythonExe, {
+        "-E", "-s", "-m", "pip", "install", "--force-reinstall", "--no-index",
+        "--find-links", path .. "\\Lib\\ensurepip\\_bundled", "pip"
+    })
     exitCode = os.execute(command)
     if not commandSucceeded(exitCode) then
         error("pip force-reinstall failed while creating pip scripts. Exit code: " .. tostring(exitCode))
