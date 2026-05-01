@@ -151,7 +151,7 @@ jobs:
           Invoke-Expression "$(vfox activate pwsh)"
           $install_output = vfox install python@3.10.20 2>&1
           $install_output | Write-Output
-          if ($LASTEXITCODE -ne 0 -or ($install_output -join "`n") -like "*failed to install python*") {
+          if ($LASTEXITCODE -ne 0 -or ($install_output -join "`n") -ilike "*failed to install python*") {
               exit 1
           }
           vfox use -g python@3.10.20
