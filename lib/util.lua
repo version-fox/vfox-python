@@ -21,6 +21,8 @@ local REQUEST_HEADERS = {
     ["User-Agent"] = "vfox"
 }
 
+local WINDOWS_PIP_SHIM_CONTENT = "@echo off\r\n\"%~dp0..\\python.exe\" -m pip %*\r\n"
+
 local UV_BUILD_ENV = "VFOX_PYTHON_USE_UV_BUILD"
 local UV_BUILD_MIRROR_ENV = "VFOX_PYTHON_UV_BUILD_MIRROR"
 
@@ -574,7 +576,7 @@ local function ensureWindowsDirectory(path)
     local command = powerShellCommand("New-Item -ItemType Directory -Force -Path " .. powerShellQuote(path) .. " | Out-Null")
     local exitCode = os.execute(command)
     if not commandSucceeded(exitCode) then
-        error("Failed to create directory: " .. path .. ". Exit code: " .. tostring(exitCode))
+        error("Failed to create directory: " .. path .. ". Command: " .. command .. ". Exit code: " .. tostring(exitCode))
     end
 end
 
@@ -592,13 +594,14 @@ local function createWindowsPipShim(installPath, version)
     local scriptsPath = installPath .. "\\Scripts"
     ensureWindowsDirectory(scriptsPath)
 
-    local content = "@echo off\r\n\"%~dp0..\\python.exe\" -m pip %*\r\n"
     local shims = { "pip.cmd", "pip3.cmd" }
     if major ~= nil and minor ~= nil then
         table.insert(shims, "pip" .. major .. "." .. minor .. ".cmd")
+    else
+        print("Warning: unable to create versioned pip shim for unexpected Python version: " .. version)
     end
     for _, shim in ipairs(shims) do
-        writeWindowsFile(scriptsPath .. "\\" .. shim, content)
+        writeWindowsFile(scriptsPath .. "\\" .. shim, WINDOWS_PIP_SHIM_CONTENT)
     end
 end
 
