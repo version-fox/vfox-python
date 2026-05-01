@@ -241,12 +241,12 @@ local function containsTraversalSegment(value)
     return false
 end
 
-local function controlCharacterPosition(value)
+local function findControlCharacter(value)
     return string.find(value, "%c")
 end
 
 local function shellQuote(value)
-    local controlCharStart = controlCharacterPosition(value)
+    local controlCharStart = findControlCharacter(value)
     if controlCharStart then
         error("Path contains unsupported control character at position " .. controlCharStart)
     end
@@ -265,7 +265,7 @@ local function shellQuote(value)
 end
 
 local function powerShellQuote(value)
-    local controlCharStart = controlCharacterPosition(value)
+    local controlCharStart = findControlCharacter(value)
     if controlCharStart then
         error("PowerShell argument contains unsupported control character at position " .. controlCharStart)
     end
@@ -275,6 +275,7 @@ local function powerShellQuote(value)
     if string.find(value, '"', 1, true) then
         error("PowerShell argument contains unsupported quote character: " .. value)
     end
+    -- PowerShell single-quoted strings escape embedded single quotes by doubling them.
     return "'" .. string.gsub(value, "'", "''") .. "'"
 end
 
