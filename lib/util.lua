@@ -14,6 +14,7 @@ end
 local version_vault_url = "https://vault.vfox.dev/python/pyenv"
 local uv_build_vault_url = "https://vault.vfox.dev/python/uv-build"
 local UV_BUILD_GITHUB_RELEASE_PATTERN = "/releases/download/([^/]+)/([^/]+)$"
+local SHA256_HEX_LENGTH = 64
 
 -- request headers
 local REQUEST_HEADERS = {
@@ -462,18 +463,15 @@ local function verifyUvBuildArchive(path, sha256)
             error("Unable to verify uv-build archive sha256 for " .. path .. ": certutil command could not be started")
         end
 
-        local readOk, output = pcall(function()
-            local data = handle:read("*a")
-            handle:close()
-            return data
-        end)
-        if not readOk or output == nil then
+        local output = handle:read("*a")
+        handle:close()
+        if output == nil then
             error("Unable to verify uv-build archive sha256 for " .. path .. ": failed to read certutil output")
         end
         local actualSha256
         for line in string.gmatch(output, "[^\r\n]+") do
             local normalizedLine = string.gsub(string.lower(line), "%s+", "")
-            if string.match(normalizedLine, "^[0-9a-f]+$") and string.len(normalizedLine) == 64 then
+            if string.match(normalizedLine, "^[0-9a-f]+$") and string.len(normalizedLine) == SHA256_HEX_LENGTH then
                 actualSha256 = normalizedLine
                 break
             end
