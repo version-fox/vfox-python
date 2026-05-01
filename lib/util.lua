@@ -14,7 +14,7 @@ end
 local version_vault_url = "https://vault.vfox.dev/python/pyenv"
 local uv_build_vault_url = "https://vault.vfox.dev/python/uv-build"
 local UV_BUILD_GITHUB_RELEASE_PATTERN = "/releases/download/([^/]+)/([^/]+)$"
-local WINDOWS_NULL_REDIRECT = " > NUL"
+local WINDOWS_NULL_REDIRECT = "> NUL"
 
 -- request headers
 local REQUEST_HEADERS = {
@@ -577,7 +577,7 @@ local function pathExists(path)
 end
 
 local function ensureWindowsUvBuildPip(path)
-    if RUNTIME.osType ~= "windows" and OS_TYPE ~= "windows" then
+    if runtimeOs() ~= "windows" then
         return
     end
 
@@ -592,7 +592,7 @@ local function ensureWindowsUvBuildPip(path)
     end
 
     print("Installing pip...")
-    local command = shellQuote(pythonExe) .. " -E -s -m ensurepip -U --default-pip" .. WINDOWS_NULL_REDIRECT
+    local command = shellQuote(pythonExe) .. " -E -s -m ensurepip -U --default-pip " .. WINDOWS_NULL_REDIRECT
     local exitCode = os.execute(command)
     if not commandSucceeded(exitCode) then
         error("ensurepip failed while installing pip. exit " .. tostring(exitCode))
@@ -602,9 +602,9 @@ local function ensureWindowsUvBuildPip(path)
         return
     end
 
-    local bundledPath = shellQuote(path .. "\\Lib\\ensurepip\\_bundled")
+    local quotedBundledPath = shellQuote(path .. "\\Lib\\ensurepip\\_bundled")
     command = shellQuote(pythonExe) .. " -E -s -m pip install --force-reinstall --no-index" ..
-        " --find-links " .. bundledPath .. " pip" .. WINDOWS_NULL_REDIRECT
+        " --find-links " .. quotedBundledPath .. " pip " .. WINDOWS_NULL_REDIRECT
     exitCode = os.execute(command)
     if not commandSucceeded(exitCode) then
         error("pip force-reinstall failed while creating pip scripts. exit " .. tostring(exitCode))
