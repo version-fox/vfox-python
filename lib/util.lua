@@ -228,11 +228,21 @@ function useUvBuild()
     return value == "1" or value == "true" or value == "yes" or value == "on"
 end
 
+local function containsTraversalSegment(value)
+    local normalizedValue = string.gsub(value, "\\", "/")
+    for segment in string.gmatch(normalizedValue, "[^/]+") do
+        if segment == ".." then
+            return true
+        end
+    end
+    return false
+end
+
 local function shellQuote(value)
     if string.find(value, "[\r\n%z]") then
         error("Path contains unsupported control character: " .. value)
     end
-    if string.find(value, "%.%.%/") or string.find(value, "%.%.\\") then
+    if containsTraversalSegment(value) then
         error("Path contains unsupported traversal segment: " .. value)
     end
 
@@ -250,7 +260,7 @@ local function powershellQuote(value)
     if string.find(value, "[\r\n%z]") then
         error("Path contains unsupported control character: " .. value)
     end
-    if string.find(value, "%.%.%/") or string.find(value, "%.%.\\") then
+    if containsTraversalSegment(value) then
         error("Path contains unsupported traversal segment: " .. value)
     end
 
@@ -469,6 +479,7 @@ local function verifyUvBuildArchive(path, sha256)
 
     local status
     if RUNTIME.osType == "windows" or OS_TYPE == "windows" then
+        -- shellQuote quotes for cmd.exe; powershellQuote quotes the archive path inside the PowerShell command.
         local command = "powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command " ..
             shellQuote("(Get-FileHash -LiteralPath " .. powershellQuote(path) .. " -Algorithm SHA256).Hash")
         local handle = io.popen(command)
