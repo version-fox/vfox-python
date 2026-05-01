@@ -594,6 +594,9 @@ function uvBuildPreInstall(version)
     if not ok then
         error("uv-build PreInstall failed: " .. tostring(result))
     end
+    if result == nil or result.url == nil or result.url == "" or result.sha256 == nil or result.sha256 == "" then
+        error("uv-build PreInstall did not provide required url and sha256 fields")
+    end
     return result
 end
 
