@@ -589,11 +589,11 @@ local function ensureWindowsUvBuildPip(path)
     end
 
     if not pathExists(path .. "\\Lib\\ensurepip\\__init__.py") then
-        print("Warning: uv-build Python does not include ensurepip; skipping pip installation.")
+        print("Warning: uv-build Python does not include ensurepip; skipping pip installation, so pip will not be available.")
         return
     end
 
-    print("Installing pip...")
+    print("Installing pip for uv-build Python on Windows...")
     local command = string.format("%s -E -s -m ensurepip -U --default-pip", shellQuote(pythonExe))
     local exitCode = os.execute(command)
     if not commandSucceeded(exitCode) then
