@@ -16,6 +16,7 @@ local uv_build_vault_url = "https://vault.vfox.dev/python/uv-build"
 local UV_BUILD_GITHUB_RELEASE_PATTERN = "/releases/download/([^/]+)/([^/]+)$"
 local SHA256_HEX_LENGTH = 64
 local URL_ENCODED_DOT = "%2e"
+local POWERSHELL_GET_FILE_HASH_SCRIPT = "& { param([string]$p) (Get-FileHash -LiteralPath $p -Algorithm SHA256).Hash }"
 
 -- request headers
 local REQUEST_HEADERS = {
@@ -269,6 +270,16 @@ local function trimTrailingSlash(value)
     return string.gsub(value, "/+$", "")
 end
 
+local function extractSha256Hex(output)
+    for line in string.gmatch(output, "[^\r\n]+") do
+        local normalizedLine = string.gsub(string.lower(line), "%s+", "")
+        if string.match(normalizedLine, "^[0-9a-f]+$") and string.len(normalizedLine) == SHA256_HEX_LENGTH then
+            return normalizedLine
+        end
+    end
+    return nil
+end
+
 local function isHttpsUrl(value)
     return type(value) == "string" and startsWith(value, "https://") and not string.find(value, "[\r\n%z]")
 end
@@ -473,9 +484,8 @@ local function verifyUvBuildArchive(path, sha256)
 
     local status
     if RUNTIME.osType == "windows" or OS_TYPE == "windows" then
-        local getFileHashScript = "& { param([string]$p) (Get-FileHash -LiteralPath $p -Algorithm SHA256).Hash }"
         local command = "powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command " ..
-            shellQuote(getFileHashScript) .. " " .. shellQuote(path)
+            shellQuote(POWERSHELL_GET_FILE_HASH_SCRIPT) .. " " .. shellQuote(path)
         local handle = io.popen(command)
         if handle == nil then
             error("Unable to verify uv-build archive sha256 for " .. path .. ": powershell Get-FileHash command could not be started")
@@ -486,14 +496,7 @@ local function verifyUvBuildArchive(path, sha256)
         if output == nil then
             error("Unable to verify uv-build archive sha256 for " .. path .. ": failed to read Get-FileHash output")
         end
-        local actualSha256
-        for line in string.gmatch(output, "[^\r\n]+") do
-            local normalizedLine = string.gsub(string.lower(line), "%s+", "")
-            if string.match(normalizedLine, "^[0-9a-f]+$") and string.len(normalizedLine) == SHA256_HEX_LENGTH then
-                actualSha256 = normalizedLine
-                break
-            end
-        end
+        local actualSha256 = extractSha256Hex(output)
         if actualSha256 == expectedSha256 then
             return
         end
