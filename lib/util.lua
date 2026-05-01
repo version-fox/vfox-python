@@ -462,9 +462,12 @@ local function verifyUvBuildArchive(path, sha256)
             error("Unable to verify uv-build archive sha256 for " .. path .. ": certutil command could not be started")
         end
 
-        local output = handle:read("*a")
-        handle:close()
-        if output == nil then
+        local readOk, output = pcall(function()
+            local data = handle:read("*a")
+            handle:close()
+            return data
+        end)
+        if not readOk or output == nil then
             error("Unable to verify uv-build archive sha256 for " .. path .. ": failed to read certutil output")
         end
         local actualSha256
