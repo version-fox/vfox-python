@@ -15,7 +15,7 @@ local version_vault_url = "https://vault.vfox.dev/python/pyenv"
 local uv_build_vault_url = "https://vault.vfox.dev/python/uv-build"
 local UV_BUILD_GITHUB_RELEASE_PATTERN = "/releases/download/([^/]+)/([^/]+)$"
 local SHA256_HEX_LENGTH = 64
-local URL_ENCODED_DOT = "%2e"
+local URL_ENCODED_DOT_PATTERN = "%%2[eE]"
 local POWERSHELL_GET_FILE_HASH_SCRIPT = "& { param([string]$p) (Get-FileHash -LiteralPath $p -Algorithm SHA256).Hash }"
 
 -- request headers
@@ -232,8 +232,7 @@ end
 
 local function containsTraversalSegment(value)
     local normalizedValue = string.gsub(value, "\\", "/")
-    local lowerValue = string.lower(normalizedValue)
-    if string.find(lowerValue, URL_ENCODED_DOT, 1, true) then
+    if string.find(normalizedValue, URL_ENCODED_DOT_PATTERN) then
         return true
     end
     for segment in string.gmatch(normalizedValue, "[^/]+") do
@@ -271,11 +270,9 @@ local function trimTrailingSlash(value)
 end
 
 local function extractSha256Hex(output)
-    for line in string.gmatch(output, "[^\r\n]+") do
-        local normalizedLine = string.gsub(string.lower(line), "%s+", "")
-        if string.match(normalizedLine, "^[0-9a-f]+$") and string.len(normalizedLine) == SHA256_HEX_LENGTH then
-            return normalizedLine
-        end
+    local normalizedOutput = string.gsub(string.lower(output), "%s+", "")
+    if string.match(normalizedOutput, "^[0-9a-f]+$") and string.len(normalizedOutput) == SHA256_HEX_LENGTH then
+        return normalizedOutput
     end
     return nil
 end
