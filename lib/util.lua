@@ -242,14 +242,14 @@ local function containsTraversalSegment(value)
 end
 
 local function findUnsupportedControlCharacter(value)
-    local controlCharStart = nil
+    local firstControlCharPos = nil
     for _, char in ipairs({ "\r", "\n", string.char(0) }) do
         local position = string.find(value, char, 1, true)
-        if position and (controlCharStart == nil or position < controlCharStart) then
-            controlCharStart = position
+        if position and (firstControlCharPos == nil or position < firstControlCharPos) then
+            firstControlCharPos = position
         end
     end
-    return controlCharStart
+    return firstControlCharPos
 end
 
 local function shellQuote(value)
@@ -599,10 +599,10 @@ local function ensureWindowsUvBuildPip(path)
         return
     end
 
-    local bundledPath = path .. "\\Lib\\ensurepip\\_bundled"
+    local windowsBundledPath = path .. "\\Lib\\ensurepip\\_bundled"
     command = powerShellPythonCommand(pythonExe, {
         "-E", "-s", "-m", "pip", "install", "--force-reinstall", "--no-index",
-        "--find-links", bundledPath, "pip"
+        "--find-links", windowsBundledPath, "pip"
     })
     exitCode = os.execute(command)
     if not commandSucceeded(exitCode) then
