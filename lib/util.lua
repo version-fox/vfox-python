@@ -15,7 +15,7 @@ local version_vault_url = "https://vault.vfox.dev/python/pyenv"
 local uv_build_vault_url = "https://vault.vfox.dev/python/uv-build"
 local UV_BUILD_GITHUB_RELEASE_PATTERN = "/releases/download/([^/]+)/([^/]+)$"
 local SHA256_HEX_LENGTH = 64
-local URL_ENCODED_DOT_PATTERN = "%%2[eE]"
+local URL_ENCODED_DOT = "%%2[eE]"
 local POWERSHELL_GET_FILE_HASH_SCRIPT = "& { param([string]$p) (Get-FileHash -LiteralPath $p -Algorithm SHA256).Hash }"
 
 -- request headers
@@ -232,7 +232,7 @@ end
 
 local function containsTraversalSegment(value)
     local normalizedValue = string.gsub(value, "\\", "/")
-    if string.find(normalizedValue, URL_ENCODED_DOT_PATTERN) then
+    if string.find(normalizedValue, URL_ENCODED_DOT) then
         return true
     end
     for segment in string.gmatch(normalizedValue, "[^/]+") do
@@ -275,6 +275,11 @@ local function extractSha256Hex(output)
         return normalizedOutput
     end
     return nil
+end
+
+local function buildWindowsSha256Command(path)
+    return string.format("powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command %s %s",
+        shellQuote(POWERSHELL_GET_FILE_HASH_SCRIPT), shellQuote(path))
 end
 
 local function isHttpsUrl(value)
@@ -481,8 +486,7 @@ local function verifyUvBuildArchive(path, sha256)
 
     local status
     if RUNTIME.osType == "windows" or OS_TYPE == "windows" then
-        local command = "powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command " ..
-            shellQuote(POWERSHELL_GET_FILE_HASH_SCRIPT) .. " " .. shellQuote(path)
+        local command = buildWindowsSha256Command(path)
         local handle = io.popen(command)
         if handle == nil then
             error("Unable to verify uv-build archive sha256 for " .. path .. ": powershell Get-FileHash command could not be started")
