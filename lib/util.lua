@@ -456,8 +456,19 @@ local function verifyUvBuildArchive(path, sha256)
 
     local status
     if RUNTIME.osType == "windows" or OS_TYPE == "windows" then
-        local command = 'certutil -hashfile ' .. shellQuote(path) .. ' SHA256 | findstr /i /c:"' .. sha256 .. '" > NUL'
-        status = os.execute(command)
+        local handle = io.popen("certutil -hashfile " .. shellQuote(path) .. " SHA256")
+        if handle == nil then
+            error("Unable to verify uv-build archive sha256: certutil is required")
+        end
+
+        local output = string.lower(handle:read("*a") or "")
+        handle:close()
+        for line in string.gmatch(output, "[^\r\n]+") do
+            if string.gsub(line, "%s+", "") == sha256 then
+                return
+            end
+        end
+        status = 1
     else
         local command = nil
         local hasSha256sum = io.popen("command -v sha256sum 2>/dev/null")
