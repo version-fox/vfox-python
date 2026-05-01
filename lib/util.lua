@@ -231,11 +231,11 @@ end
 local function containsTraversalSegment(value)
     local normalizedValue = string.gsub(value, "\\", "/")
     local lowerValue = string.lower(normalizedValue)
-    if string.find(lowerValue, "%%2e", 1, false) then
+    if string.find(lowerValue, "%2e", 1, true) then
         return true
     end
     for segment in string.gmatch(normalizedValue, "[^/]+") do
-        if string.sub(segment, 1, 2) == ".." then
+        if segment == ".." then
             return true
         end
     end
