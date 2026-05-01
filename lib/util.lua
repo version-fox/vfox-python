@@ -585,7 +585,7 @@ end
 local function writeWindowsFile(path, content)
     local file = io.open(path, "w")
     if not file then
-        error("Failed to write file: " .. path)
+        error("Failed to write file: " .. path .. ". Check directory permissions and available disk space.")
     end
     file:write(content)
     file:close()
@@ -637,19 +637,19 @@ local function ensureWindowsUvBuildPip(path)
     end
 
     local windowsBundledPath = path .. "\\Lib\\ensurepip\\_bundled"
-    command = powerShellPythonCommand(pythonExe, {
+    local reinstallCommand = powerShellPythonCommand(pythonExe, {
         "-E", "-s", "-m", "pip", "install", "--force-reinstall", "--no-index",
         "--find-links", windowsBundledPath, "pip"
     })
-    exitCode = os.execute(command)
-    if not commandSucceeded(exitCode) then
-        error("pip force-reinstall failed while creating pip scripts. Exit code: " .. tostring(exitCode))
+    local reinstallExitCode = os.execute(reinstallCommand)
+    if not commandSucceeded(reinstallExitCode) then
+        error("pip force-reinstall failed while creating pip scripts. Exit code: " .. tostring(reinstallExitCode))
     end
 
-    command = powerShellPythonCommand(pythonExe, { "-E", "-s", "-m", "pip", "--version" })
-    exitCode = os.execute(command)
-    if not commandSucceeded(exitCode) then
-        error("pip module is not available after installation attempts. Exit code: " .. tostring(exitCode))
+    local verifyCommand = powerShellPythonCommand(pythonExe, { "-E", "-s", "-m", "pip", "--version" })
+    local verifyExitCode = os.execute(verifyCommand)
+    if not commandSucceeded(verifyExitCode) then
+        error("pip module is not available after installation attempts. Exit code: " .. tostring(verifyExitCode))
     end
 
     if not windowsPipCommandExists(scriptsPath) then
