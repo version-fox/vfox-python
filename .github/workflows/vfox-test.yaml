@@ -149,7 +149,11 @@ jobs:
           VFOX_PYTHON_USE_UV_BUILD: "1"
         run: |
           Invoke-Expression "$(vfox activate pwsh)"
-          vfox install python@3.10.20
+          $install_output = vfox install python@3.10.20 2>&1
+          $install_output | Write-Output
+          if ($LASTEXITCODE -ne 0 -or ($install_output -join "`n") -like "*failed to install python*") {
+              exit 1
+          }
           vfox use -g python@3.10.20
           vfox current
 
