@@ -260,8 +260,9 @@ local function shellQuote(value)
 end
 
 local function powerShellQuote(value)
-    if string.find(value, "[\r\n%z]") then
-        error("PowerShell argument contains unsupported control character: " .. value)
+    local controlCharStart = string.find(value, "[\r\n%z]")
+    if controlCharStart then
+        error("PowerShell argument contains unsupported control character at position " .. controlCharStart)
     end
     if containsTraversalSegment(value) then
         error("PowerShell argument contains unsupported traversal segment: " .. value)
@@ -273,8 +274,7 @@ local function powerShellQuote(value)
 end
 
 local function powerShellCommand(script)
-    local command = "powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command " .. shellQuote(script)
-    return command
+    return "powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command " .. shellQuote(script)
 end
 
 local function powerShellPythonCommand(pythonExe, pythonArgs)
