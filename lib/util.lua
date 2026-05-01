@@ -363,6 +363,9 @@ local function uvBuildVersion(build)
     if build.display_version ~= nil then
         return build.display_version
     end
+    if build.version == nil then
+        return nil
+    end
     if build.variant == "freethreaded" then
         return build.version .. "t"
     end
@@ -470,6 +473,10 @@ local function verifyUvBuildArchive(path, sha256)
 end
 
 local function uvBuildDownloadUrl(build)
+    if not isHttpsUrl(build.url) then
+        error("Invalid uv-build download URL")
+    end
+
     local mirror = os.getenv(UV_BUILD_MIRROR_ENV)
     if mirror == nil or mirror == "" then
         return build.url
