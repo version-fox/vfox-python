@@ -590,32 +590,27 @@ local function writeWindowsFile(path, content)
     file:close()
 end
 
-local function createWindowsPipShim(installPath, version)
-    local major, minor = string.match(version, "^(%d+)%.(%d+)")
-    if major == nil or minor == nil then
-        error("Cannot create pip shim for unexpected Python version: " .. version)
-    end
-    local scriptsPath = installPath .. "\\Scripts"
+local function createWindowsPipShim(scriptsPath)
     ensureWindowsDirectory(scriptsPath)
 
     local shims = { "pip.cmd", "pip3.cmd" }
-    table.insert(shims, "pip" .. major .. "." .. minor .. ".cmd")
     for _, shim in ipairs(shims) do
         writeWindowsFile(scriptsPath .. "\\" .. shim, WINDOWS_PIP_SHIM_CONTENT)
     end
 end
 
-local function ensureWindowsUvBuildPip(path, version)
+local function ensureWindowsUvBuildPip(path)
     if runtimeOs() ~= "windows" then
         return
     end
 
     local pythonExe = path .. "\\python.exe"
+    local scriptsPath = path .. "\\Scripts"
     if not pathExists(pythonExe) then
         error("Cannot install pip: python.exe was not found at " .. pythonExe)
     end
     -- If Scripts does not exist yet, pathExists returns false and setup continues.
-    if pathExists(path .. "\\Scripts\\pip.exe") or pathExists(path .. "\\Scripts\\pip.cmd") then
+    if pathExists(scriptsPath .. "\\pip.exe") or pathExists(scriptsPath .. "\\pip.cmd") then
         return
     end
 
@@ -631,7 +626,7 @@ local function ensureWindowsUvBuildPip(path, version)
         error("ensurepip failed while installing pip. Exit code: " .. tostring(exitCode))
     end
 
-    if pathExists(path .. "\\Scripts\\pip.exe") then
+    if pathExists(scriptsPath .. "\\pip.exe") then
         return
     end
 
@@ -651,8 +646,8 @@ local function ensureWindowsUvBuildPip(path, version)
         error("pip module is not available after installation attempts. Exit code: " .. tostring(exitCode))
     end
 
-    if not pathExists(path .. "\\Scripts\\pip.exe") then
-        createWindowsPipShim(path, version)
+    if not pathExists(scriptsPath .. "\\pip.exe") then
+        createWindowsPipShim(scriptsPath)
     end
 end
 
@@ -751,7 +746,7 @@ function uvBuildInstall(ctx)
     if OS_TYPE ~= "windows" then
         fixShebangLines(extractedPath)
     else
-        ensureWindowsUvBuildPip(extractedPath, version)
+        ensureWindowsUvBuildPip(extractedPath)
     end
 
     print("Install Python uv-build success!")
