@@ -461,7 +461,7 @@ local function uvBuildAssetPriority(build)
     return 90
 end
 
-local function uvBuildResolveDownloadUrl(build)
+local function uvBuildDownloadUrl(build)
     if not isHttpsUrl(build.url) then
         error("Invalid uv-build download URL")
     end
@@ -584,7 +584,7 @@ function uvBuildPreInstall(version)
     local build = findUvBuild(version)
     return {
         version = version,
-        url = uvBuildResolveDownloadUrl(build),
+        url = uvBuildDownloadUrl(build),
         headers = REQUEST_HEADERS,
         sha256 = uvBuildSha256(build),
         note = "uv-build",
@@ -637,7 +637,7 @@ function uvBuildInstall(ctx)
 
     local extractedPath = resolvePythonInstallPath(path, version)
     if not pathExists(extractedPath .. "/bin/python") and not pathExists(extractedPath .. "\\python.exe") then
-        error("Python executable not found at expected location in uv-build installation: " .. extractedPath)
+        error("Extracted uv-build archive does not contain a Python executable at expected location: " .. extractedPath)
     end
 
     if OS_TYPE ~= "windows" then
