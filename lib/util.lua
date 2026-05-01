@@ -587,8 +587,13 @@ local function writeWindowsFile(path, content)
     if not file then
         error("Failed to write file: " .. path .. ". Error: " .. (err or "unknown"))
     end
-    file:write(content)
+    local ok, writeErr = pcall(function()
+        file:write(content)
+    end)
     file:close()
+    if not ok then
+        error("Failed to write file: " .. path .. ". Error: " .. tostring(writeErr))
+    end
 end
 
 local function createWindowsPipShim(scriptsPath)
