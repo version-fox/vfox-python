@@ -272,6 +272,7 @@ local function powerShellQuote(value)
     if containsTraversalSegment(value) then
         error("PowerShell argument contains unsupported traversal segment: " .. value)
     end
+    -- The generated script is passed to powershell through cmd as a double-quoted -Command argument.
     if string.find(value, '"', 1, true) then
         error("PowerShell argument contains unsupported quote character: " .. value)
     end
@@ -280,6 +281,7 @@ local function powerShellQuote(value)
 end
 
 local function powerShellCommand(script)
+    -- Windows PowerShell is available by default on supported Windows targets.
     return "powershell -NoProfile -NonInteractive -ExecutionPolicy RemoteSigned -Command " .. shellQuote(script)
 end
 
