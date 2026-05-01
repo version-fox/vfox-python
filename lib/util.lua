@@ -570,7 +570,39 @@ local function pathExists(path)
     return false
 end
 
-local function ensureWindowsUvBuildPip(path)
+local function ensureWindowsDirectory(path)
+    local command = powerShellCommand("New-Item -ItemType Directory -Force -Path " .. powerShellQuote(path) .. " | Out-Null")
+    local exitCode = os.execute(command)
+    if not commandSucceeded(exitCode) then
+        error("Failed to create directory: " .. path .. ". Exit code: " .. tostring(exitCode))
+    end
+end
+
+local function writeWindowsFile(path, content)
+    local file = io.open(path, "w")
+    if not file then
+        error("Failed to write file: " .. path)
+    end
+    file:write(content)
+    file:close()
+end
+
+local function createWindowsPipShim(installPath, version)
+    local major, minor = string.match(version, "^(%d+)%.(%d+)")
+    local scriptsPath = installPath .. "\\Scripts"
+    ensureWindowsDirectory(scriptsPath)
+
+    local content = "@echo off\r\n\"%~dp0..\\python.exe\" -m pip %*\r\n"
+    local shims = { "pip.cmd", "pip3.cmd" }
+    if major ~= nil and minor ~= nil then
+        table.insert(shims, "pip" .. major .. "." .. minor .. ".cmd")
+    end
+    for _, shim in ipairs(shims) do
+        writeWindowsFile(scriptsPath .. "\\" .. shim, content)
+    end
+end
+
+local function ensureWindowsUvBuildPip(path, version)
     if runtimeOs() ~= "windows" then
         return
     end
@@ -579,7 +611,7 @@ local function ensureWindowsUvBuildPip(path)
     if not pathExists(pythonExe) then
         error("Cannot install pip: python.exe was not found at " .. pythonExe)
     end
-    if pathExists(path .. "\\Scripts\\pip.exe") then
+    if pathExists(path .. "\\Scripts\\pip.exe") or pathExists(path .. "\\Scripts\\pip.cmd") then
         return
     end
 
@@ -609,8 +641,14 @@ local function ensureWindowsUvBuildPip(path)
         error("pip force-reinstall failed while creating pip scripts. Exit code: " .. tostring(exitCode))
     end
 
+    command = powerShellPythonCommand(pythonExe, { "-E", "-s", "-m", "pip", "--version" })
+    exitCode = os.execute(command)
+    if not commandSucceeded(exitCode) then
+        error("pip module is not available after installation attempts. Exit code: " .. tostring(exitCode))
+    end
+
     if not pathExists(path .. "\\Scripts\\pip.exe") then
-        error("Failed to install pip: pip.exe was not created after installation attempts")
+        createWindowsPipShim(path, version)
     end
 end
 
@@ -709,7 +747,7 @@ function uvBuildInstall(ctx)
     if OS_TYPE ~= "windows" then
         fixShebangLines(extractedPath)
     else
-        ensureWindowsUvBuildPip(extractedPath)
+        ensureWindowsUvBuildPip(extractedPath, version)
     end
 
     print("Install Python uv-build success!")
