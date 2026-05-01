@@ -246,6 +246,17 @@ local function shellQuote(value)
     return "'" .. string.gsub(value, "'", "'\\''") .. "'"
 end
 
+local function powershellQuote(value)
+    if string.find(value, "[\r\n%z]") then
+        error("Path contains unsupported control character: " .. value)
+    end
+    if string.find(value, "%.%.%/") or string.find(value, "%.%.\\") then
+        error("Path contains unsupported traversal segment: " .. value)
+    end
+
+    return "'" .. string.gsub(value, "'", "''") .. "'"
+end
+
 local function startsWith(value, prefix)
     return string.sub(value, 1, string.len(prefix)) == prefix
 end
@@ -458,15 +469,17 @@ local function verifyUvBuildArchive(path, sha256)
 
     local status
     if RUNTIME.osType == "windows" or OS_TYPE == "windows" then
-        local handle = io.popen("certutil -hashfile " .. shellQuote(path) .. " SHA256")
+        local command = "powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command " ..
+            shellQuote("(Get-FileHash -LiteralPath " .. powershellQuote(path) .. " -Algorithm SHA256).Hash")
+        local handle = io.popen(command)
         if handle == nil then
-            error("Unable to verify uv-build archive sha256 for " .. path .. ": certutil command could not be started")
+            error("Unable to verify uv-build archive sha256 for " .. path .. ": powershell Get-FileHash command could not be started")
         end
 
         local output = handle:read("*a")
         handle:close()
         if output == nil then
-            error("Unable to verify uv-build archive sha256 for " .. path .. ": failed to read certutil output")
+            error("Unable to verify uv-build archive sha256 for " .. path .. ": failed to read Get-FileHash output")
         end
         local actualSha256
         for line in string.gmatch(output, "[^\r\n]+") do
