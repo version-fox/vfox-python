@@ -278,11 +278,11 @@ local function powerShellCommand(script)
 end
 
 local function powerShellPythonCommand(pythonExe, pythonArgs)
-    local script = "& " .. powerShellQuote(pythonExe)
+    local scriptParts = { "&", powerShellQuote(pythonExe) }
     for _, arg in ipairs(pythonArgs) do
-        script = script .. " " .. powerShellQuote(arg)
+        table.insert(scriptParts, powerShellQuote(arg))
     end
-    return powerShellCommand(script)
+    return powerShellCommand(table.concat(scriptParts, " "))
 end
 
 local function startsWith(value, prefix)
@@ -584,9 +584,10 @@ local function ensureWindowsUvBuildPip(path)
         return
     end
 
+    local bundledPath = path .. "\\Lib\\ensurepip\\_bundled"
     command = powerShellPythonCommand(pythonExe, {
         "-E", "-s", "-m", "pip", "install", "--force-reinstall", "--no-index",
-        "--find-links", path .. "\\Lib\\ensurepip\\_bundled", "pip"
+        "--find-links", bundledPath, "pip"
     })
     exitCode = os.execute(command)
     if not commandSucceeded(exitCode) then
