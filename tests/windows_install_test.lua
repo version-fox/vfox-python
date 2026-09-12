@@ -43,6 +43,7 @@ local function decodeCommand(value)
     end
     local script = table.concat(bytes)
     assert(script:find("$ErrorActionPreference = 'Stop'; ", 1, true) == 1, 'error preference must execute')
+    assert(script:find("$ProgressPreference = 'SilentlyContinue'; ", 1, true), 'PowerShell progress must not pollute installer output')
     return script
 end
 
@@ -122,12 +123,12 @@ for _, value in ipairs({'', 'f', 'fo', 'foo', 'foob', 'fooba', 'foobar', "C:\\ç”
 end
 for _, case in ipairs({
     {
-        file = 'C:\\MSI files\\core.msi', path = path,
-        expected = '/quiet /a "C:\\MSI files\\core.msi" TargetDir="' .. path .. '"',
+        file = 'C:\\MSI files\\core.msi', path = 'C:\\User files\\Python',
+        expected = '/quiet /a "C:\\MSI files\\core.msi" TargetDir="C:\\User files\\Python"',
     },
     {
-        file = 'C:\\MSI files & %TEMP% !\\stdlib.msi', path = "C:\\User's & %TEMP% !\\Python files\\",
-        expected = '/quiet /a "C:\\MSI files & %TEMP% !\\stdlib.msi" TargetDir="C:\\User\'s & %TEMP% !\\Python files\\\\"',
+        file = 'C:\\MSI files & %TEMP% !\\stdlib.msi', path = "C:\\User's & !\\Python files\\",
+        expected = '/quiet /a "C:\\MSI files & %TEMP% !\\stdlib.msi" TargetDir="C:\\User\'s & !\\Python files\\\\"',
     },
 }) do
     local msi = decodeCommand(windows.msi(case.file, case.path))
@@ -136,7 +137,25 @@ for _, case in ipairs({
     local encoded = assert(msi:match("FromBase64String%('([A-Za-z0-9+/=]*)'%)"))
     local arguments = decodeBase64(encoded)
     assert(arguments == case.expected, 'MSI arguments changed: ' .. arguments)
+    assert(not msi:find('Junction', 1, true), 'ordinary paths must not need a junction')
 end
+local junction = decodeCommand(windows.msi('C:\\MSI %SOURCE% files\\core.msi', path))
+local values = {}
+for encoded in junction:gmatch("FromBase64String%('([A-Za-z0-9+/=]*)'%)") do
+    values[#values + 1] = decodeBase64(encoded)
+end
+assert(values[1] == path, 'junction target must retain the literal percent path')
+assert(values[2] == '/quiet /a "C:\\MSI %SOURCE% files\\core.msi" TargetDir=', 'MSI source must remain unchanged')
+assert(junction:find('New-Item -ItemType Junction', 1, true), 'percent paths need a temporary junction')
+assert(junction:find('[IO.Path]::GetTempPath()', 1, true), 'junction must be outside the SDK directory')
+assert(junction:find("$temp.Contains('%')", 1, true), 'a percent-containing TEMP must fail safely')
+assert(junction:find('[Guid]::NewGuid()', 1, true), 'junction name must be unique')
+assert(junction:find('[IO.Directory]::Exists($target)', 1, true), 'junction target must already exist')
+assert(junction:find('+ [char]34 + $alias + [char]34', 1, true), 'MSI TargetDir must use the quoted alias')
+assert(junction:find('finally', 1, true) and junction:find('[IO.Directory]::Delete($alias)', 1, true), 'junction must be cleaned without deleting the SDK')
+assert(not junction:find('-Recurse', 1, true) and not junction:find('Remove-Item', 1, true), 'cleanup must not recurse into the junction target')
+assert(junction:find('-Wait -PassThru', 1, true) and junction:find('$exitCode = $process.ExitCode', 1, true), 'MSI exit code must be preserved')
+assert(junction:find('; exit $exitCode', 1, true), 'cleanup must precede the MSI exit')
 assert(not pcall(windows.msi, 'C:\\bad"path\\python.msi', path), 'invalid Windows quote must fail')
 assert(not pcall(windows.native, 'bad\nprogram', {}), 'control characters must fail')
 os.execute, io.popen, io.open, io.close, os.remove = oldExecute, oldPopen, oldOpen, oldClose, oldRemove

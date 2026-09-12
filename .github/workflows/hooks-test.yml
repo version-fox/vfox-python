@@ -66,6 +66,7 @@ jobs:
           $archive = Join-Path $env:RUNNER_TEMP 'python-plugin.zip'
           Compress-Archive -Path metadata.lua,hooks,lib,bin -DestinationPath $archive
           & $env:VFOX_TEST_CLI add --source $archive
+          $junctionsBefore = @(Get-ChildItem -LiteralPath ([IO.Path]::GetTempPath()) -Filter 'vfox-python-msi-*' | ForEach-Object FullName)
           $install = Start-Process -FilePath $env:VFOX_TEST_CLI -ArgumentList @('install', 'python@3.14.5') -NoNewWindow -PassThru
           if (-not $install.WaitForExit(300000)) {
             Get-CimInstance Win32_Process |
@@ -82,6 +83,13 @@ jobs:
             throw 'Python installation did not finish within five minutes'
           }
           if ($install.ExitCode -ne 0) { throw "Python installation failed: $($install.ExitCode)" }
+          $expandedHome = [Environment]::ExpandEnvironmentVariables($env:VFOX_HOME)
+          if (Test-Path -LiteralPath $expandedHome) {
+            throw "Installer wrote to the expanded path instead of the literal path: $expandedHome"
+          }
+          $leftoverJunctions = @(Get-ChildItem -LiteralPath ([IO.Path]::GetTempPath()) -Filter 'vfox-python-msi-*' |
+            Where-Object { $_.FullName -notin $junctionsBefore })
+          if ($leftoverJunctions.Count -ne 0) { throw 'Installer did not clean up its temporary junctions' }
 
           $root = Join-Path $env:VFOX_HOME 'cache\python\v-3.14.5\python-3.14.5'
           $python = Join-Path $root 'python.exe'

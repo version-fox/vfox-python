@@ -27,7 +27,7 @@ local function literal(value)
 end
 
 local function powershell(script)
-    script = "$ErrorActionPreference = 'Stop'; " .. script
+    script = "$ErrorActionPreference = 'Stop'; $ProgressPreference = 'SilentlyContinue'; " .. script
     -- GopherLua launches cmd.exe /c, which reinterprets a quoted -Command.
     -- -EncodedCommand takes UTF-16LE base64 with no quotes or metacharacters.
     local utf16 = script:gsub('.', function(char)
@@ -54,6 +54,34 @@ function command.msi(file, path)
         return '"' .. value:gsub('(\\+)$', '%1%1') .. '"'
     end
     local args = '/quiet /a ' .. argument(file) .. ' TargetDir=' .. argument(path)
+    if path:find('%', 1, true) then
+        -- Windows Installer expands percent variables during FileCopy even
+        -- when TARGETDIR contains the literal path. Install through a temporary
+        -- junction, keeping the real SDK directory in its final location.
+        local script = '$target = ' .. literal(path) .. [[;
+$temp = [IO.Path]::GetTempPath();
+if ($temp.Contains('%')) {
+    throw 'Python MSI installation requires a TEMP directory without percent signs';
+}
+if (-not [IO.Directory]::Exists($target)) {
+    throw 'Python MSI junction target directory does not exist';
+}
+$alias = [IO.Path]::Combine($temp, 'vfox-python-msi-' + [Guid]::NewGuid().ToString('N'));
+$created = $false;
+$exitCode = 1;
+try {
+    New-Item -ItemType Junction -Path $alias -Target $target | Out-Null;
+    $created = $true;
+    $arguments = ]] .. literal('/quiet /a ' .. argument(file) .. ' TargetDir=') .. [[ + [char]34 + $alias + [char]34;
+    $process = Start-Process -FilePath msiexec.exe -Wait -PassThru -ArgumentList $arguments;
+    $exitCode = $process.ExitCode;
+} finally {
+    if ($created) {
+        [IO.Directory]::Delete($alias);
+    }
+}; exit $exitCode]]
+        return powershell(script)
+    end
     return powershell("$process = Start-Process -FilePath msiexec.exe -Wait -PassThru -ArgumentList " ..
         literal(args) .. '; exit $process.ExitCode')
 end
