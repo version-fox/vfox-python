@@ -1,6 +1,7 @@
 name: Test Plugin
 
 on:
+  workflow_dispatch:
   pull_request:
   push:
     branches: [main]
@@ -21,3 +22,52 @@ jobs:
           cache: false
       - name: Test plugin hooks with vfox's Lua interpreter
         run: go run github.com/yuin/gopher-lua/cmd/glua@v1.1.1 tests/hooks_test.lua
+      - name: Test Windows installer command generation
+        run: go run github.com/yuin/gopher-lua/cmd/glua@v1.1.1 tests/windows_install_test.lua
+
+  windows-install:
+    name: Windows installer paths
+    runs-on: windows-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Install released vfox
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+          $directory = Join-Path $env:RUNNER_TEMP 'vfox-cli'
+          gh release download v1.0.12 --repo version-fox/vfox --pattern vfox_1.0.12_windows_x86_64.zip --dir $directory
+          Expand-Archive -LiteralPath (Join-Path $directory 'vfox_1.0.12_windows_x86_64.zip') -DestinationPath $directory
+          $vfox = Get-ChildItem -LiteralPath $directory -Recurse -Filter vfox.exe | Select-Object -First 1
+          if (-not $vfox) { throw 'vfox.exe was not found in the release archive' }
+          "VFOX_TEST_CLI=$($vfox.FullName)" >> $env:GITHUB_ENV
+      - name: Install Python through WiX and embedded MSI packages
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+          # Literal percent/exclamation marks also catch cmd expansion bugs.
+          $env:VFOX_HOME = Join-Path $env:RUNNER_TEMP 'Mechael Jackson''s & %USERNAME% ! SDKs'
+          $env:VFOX_PYTHON_USE_UV_BUILD = '0'
+          $archive = Join-Path $env:RUNNER_TEMP 'python-plugin.zip'
+          Compress-Archive -Path metadata.lua,hooks,lib,bin -DestinationPath $archive
+          & $env:VFOX_TEST_CLI add --source $archive
+          & $env:VFOX_TEST_CLI install python@3.14.5
+
+          $root = Join-Path $env:VFOX_HOME 'cache\python\v-3.14.5\python-3.14.5'
+          $python = Join-Path $root 'python.exe'
+          if (-not (Test-Path -LiteralPath $python)) { throw "Python missing: $python" }
+          & $python -c 'import sys; assert sys.version_info[:3] == (3, 14, 5), sys.version; print(sys.executable)'
+          & $python -m pip --version
+          foreach ($name in @('python3.exe', 'python314.exe', 'python3.14.exe')) {
+            & (Join-Path $root $name) -c 'import sys; assert sys.version_info[:3] == (3, 14, 5)'
+          }
+          $venv = Join-Path $env:RUNNER_TEMP 'venv with spaces & symbols'
+          & $python -m venv $venv
+          & (Join-Path $venv 'Scripts\python.exe') -m pip --version
