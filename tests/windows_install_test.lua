@@ -11,11 +11,47 @@ package.preload.http = function() return {download_file = function() return nil 
 package.preload.html = function() return {} end
 package.preload.json = function() return {} end
 local oldExecute, oldPopen, oldOpen, oldClose, oldRemove = os.execute, io.popen, io.open, io.close, os.remove
+
+-- Decode the command independently so the test inspects what PowerShell will
+-- execute, rather than only checking a command string prefix.
+local alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+local function decodeBase64(value)
+    local result, accumulator, bits = {}, 0, 0
+    for char in value:gmatch('.') do
+        if char == '=' then break end
+        local index = assert(alphabet:find(char, 1, true), 'invalid base64') - 1
+        accumulator = accumulator * 64 + index
+        bits = bits + 6
+        if bits >= 8 then
+            bits = bits - 8
+            local scale = 2 ^ bits
+            result[#result + 1] = string.char(math.floor(accumulator / scale))
+            accumulator = accumulator % scale
+        end
+    end
+    return table.concat(result)
+end
+local function decodeCommand(value)
+    local payload = assert(value:match('^powershell %-NoProfile %-NonInteractive %-EncodedCommand ([A-Za-z0-9+/=]+)$'),
+        'PowerShell command must contain only an unquoted base64 payload: ' .. value)
+    local utf16 = decodeBase64(payload)
+    assert(#utf16 % 2 == 0, 'incomplete UTF-16LE code unit')
+    local bytes = {}
+    for i = 1, #utf16, 2 do
+        assert(utf16:byte(i) < 128 and utf16:byte(i + 1) == 0, 'script must use ASCII UTF-16LE')
+        bytes[#bytes + 1] = utf16:sub(i, i)
+    end
+    local script = table.concat(bytes)
+    assert(script:find("$ErrorActionPreference = 'Stop'; ", 1, true) == 1, 'error preference must execute')
+    return script
+end
+
 os.execute = function(command)
     state.commands[#state.commands + 1] = command
     -- Native paths must never be expanded as cmd variables or tokenized on spaces.
     assert(command:find('powershell ', 1, true), 'unquoted Windows command: ' .. command)
     assert(not command:find('%%') and not command:find('!'), 'cmd expansion in command: ' .. command)
+    decodeCommand(command)
     return #state.commands == state.failOn and 1 or 0
 end
 io.popen = function(command)
@@ -74,6 +110,19 @@ for _, failure in ipairs({
     assert(#state.commands == 2, failure.name .. ': no MSI or pip may run before enumeration succeeds')
 end
 local windows = require('windows_command')
+for _, value in ipairs({'', 'f', 'fo', 'foo', 'foob', 'fooba', 'foobar', "C:\\用户\\Mechael's & %USERNAME% !\\", 'quotes"stay data'}) do
+    local script = decodeCommand(windows.native('program.exe', {value}))
+    local arguments = {}
+    for encoded in script:gmatch("FromBase64String%('([A-Za-z0-9+/=]*)'%)") do
+        arguments[#arguments + 1] = decodeBase64(encoded)
+    end
+    assert(#arguments == 2 and arguments[1] == 'program.exe' and arguments[2] == value,
+        'native argument changed after payload decoding')
+    assert(script:find('; exit $LASTEXITCODE', 1, true), 'native exit status must propagate')
+end
+local msi = decodeCommand(windows.msi('C:\\MSI files\\core.msi', path))
+assert(msi:find('Start-Process -FilePath msiexec.exe -Wait -PassThru', 1, true))
+assert(msi:find('; exit $process.ExitCode', 1, true))
 assert(not pcall(windows.msi, 'C:\\bad"path\\python.msi', path), 'invalid Windows quote must fail')
 assert(not pcall(windows.native, 'bad\nprogram', {}), 'control characters must fail')
 os.execute, io.popen, io.open, io.close, os.remove = oldExecute, oldPopen, oldOpen, oldClose, oldRemove
