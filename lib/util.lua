@@ -92,6 +92,7 @@ function windowsInstallMsi(path, url, version, filename)
 
     -- Install msi
     print("Installing python...")
+    print("Installing MSI package: " .. filename)
     local command = windowsCommand.msi(qInstallFile, qInstallPath)
     local exitCode = os.execute(command)
     os.remove(qInstallFile)
@@ -176,6 +177,7 @@ function windowsInstallExe(path, url, version, filename)
         error('No installer MSI packages found in: ' .. msiPath)
     end
     for _, file in ipairs(files) do
+        print("Installing MSI package: " .. file)
         local command = windowsCommand.msi(msiPath .. '\\' .. file, qInstallPath)
         local exitCode = os.execute(command)
         if exitCode ~= 0 then

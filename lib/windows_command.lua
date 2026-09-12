@@ -53,7 +53,7 @@ function command.msi(file, path)
         -- A backslash immediately before the closing native quote is escaped.
         return '"' .. value:gsub('(\\+)$', '%1%1') .. '"'
     end
-    local args = '/quiet /a ' .. argument(file) .. ' ' .. argument('TargetDir=' .. path)
+    local args = '/quiet /a ' .. argument(file) .. ' TargetDir=' .. argument(path)
     return powershell("$process = Start-Process -FilePath msiexec.exe -Wait -PassThru -ArgumentList " ..
         literal(args) .. '; exit $process.ExitCode')
 end

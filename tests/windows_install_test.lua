@@ -120,9 +120,23 @@ for _, value in ipairs({'', 'f', 'fo', 'foo', 'foob', 'fooba', 'foobar', "C:\\ç”
         'native argument changed after payload decoding')
     assert(script:find('; exit $LASTEXITCODE', 1, true), 'native exit status must propagate')
 end
-local msi = decodeCommand(windows.msi('C:\\MSI files\\core.msi', path))
-assert(msi:find('Start-Process -FilePath msiexec.exe -Wait -PassThru', 1, true))
-assert(msi:find('; exit $process.ExitCode', 1, true))
+for _, case in ipairs({
+    {
+        file = 'C:\\MSI files\\core.msi', path = path,
+        expected = '/quiet /a "C:\\MSI files\\core.msi" TargetDir="' .. path .. '"',
+    },
+    {
+        file = 'C:\\MSI files & %TEMP% !\\stdlib.msi', path = "C:\\User's & %TEMP% !\\Python files\\",
+        expected = '/quiet /a "C:\\MSI files & %TEMP% !\\stdlib.msi" TargetDir="C:\\User\'s & %TEMP% !\\Python files\\\\"',
+    },
+}) do
+    local msi = decodeCommand(windows.msi(case.file, case.path))
+    assert(msi:find('Start-Process -FilePath msiexec.exe -Wait -PassThru', 1, true))
+    assert(msi:find('; exit $process.ExitCode', 1, true))
+    local encoded = assert(msi:match("FromBase64String%('([A-Za-z0-9+/=]*)'%)"))
+    local arguments = decodeBase64(encoded)
+    assert(arguments == case.expected, 'MSI arguments changed: ' .. arguments)
+end
 assert(not pcall(windows.msi, 'C:\\bad"path\\python.msi', path), 'invalid Windows quote must fail')
 assert(not pcall(windows.native, 'bad\nprogram', {}), 'control characters must fail')
 os.execute, io.popen, io.open, io.close, os.remove = oldExecute, oldPopen, oldOpen, oldClose, oldRemove
