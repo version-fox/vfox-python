@@ -23,6 +23,12 @@ export VFOX_PYTHON_MIRROR=https://mirrors.huaweicloud.com/python/
 
 ## uv-build
 
+On Windows, the default version list contains stable installers published on
+python.org for the current architecture. Source-only releases (for example
+3.8.18) are omitted. `VFOX_PYTHON_MIRROR` still controls installer downloads;
+version discovery uses the official Windows download index. The optional uv-build
+mode below uses its own platform-specific build list.
+
 Set `VFOX_PYTHON_USE_UV_BUILD=1` to install prebuilt Python archives from the
 vfox vault uv-build endpoint instead of building from pyenv/python-build.
 

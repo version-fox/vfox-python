@@ -5,7 +5,7 @@ function PLUGIN:Available(ctx)
     end
 
     if OS_TYPE == "windows" then
-        return parseVersion()
+        return parseWindowsVersions()
     else
         return parseVersionFromPyenv()
     end
