@@ -799,6 +799,46 @@ function fixHeaders()
     REQUEST_HEADERS["User-Agent"] = "vfox v" .. RUNTIME.version;
 end
 
+-- The FTP index includes source-only security releases. The Windows download
+-- page lists actual installers, so one request can filter by host architecture.
+function parseWindowsVersions()
+    fixHeaders()
+    local url = "https://www.python.org/downloads/windows/"
+    local resp, err = http.get({ url = url, headers = REQUEST_HEADERS })
+    if err ~= nil or resp == nil then
+        error("Failed to list Windows Python installers: " .. tostring(err or "empty response"))
+    end
+    if resp.status_code ~= 200 then
+        error("Failed to list Windows Python installers: HTTP " .. tostring(resp.status_code))
+    end
+    local arch = RUNTIME.archType
+    if arch ~= "amd64" and arch ~= "386" and arch ~= "arm64" then
+        error("Unsupported Windows Python architecture: " .. tostring(arch))
+    end
+    local result, seen = {}, {}
+    html.parse(resp.body):find("a"):each(function(_, selection)
+        local href = selection:attr("href") or ""
+        local filename = href:match("([^/]+)$") or ""
+        local version = filename:match("^python%-(%d+%.%d+%.%d+)") or filename:match("^python%-(%d+%.%d+)")
+        if not version then return end
+        local exeSuffix = arch == "386" and "" or "-" .. arch
+        local msiSuffix = arch == "386" and "" or "." .. arch
+        if filename ~= "python-" .. version .. exeSuffix .. ".exe"
+            and filename ~= "python-" .. version .. msiSuffix .. ".msi" then
+            return
+        end
+        if compare_versions(version, "2.5.0") >= 0 and not seen[version] then
+            seen[version] = true
+            table.insert(result, { version = version, note = "" })
+        end
+    end)
+    table.sort(result, function(a, b) return compare_versions(a.version, b.version) > 0 end)
+    if #result == 0 then
+        error("No Windows Python installers found for " .. arch .. " at " .. url)
+    end
+    return result
+end
+
 function parseVersion()
     fixHeaders()
 

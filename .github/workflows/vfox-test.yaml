@@ -35,8 +35,9 @@ jobs:
       - name: Install vfox
         shell: bash
         run: |
-          for i in {1..10}; do
-            curl -sSL https://raw.githubusercontent.com/version-fox/vfox/main/install.sh | bash && break || sleep 5;
+          for _ in {1..10}; do
+            if curl -fsSL https://raw.githubusercontent.com/version-fox/vfox/main/install.sh | bash; then break; fi
+            sleep 5
           done
           vfox --version
 
@@ -57,7 +58,7 @@ jobs:
         run: |
           eval "$(vfox activate bash)"
           python_version=$(python -c 'import sys;print(sys.version, sys.path)')
-          echo $python_version
+          echo "$python_version"
 
           if [[ ! $python_version == ${{ matrix.python-version }}* ]]; then
               exit 1
@@ -78,7 +79,7 @@ jobs:
         run: |
           eval "$(vfox activate bash)"
           python_version=$(python -c 'import sys;print(sys.version)')
-          echo $python_version
+          echo "$python_version"
 
           if [[ ! $python_version == 3.10.20* ]]; then
               exit 1
@@ -88,6 +89,9 @@ jobs:
           pip --version
 
   test-on-windows:
+    defaults:
+      run:
+        shell: pwsh
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
