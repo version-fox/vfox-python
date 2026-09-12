@@ -1,6 +1,7 @@
 local http = require("http")
 local html = require("html")
 local json = require("json")
+local windowsCommand = require("windows_command")
 
 -- get mirror
 local PYTHON_URL = "https://www.python.org/ftp/python/"
@@ -91,7 +92,8 @@ function windowsInstallMsi(path, url, version, filename)
 
     -- Install msi
     print("Installing python...")
-    local command = 'msiexec /quiet /a ' .. qInstallFile .. ' TargetDir=' .. qInstallPath
+    print("Installing MSI package: " .. filename)
+    local command = windowsCommand.msi(qInstallFile, qInstallPath)
     local exitCode = os.execute(command)
     os.remove(qInstallFile)
     if exitCode ~= 0 then
@@ -104,7 +106,7 @@ function windowsInstallMsi(path, url, version, filename)
     if file then
         io.close(file)
         print("Installing pip...")
-        local command = qInstallPath .. '\\python -E -s -m ensurepip -U --default-pip > NUL'
+        local command = windowsCommand.native(qInstallPath .. '\\python.exe', {'-E', '-s', '-m', 'ensurepip', '-U', '--default-pip'})
         local exitCode = os.execute(command)
         if exitCode ~= 0 then
             error("Install pip failed. exit " .. exitCode)
@@ -134,7 +136,7 @@ function windowsInstallExe(path, url, version, filename)
     -- Extract
     print("Extracting installer...")
     local wixBin = RUNTIME.pluginDirPath .. '\\bin\\WiX\\dark.exe'
-    local command = wixBin .. " -x " .. qInstallPath .. '\\ ' .. qInstallFile .. ' > NUL'
+    local command = windowsCommand.native(wixBin, {'-x', qInstallPath, qInstallFile})
     local exitCode = os.execute(command)
     if exitCode ~= 0 then
         error("Extract failed")
@@ -150,16 +152,38 @@ function windowsInstallExe(path, url, version, filename)
 
     -- Install msi
     print("Installing python...")
-    local files = io.popen("dir /b " .. msiPath):lines()
-    for file in files do
-        if file:match("%.msi$") then
-            local command = "msiexec /quiet /a " .. msiPath .. '\\' .. file .. " TargetDir=" .. qInstallPath
-            local exitCode = os.execute(command)
-            if exitCode ~= 0 then
-                error("Install msi failed: " .. file)
+    local listing, listErr = io.popen(windowsCommand.files(msiPath))
+    if not listing then
+        error('Failed to list installer packages: ' .. tostring(listErr))
+    end
+    local files = {}
+    local readOk, readErr = pcall(function()
+        for file in listing:lines() do
+            if file:match("%.msi$") then
+                files[#files + 1] = file
             end
-            os.remove(qInstallPath .. '\\' .. file)
         end
+    end)
+    -- GopherLua returns the process's numeric exit status from pipe close.
+    -- Close even after a read error, and reject partial results before installing.
+    local closeOk, listExitCode = pcall(function() return listing:close() end)
+    if not readOk then
+        error('Failed to list installer packages: ' .. tostring(readErr))
+    end
+    if not closeOk or listExitCode ~= 0 then
+        error('Failed to list installer packages: ' .. tostring(listExitCode))
+    end
+    if #files == 0 then
+        error('No installer MSI packages found in: ' .. msiPath)
+    end
+    for _, file in ipairs(files) do
+        print("Installing MSI package: " .. file)
+        local command = windowsCommand.msi(msiPath .. '\\' .. file, qInstallPath)
+        local exitCode = os.execute(command)
+        if exitCode ~= 0 then
+            error("Install msi failed: " .. file)
+        end
+        os.remove(qInstallPath .. '\\' .. file)
     end
 
     -- Install pip
@@ -168,7 +192,7 @@ function windowsInstallExe(path, url, version, filename)
     local file = io.open(ensurepipPath, "r")
     if file then
         io.close(file)
-        local command = qInstallPath .. '\\python -E -s -m ensurepip -U --default-pip > NUL'
+        local command = windowsCommand.native(qInstallPath .. '\\python.exe', {'-E', '-s', '-m', 'ensurepip', '-U', '--default-pip'})
         local exitCode = os.execute(command)
         if exitCode ~= 0 then
             error("Install pip failed. exit " .. exitCode)
@@ -190,16 +214,20 @@ function windowsInstallExe(path, url, version, filename)
     local files = {qInstallPath .. "\\python" .. major .. ".exe", qInstallPath .. "\\python" .. majorMinor .. ".exe",
                    qInstallPath .. "\\python" .. majorDotMinor .. ".exe"}
     for _, file in ipairs(files) do
-        local command = 'copy /y ' .. pythonExePath .. ' ' .. file .. ' > NUL'
-        os.execute(command)
+        local command = windowsCommand.copy(pythonExePath, file)
+        if os.execute(command) ~= 0 then
+            error('Failed to create Python executable alias: ' .. file)
+        end
     end
 
     -- pythonw.exe
     local files = {qInstallPath .. "\\pythonw" .. major .. ".exe", qInstallPath .. "\\pythonw" .. majorMinor .. ".exe",
                    qInstallPath .. "\\pythonw" .. majorDotMinor .. ".exe"}
     for _, file in ipairs(files) do
-        local command = 'copy /y ' .. pythonwExePath .. ' ' .. file .. ' > NUL'
-        os.execute(command)
+        local command = windowsCommand.copy(pythonwExePath, file)
+        if os.execute(command) ~= 0 then
+            error('Failed to create Python executable alias: ' .. file)
+        end
     end
 
     -- Check if venvlauncher exists
@@ -214,8 +242,10 @@ function windowsInstallExe(path, url, version, filename)
                        qInstallPath .. "\\Lib\\venv\\scripts\\nt\\pythonw" .. majorMinor .. ".exe",
                        qInstallPath .. "\\Lib\\venv\\scripts\\nt\\pythonw" .. majorDotMinor .. ".exe"}
         for _, file in ipairs(files) do
-            local command = 'copy /y ' .. venvlauncherExePath .. ' ' .. file .. ' > NUL'
-            os.execute(command)
+            local command = windowsCommand.copy(venvlauncherExePath, file)
+            if os.execute(command) ~= 0 then
+                error('Failed to create Python venv executable alias: ' .. file)
+            end
         end
     end
 
