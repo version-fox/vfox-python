@@ -155,18 +155,34 @@ function windowsInstallExe(path, url, version, filename)
     if not listing then
         error('Failed to list installer packages: ' .. tostring(listErr))
     end
-    local files = listing:lines()
-    for file in files do
-        if file:match("%.msi$") then
-            local command = windowsCommand.msi(msiPath .. '\\' .. file, qInstallPath)
-            local exitCode = os.execute(command)
-            if exitCode ~= 0 then
-                error("Install msi failed: " .. file)
+    local files = {}
+    local readOk, readErr = pcall(function()
+        for file in listing:lines() do
+            if file:match("%.msi$") then
+                files[#files + 1] = file
             end
-            os.remove(qInstallPath .. '\\' .. file)
         end
+    end)
+    -- GopherLua returns the process's numeric exit status from pipe close.
+    -- Close even after a read error, and reject partial results before installing.
+    local closeOk, listExitCode = pcall(function() return listing:close() end)
+    if not readOk then
+        error('Failed to list installer packages: ' .. tostring(readErr))
     end
-    listing:close()
+    if not closeOk or listExitCode ~= 0 then
+        error('Failed to list installer packages: ' .. tostring(listExitCode))
+    end
+    if #files == 0 then
+        error('No installer MSI packages found in: ' .. msiPath)
+    end
+    for _, file in ipairs(files) do
+        local command = windowsCommand.msi(msiPath .. '\\' .. file, qInstallPath)
+        local exitCode = os.execute(command)
+        if exitCode ~= 0 then
+            error("Install msi failed: " .. file)
+        end
+        os.remove(qInstallPath .. '\\' .. file)
+    end
 
     -- Install pip
     print("Installing pip...")
