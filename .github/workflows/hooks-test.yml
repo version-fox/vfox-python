@@ -55,6 +55,8 @@ jobs:
           # Literal percent/exclamation marks also catch cmd expansion bugs.
           # Keep plugin staging and installation on the user's volume.
           $env:VFOX_HOME = Join-Path $env:USERPROFILE 'Mechael Jackson''s & %USERNAME% ! SDKs'
+          # vfox expects a custom shared root to exist before initialization.
+          [System.IO.Directory]::CreateDirectory($env:VFOX_HOME) | Out-Null
           $env:VFOX_PYTHON_USE_UV_BUILD = '0'
           $archive = Join-Path $env:RUNNER_TEMP 'python-plugin.zip'
           Compress-Archive -Path metadata.lua,hooks,lib,bin -DestinationPath $archive
