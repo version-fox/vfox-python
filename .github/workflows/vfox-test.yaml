@@ -9,12 +9,13 @@ on:
     tags: ["v*"]
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   test-on-linux:
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest]
         python-version: [3.12.2]
@@ -33,6 +34,8 @@ jobs:
           exclusions: "*.git* manifest.json"
 
       - name: Install vfox
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           for _ in {1..10}; do
@@ -64,24 +67,28 @@ jobs:
               exit 1
           fi
 
-      - name: Install Python 3.10.20 with uv-build
+      - name: Select an available uv-build Python 3.10 version
+        if: matrix.mirror == ''
+        run: python .github/select-uv-version.py
+
+      - name: Install Python 3.10 with uv-build
         if: matrix.mirror == ''
         env:
           VFOX_PYTHON_USE_UV_BUILD: "1"
         run: |
           eval "$(vfox activate bash)"
-          vfox install python@3.10.20
-          vfox use -g python@3.10.20
+          vfox install python@"$VFOX_TEST_UV_VERSION"
+          vfox use -g python@"$VFOX_TEST_UV_VERSION"
           vfox current
 
-      - name: Check uv-build python 3.10.20
+      - name: Check uv-build python 3.10
         if: matrix.mirror == ''
         run: |
           eval "$(vfox activate bash)"
           python_version=$(python -c 'import sys;print(sys.version)')
           echo "$python_version"
 
-          if [[ ! $python_version == 3.10.20* ]]; then
+          if [[ ! $python_version == "$VFOX_TEST_UV_VERSION"* ]]; then
               exit 1
           fi
 
@@ -94,6 +101,7 @@ jobs:
         shell: pwsh
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         os: [windows-latest]
         python-version: [3.12.2]
@@ -147,17 +155,21 @@ jobs:
               exit 1
           }
 
-      - name: Install Python 3.10.20 with uv-build
+      - name: Select an available uv-build Python 3.10 version
+        if: matrix.mirror == ''
+        run: python .github/select-uv-version.py
+
+      - name: Install Python 3.10 with uv-build
         if: runner.os == 'Windows' && matrix.mirror == ''
         env:
           VFOX_PYTHON_USE_UV_BUILD: "1"
         run: |
           Invoke-Expression "$(vfox activate pwsh)"
-          vfox install python@3.10.20
+          vfox install "python@$env:VFOX_TEST_UV_VERSION"
           if ($LASTEXITCODE -ne 0) {
             exit $LASTEXITCODE
           }
-          vfox use -g python@3.10.20
+          vfox use -g "python@$env:VFOX_TEST_UV_VERSION"
           if ($LASTEXITCODE -ne 0) {
             exit $LASTEXITCODE
           }
@@ -169,19 +181,19 @@ jobs:
           }
           Write-Output $python_version
 
-          if ($python_version -notlike "3.10.20*") {
-              Write-Error "expected uv-build python 3.10.20, got $python_version"
+          if ($python_version -notlike "$env:VFOX_TEST_UV_VERSION*") {
+              Write-Error "expected uv-build python $env:VFOX_TEST_UV_VERSION, got $python_version"
               exit 1
           }
 
-      - name: Check uv-build python 3.10.20
+      - name: Check uv-build python 3.10
         if: runner.os == 'Windows' && matrix.mirror == ''
         run: |
           Invoke-Expression "$(vfox activate pwsh)"
           $python_version = $(python -c 'import sys;print(sys.version)')
           Write-Output $python_version
 
-          if ($python_version -notlike "3.10.20*") {
+          if ($python_version -notlike "$env:VFOX_TEST_UV_VERSION*") {
               exit 1
           }
 
