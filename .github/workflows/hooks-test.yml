@@ -94,3 +94,13 @@ jobs:
           $venv = Join-Path $env:RUNNER_TEMP 'venv with spaces & symbols'
           & $python -m venv $venv
           & (Join-Path $venv 'Scripts\python.exe') -m pip --version
+      - name: Show installer destinations after a failure
+        if: failure()
+        run: |
+          foreach ($directory in @($env:TEMP, (Join-Path $env:WINDIR 'Temp'))) {
+            Get-ChildItem -LiteralPath $directory -Filter 'MSI*.log' -ErrorAction SilentlyContinue |
+              ForEach-Object {
+                Write-Output "Installer log: $($_.FullName)"
+                Select-String -LiteralPath $_.FullName -Pattern 'Command Line|TARGETDIR|TargetDir|SourceDir|File: python.exe|Return value 3|MainEngineThread is returning'
+              }
+          }
