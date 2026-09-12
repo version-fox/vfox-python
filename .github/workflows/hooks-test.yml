@@ -101,6 +101,16 @@ jobs:
             Get-ChildItem -LiteralPath $directory -Filter 'MSI*.log' -ErrorAction SilentlyContinue |
               ForEach-Object {
                 Write-Output "Installer log: $($_.FullName)"
-                Select-String -LiteralPath $_.FullName -Pattern 'Command Line|TARGETDIR|TargetDir|SourceDir|File: python.exe|Return value 3|MainEngineThread is returning'
+                Select-String -LiteralPath $_.FullName -Pattern 'Command Line|TARGETDIR|InstallDirectory|ROOTDRIVE|FileCopy.*python|FileCopy.*ensurepip|Return value 3|MainEngineThread is returning' |
+                  ForEach-Object { Write-Output $_.Line }
               }
           }
+      - name: Preserve MSI logs after a failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer-logs
+          path: |
+            C:\Users\runneradmin\AppData\Local\Temp\MSI*.log
+            C:\Windows\Temp\MSI*.log
+          if-no-files-found: warn
