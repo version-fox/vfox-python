@@ -1,3 +1,17 @@
+-- Copyright 2026 Han Li and contributors
+--
+-- Licensed under the Apache License, Version 2.0 (the "License");
+-- you may not use this file except in compliance with the License.
+-- You may obtain a copy of the License at
+--
+--   http://www.apache.org/licenses/LICENSE-2.0
+--
+-- Unless required by applicable law or agreed to in writing, software
+-- distributed under the License is distributed on an "AS IS" BASIS,
+-- WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-- See the License for the specific language governing permissions and
+-- limitations under the License.
+
 local http = require("http")
 local html = require("html")
 local json = require("json")
@@ -6,9 +20,14 @@ local windowsCommand = require("windows_command")
 -- get mirror
 local PYTHON_URL = "https://www.python.org/ftp/python/"
 local VFOX_PYTHON_MIRROR = os.getenv("VFOX_PYTHON_MIRROR")
-if VFOX_PYTHON_MIRROR then
+if VFOX_PYTHON_MIRROR and VFOX_PYTHON_MIRROR ~= "" then
+    if not VFOX_PYTHON_MIRROR:match("/$") then
+        VFOX_PYTHON_MIRROR = VFOX_PYTHON_MIRROR .. "/"
+    end
     PYTHON_URL = VFOX_PYTHON_MIRROR
+    ---@diagnostic disable-next-line: undefined-field
     os.setenv("PYTHON_BUILD_MIRROR_URL_SKIP_CHECKSUM", 1)
+    ---@diagnostic disable-next-line: undefined-field
     os.setenv("PYTHON_BUILD_MIRROR_URL", PYTHON_URL)
 end
 
@@ -19,12 +38,12 @@ local URL_ENCODED_DOT = "%%2[eE]"
 
 -- request headers
 local REQUEST_HEADERS = {
-    ["User-Agent"] = "vfox"
+    ["User-Agent"] = "vfox",
 }
 
 -- pip.cmd lives under Scripts, so %~dp0..\python.exe resolves to the install root's python.exe.
 -- Windows command scripts conventionally use CRLF line endings.
-local WINDOWS_PIP_SHIM_CONTENT = "@echo off\r\n\"%~dp0..\\python.exe\" -m pip %*\r\n"
+local WINDOWS_PIP_SHIM_CONTENT = '@echo off\r\n"%~dp0..\\python.exe" -m pip %*\r\n'
 
 local UV_BUILD_ENV = "VFOX_PYTHON_USE_UV_BUILD"
 local UV_BUILD_MIRROR_ENV = "VFOX_PYTHON_UV_BUILD_MIRROR"
@@ -38,16 +57,16 @@ local DOWNLOAD_SOURCE = {
 
 function checkIsReleaseVersion(version)
     local resp, err = http.head({
-        url = DOWNLOAD_SOURCE.SOURCE:format(version, version) .. '.xz',
-        headers = REQUEST_HEADERS
+        url = DOWNLOAD_SOURCE.SOURCE:format(version, version) .. ".xz",
+        headers = REQUEST_HEADERS,
     })
     if err == nil and resp.status_code == 200 then
         return true
     end
 
     local resp, err = http.head({
-        url = DOWNLOAD_SOURCE.SOURCE:format(version, version) .. '.bz2',
-        headers = REQUEST_HEADERS
+        url = DOWNLOAD_SOURCE.SOURCE:format(version, version) .. ".bz2",
+        headers = REQUEST_HEADERS,
     })
     if err == nil and resp.status_code == 200 then
         return true
@@ -57,7 +76,7 @@ function checkIsReleaseVersion(version)
 end
 
 function windowsInstall(ctx)
-    local sdkInfo = ctx.sdkInfo['python']
+    local sdkInfo = ctx.sdkInfo["python"]
     local path = sdkInfo.path
     local version = sdkInfo.version
     local url = getReleaseForWindows(version)
@@ -67,11 +86,10 @@ function windowsInstall(ctx)
     elseif string.sub(filename, -3) == "exe" then
         windowsInstallExe(path, url, version, filename)
     end
-
 end
 
 function windowsInstallMsi(path, url, version, filename)
-    -- WARNNING: 
+    -- WARNNING:
     -- The msi installer for python 2.x must be downloaded to another directory
     -- it cannot be installed in the current directory.
     local qInstallFile = RUNTIME.pluginDirPath .. "\\" .. filename
@@ -83,7 +101,7 @@ function windowsInstallMsi(path, url, version, filename)
     print("to:\t" .. qInstallFile)
     local err = http.download_file({
         url = url,
-        headers = REQUEST_HEADERS
+        headers = REQUEST_HEADERS,
     }, qInstallFile)
 
     if err ~= nil then
@@ -106,7 +124,10 @@ function windowsInstallMsi(path, url, version, filename)
     if file then
         io.close(file)
         print("Installing pip...")
-        local command = windowsCommand.native(qInstallPath .. '\\python.exe', {'-E', '-s', '-m', 'ensurepip', '-U', '--default-pip'})
+        local command = windowsCommand.native(
+            qInstallPath .. "\\python.exe",
+            { "-E", "-s", "-m", "ensurepip", "-U", "--default-pip" }
+        )
         local exitCode = os.execute(command)
         if exitCode ~= 0 then
             error("Install pip failed. exit " .. exitCode)
@@ -118,7 +139,7 @@ function windowsInstallExe(path, url, version, filename)
     --- Attention system difference
     local qInstallFile = path .. "\\" .. filename
     local qInstallPath = path
-    local msiPath = path .. '\\AttachedContainer'
+    local msiPath = path .. "\\AttachedContainer"
 
     -- download
     print("Downloading installer...")
@@ -126,7 +147,7 @@ function windowsInstallExe(path, url, version, filename)
     print("to:\t" .. qInstallFile)
     local err = http.download_file({
         url = url,
-        headers = REQUEST_HEADERS
+        headers = REQUEST_HEADERS,
     }, qInstallFile)
 
     if err ~= nil then
@@ -135,8 +156,8 @@ function windowsInstallExe(path, url, version, filename)
 
     -- Extract
     print("Extracting installer...")
-    local wixBin = RUNTIME.pluginDirPath .. '\\bin\\WiX\\dark.exe'
-    local command = windowsCommand.native(wixBin, {'-x', qInstallPath, qInstallFile})
+    local wixBin = RUNTIME.pluginDirPath .. "\\bin\\WiX\\dark.exe"
+    local command = windowsCommand.native(wixBin, { "-x", qInstallPath, qInstallFile })
     local exitCode = os.execute(command)
     if exitCode ~= 0 then
         error("Extract failed")
@@ -145,16 +166,16 @@ function windowsInstallExe(path, url, version, filename)
     -- Cleaning up ...
     print("Cleaning installer...")
     os.remove(qInstallFile)
-    local files = {'appendpath.msi', 'launcher.msi', 'path.msi', 'pip.msi'}
+    local files = { "appendpath.msi", "launcher.msi", "path.msi", "pip.msi" }
     for _, file in ipairs(files) do
-        os.remove(msiPath .. '\\' .. file)
+        os.remove(msiPath .. "\\" .. file)
     end
 
     -- Install msi
     print("Installing python...")
     local listing, listErr = io.popen(windowsCommand.files(msiPath))
     if not listing then
-        error('Failed to list installer packages: ' .. tostring(listErr))
+        error("Failed to list installer packages: " .. tostring(listErr))
     end
     local files = {}
     local readOk, readErr = pcall(function()
@@ -166,24 +187,26 @@ function windowsInstallExe(path, url, version, filename)
     end)
     -- GopherLua returns the process's numeric exit status from pipe close.
     -- Close even after a read error, and reject partial results before installing.
-    local closeOk, listExitCode = pcall(function() return listing:close() end)
+    local closeOk, listExitCode = pcall(function()
+        return listing:close()
+    end)
     if not readOk then
-        error('Failed to list installer packages: ' .. tostring(readErr))
+        error("Failed to list installer packages: " .. tostring(readErr))
     end
     if not closeOk or listExitCode ~= 0 then
-        error('Failed to list installer packages: ' .. tostring(listExitCode))
+        error("Failed to list installer packages: " .. tostring(listExitCode))
     end
     if #files == 0 then
-        error('No installer MSI packages found in: ' .. msiPath)
+        error("No installer MSI packages found in: " .. msiPath)
     end
     for _, file in ipairs(files) do
         print("Installing MSI package: " .. file)
-        local command = windowsCommand.msi(msiPath .. '\\' .. file, qInstallPath)
+        local command = windowsCommand.msi(msiPath .. "\\" .. file, qInstallPath)
         local exitCode = os.execute(command)
         if exitCode ~= 0 then
             error("Install msi failed: " .. file)
         end
-        os.remove(qInstallPath .. '\\' .. file)
+        os.remove(qInstallPath .. "\\" .. file)
     end
 
     -- Install pip
@@ -192,7 +215,10 @@ function windowsInstallExe(path, url, version, filename)
     local file = io.open(ensurepipPath, "r")
     if file then
         io.close(file)
-        local command = windowsCommand.native(qInstallPath .. '\\python.exe', {'-E', '-s', '-m', 'ensurepip', '-U', '--default-pip'})
+        local command = windowsCommand.native(
+            qInstallPath .. "\\python.exe",
+            { "-E", "-s", "-m", "ensurepip", "-U", "--default-pip" }
+        )
         local exitCode = os.execute(command)
         if exitCode ~= 0 then
             error("Install pip failed. exit " .. exitCode)
@@ -211,22 +237,28 @@ function windowsInstallExe(path, url, version, filename)
 
     -- Copy Python executables with versioned names
     -- python.exe
-    local files = {qInstallPath .. "\\python" .. major .. ".exe", qInstallPath .. "\\python" .. majorMinor .. ".exe",
-                   qInstallPath .. "\\python" .. majorDotMinor .. ".exe"}
+    local files = {
+        qInstallPath .. "\\python" .. major .. ".exe",
+        qInstallPath .. "\\python" .. majorMinor .. ".exe",
+        qInstallPath .. "\\python" .. majorDotMinor .. ".exe",
+    }
     for _, file in ipairs(files) do
         local command = windowsCommand.copy(pythonExePath, file)
         if os.execute(command) ~= 0 then
-            error('Failed to create Python executable alias: ' .. file)
+            error("Failed to create Python executable alias: " .. file)
         end
     end
 
     -- pythonw.exe
-    local files = {qInstallPath .. "\\pythonw" .. major .. ".exe", qInstallPath .. "\\pythonw" .. majorMinor .. ".exe",
-                   qInstallPath .. "\\pythonw" .. majorDotMinor .. ".exe"}
+    local files = {
+        qInstallPath .. "\\pythonw" .. major .. ".exe",
+        qInstallPath .. "\\pythonw" .. majorMinor .. ".exe",
+        qInstallPath .. "\\pythonw" .. majorDotMinor .. ".exe",
+    }
     for _, file in ipairs(files) do
         local command = windowsCommand.copy(pythonwExePath, file)
         if os.execute(command) ~= 0 then
-            error('Failed to create Python executable alias: ' .. file)
+            error("Failed to create Python executable alias: " .. file)
         end
     end
 
@@ -235,20 +267,21 @@ function windowsInstallExe(path, url, version, filename)
     if file then
         io.close(file)
         -- python.exe
-        local files = {qInstallPath .. "\\Lib\\venv\\scripts\\nt\\python" .. major .. ".exe",
-                       qInstallPath .. "\\Lib\\venv\\scripts\\nt\\python" .. majorMinor .. ".exe",
-                       qInstallPath .. "\\Lib\\venv\\scripts\\nt\\python" .. majorDotMinor .. ".exe",
-                       qInstallPath .. "\\Lib\\venv\\scripts\\nt\\pythonw" .. major .. ".exe",
-                       qInstallPath .. "\\Lib\\venv\\scripts\\nt\\pythonw" .. majorMinor .. ".exe",
-                       qInstallPath .. "\\Lib\\venv\\scripts\\nt\\pythonw" .. majorDotMinor .. ".exe"}
+        local files = {
+            qInstallPath .. "\\Lib\\venv\\scripts\\nt\\python" .. major .. ".exe",
+            qInstallPath .. "\\Lib\\venv\\scripts\\nt\\python" .. majorMinor .. ".exe",
+            qInstallPath .. "\\Lib\\venv\\scripts\\nt\\python" .. majorDotMinor .. ".exe",
+            qInstallPath .. "\\Lib\\venv\\scripts\\nt\\pythonw" .. major .. ".exe",
+            qInstallPath .. "\\Lib\\venv\\scripts\\nt\\pythonw" .. majorMinor .. ".exe",
+            qInstallPath .. "\\Lib\\venv\\scripts\\nt\\pythonw" .. majorDotMinor .. ".exe",
+        }
         for _, file in ipairs(files) do
             local command = windowsCommand.copy(venvlauncherExePath, file)
             if os.execute(command) ~= 0 then
-                error('Failed to create Python venv executable alias: ' .. file)
+                error("Failed to create Python venv executable alias: " .. file)
             end
         end
     end
-
 end
 
 local pyenvBranch = ""
@@ -416,7 +449,7 @@ local function runtimeLibc(osType)
         "/lib/ld-musl-armhf.so.1",
         "/usr/lib/libc.musl-x86_64.so.1",
         "/usr/lib/libc.musl-aarch64.so.1",
-        "/usr/lib/libc.musl-armhf.so.1"
+        "/usr/lib/libc.musl-armhf.so.1",
     }
     for _, muslLib in ipairs(muslLibs) do
         local file = io.open(muslLib, "r")
@@ -512,12 +545,12 @@ local function uvBuildAssetName(build)
 end
 
 local function isSupportedArchiveName(name)
-    return string.sub(name, -7) == ".tar.gz" or
-        string.sub(name, -4) == ".tgz" or
-        string.sub(name, -7) == ".tar.xz" or
-        string.sub(name, -8) == ".tar.bz2" or
-        string.sub(name, -4) == ".zip" or
-        string.sub(name, -3) == ".7z"
+    return string.sub(name, -7) == ".tar.gz"
+        or string.sub(name, -4) == ".tgz"
+        or string.sub(name, -7) == ".tar.xz"
+        or string.sub(name, -8) == ".tar.bz2"
+        or string.sub(name, -4) == ".zip"
+        or string.sub(name, -3) == ".7z"
 end
 
 local function uvBuildAssetPriority(build)
@@ -555,7 +588,9 @@ local function uvBuildDownloadUrl(build)
 
     local release, filename = string.match(build.url, UV_BUILD_GITHUB_RELEASE_PATTERN)
     if release == nil or filename == nil then
-        error("Unable to rewrite uv-build download URL for mirror; expected a GitHub release download URL: " .. build.url)
+        error(
+            "Unable to rewrite uv-build download URL for mirror; expected a GitHub release download URL: " .. build.url
+        )
     end
 
     return trimTrailingSlash(mirror) .. "/" .. release .. "/" .. filename
@@ -565,7 +600,7 @@ local function getUvBuilds(osType, archType, libc)
     fixHeaders()
     local resp, err = http.get({
         url = buildUvBuildUrl(osType, archType, libc),
-        headers = REQUEST_HEADERS
+        headers = REQUEST_HEADERS,
     })
     if err ~= nil or resp.status_code ~= 200 then
         local statusCode = resp and resp.status_code or "none"
@@ -592,7 +627,16 @@ local function findUvBuild(version)
     if selectedBuild ~= nil then
         return selectedBuild
     end
-    error("No uv-build prebuilt Python found for version " .. version .. " on " .. osType .. "/" .. archType .. "/" .. libc)
+    error(
+        "No uv-build prebuilt Python found for version "
+            .. version
+            .. " on "
+            .. osType
+            .. "/"
+            .. archType
+            .. "/"
+            .. libc
+    )
 end
 
 local function pathExists(path)
@@ -605,7 +649,8 @@ local function pathExists(path)
 end
 
 local function ensureWindowsDirectory(path)
-    local command = powerShellCommand("New-Item -ItemType Directory -Force -Path " .. powerShellQuote(path) .. " | Out-Null")
+    local command =
+        powerShellCommand("New-Item -ItemType Directory -Force -Path " .. powerShellQuote(path) .. " | Out-Null")
     local exitCode = os.execute(command)
     if not commandSucceeded(exitCode) then
         error("Failed to create directory: " .. path .. ". Exit code: " .. tostring(exitCode))
@@ -673,8 +718,16 @@ local function ensureWindowsUvBuildPip(path)
 
     local windowsBundledPath = path .. "\\Lib\\ensurepip\\_bundled"
     local reinstallCommand = powerShellPythonCommand(pythonExe, {
-        "-E", "-s", "-m", "pip", "install", "--force-reinstall", "--no-index",
-        "--find-links", windowsBundledPath, "pip"
+        "-E",
+        "-s",
+        "-m",
+        "pip",
+        "install",
+        "--force-reinstall",
+        "--no-index",
+        "--find-links",
+        windowsBundledPath,
+        "pip",
     })
     local reinstallExitCode = os.execute(reinstallCommand)
     if not commandSucceeded(reinstallExitCode) then
@@ -704,6 +757,23 @@ function resolvePythonInstallPath(installPath, version)
     end
 
     return installPath
+end
+
+--- Whether a vfox version directory holds a link to a Python that lives
+--- elsewhere (`vfox link`). Such an installation belongs to its owner; the
+--- plugin must not rewrite shebangs or report its missing packaging tools.
+function isLinkedPythonInstall(versionPath, version)
+    if OS_TYPE == "windows" then
+        return false
+    end
+    local linkPath = versionPath .. "/python-" .. version
+    local handle = io.popen("test -L " .. shellQuote(linkPath) .. " 2>/dev/null && echo yes")
+    if not handle then
+        return false
+    end
+    local output = handle:read("*a") or ""
+    handle:close()
+    return string.find(output, "yes", 1, true) ~= nil
 end
 
 function uvBuildPreInstall(version)
@@ -736,7 +806,7 @@ function uvBuildPreInstall(version)
 end
 
 function linuxCompile(ctx)
-    local sdkInfo = ctx.sdkInfo['python']
+    local sdkInfo = ctx.sdkInfo["python"]
     local path = sdkInfo.path
     local version = sdkInfo.version
     local pyenv_url = "https://github.com/pyenv/pyenv.git"
@@ -745,7 +815,9 @@ function linuxCompile(ctx)
     if pyenvBranch ~= "" then
         branch = "--branch " .. pyenvBranch
     end
-    local status = os.execute("git -c advice.detachedHead=false clone --depth 1 " .. branch .. " "  .. pyenv_url .. " " .. dest_pyenv_path)
+    local status = os.execute(
+        "git -c advice.detachedHead=false clone --depth 1 " .. branch .. " " .. pyenv_url .. " " .. dest_pyenv_path
+    )
     if status ~= 0 then
         error("git clone failed")
     end
@@ -768,7 +840,7 @@ function linuxCompile(ctx)
 end
 
 function uvBuildInstall(ctx)
-    local sdkInfo = ctx.sdkInfo['python']
+    local sdkInfo = ctx.sdkInfo["python"]
     local path = sdkInfo.path
     local version = sdkInfo.version
 
@@ -806,7 +878,7 @@ function getReleaseForWindows(version)
     local url = DOWNLOAD_SOURCE.EXE:format(version, version, exeArchSuffix)
     local resp, err = http.head({
         url = url,
-        headers = REQUEST_HEADERS
+        headers = REQUEST_HEADERS,
     })
     if err == nil and resp.status_code == 200 then
         return url
@@ -816,7 +888,7 @@ function getReleaseForWindows(version)
     local url = DOWNLOAD_SOURCE.MSI:format(version, version, msiArchSuffix)
     local resp, err = http.head({
         url = url,
-        headers = REQUEST_HEADERS
+        headers = REQUEST_HEADERS,
     })
     if err == nil and resp.status_code == 200 then
         return url
@@ -825,8 +897,8 @@ function getReleaseForWindows(version)
     error("No available installer found for current version")
 end
 
-function fixHeaders() 
-    REQUEST_HEADERS["User-Agent"] = "vfox v" .. RUNTIME.version;
+function fixHeaders()
+    REQUEST_HEADERS["User-Agent"] = "vfox v" .. RUNTIME.version
 end
 
 -- The FTP index includes source-only security releases. The Windows download
@@ -850,11 +922,15 @@ function parseWindowsVersions()
         local href = selection:attr("href") or ""
         local filename = href:match("([^/]+)$") or ""
         local version = filename:match("^python%-(%d+%.%d+%.%d+)") or filename:match("^python%-(%d+%.%d+)")
-        if not version then return end
+        if not version then
+            return
+        end
         local exeSuffix = arch == "386" and "" or "-" .. arch
         local msiSuffix = arch == "386" and "" or "." .. arch
-        if filename ~= "python-" .. version .. exeSuffix .. ".exe"
-            and filename ~= "python-" .. version .. msiSuffix .. ".msi" then
+        if
+            filename ~= "python-" .. version .. exeSuffix .. ".exe"
+            and filename ~= "python-" .. version .. msiSuffix .. ".msi"
+        then
             return
         end
         if compare_versions(version, "2.5.0") >= 0 and not seen[version] then
@@ -862,7 +938,9 @@ function parseWindowsVersions()
             table.insert(result, { version = version, note = "" })
         end
     end)
-    table.sort(result, function(a, b) return compare_versions(a.version, b.version) > 0 end)
+    table.sort(result, function(a, b)
+        return compare_versions(a.version, b.version) > 0
+    end)
     if #result == 0 then
         error("No Windows Python installers found for " .. arch .. " at " .. url)
     end
@@ -874,7 +952,7 @@ function parseVersion()
 
     local resp, err = http.get({
         url = PYTHON_URL,
-        headers = REQUEST_HEADERS
+        headers = REQUEST_HEADERS,
     })
     if err ~= nil or resp.status_code ~= 200 then
         error("paring release info failed." .. err)
@@ -890,13 +968,13 @@ function parseVersion()
                 if compare_versions(vn, "2.5.0") >= 0 then
                     table.insert(result, {
                         version = string.sub(href, 1, -2),
-                        note = ""
+                        note = "",
                     })
                 end
             else
                 table.insert(result, {
                     version = vn,
-                    note = ""
+                    note = "",
                 })
             end
         end
@@ -935,7 +1013,7 @@ function parseVersionFromPyenv()
     fixHeaders()
     local resp, err = http.get({
         url = version_vault_url,
-        headers = REQUEST_HEADERS
+        headers = REQUEST_HEADERS,
     })
     if err ~= nil or resp.status_code ~= 200 then
         error("paring release info failed." .. err)
@@ -943,12 +1021,12 @@ function parseVersionFromPyenv()
     local result = {}
     local jsonObj = json.decode(resp.body)
 
-    local tagName = jsonObj.tagName;
+    local tagName = jsonObj.tagName
     if tagName then
-        pyenvBranch = tagName;
+        pyenvBranch = tagName
     end
 
-    local versions = jsonObj.versions;
+    local versions = jsonObj.versions
 
     local numericVersions = {}
     local namedVersions = {}
@@ -972,14 +1050,14 @@ function parseVersionFromPyenv()
     for _, version in ipairs(numericVersions) do
         table.insert(result, {
             version = version,
-            note = ""
+            note = "",
         })
     end
 
     for _, version in ipairs(namedVersions) do
         table.insert(result, {
             version = version,
-            note = ""
+            note = "",
         })
     end
 
@@ -992,10 +1070,10 @@ function parseVersionFromUvBuild()
     for _, build in ipairs(getUvBuilds()) do
         if isSupportedUvBuild(build) then
             local version = uvBuildVersion(build)
-            if not seen[version] then
+            if version and not seen[version] then
                 table.insert(result, {
                     version = version,
-                    note = ""
+                    note = "",
                 })
                 seen[version] = true
             end
@@ -1059,7 +1137,15 @@ function fixShebangForVersion(installPath, version)
     end
 
     findResult:close()
-    print("Shebang fix completed" .. versionInfo .. ". Checked " .. checkedCount .. " files, fixed " .. fixedCount .. " files.")
+    print(
+        "Shebang fix completed"
+            .. versionInfo
+            .. ". Checked "
+            .. checkedCount
+            .. " files, fixed "
+            .. fixedCount
+            .. " files."
+    )
     return true, fixedCount
 end
 
@@ -1135,7 +1221,7 @@ function checkPythonHealth(installPath, version)
         pythonExists = false,
         scriptsChecked = {},
         problemsFound = {},
-        overallHealth = "unknown"
+        overallHealth = "unknown",
     }
 
     -- Check if bin directory exists
@@ -1159,7 +1245,7 @@ function checkPythonHealth(installPath, version)
     healthReport.pythonExists = true
 
     -- Check critical Python scripts
-    local criticalScripts = {"pip", "pip3", "easy_install"}
+    local criticalScripts = { "pip", "pip3", "easy_install" }
     local problemCount = 0
 
     for _, scriptName in ipairs(criticalScripts) do
@@ -1170,7 +1256,7 @@ function checkPythonHealth(installPath, version)
             exists = false,
             executable = false,
             shebangOk = false,
-            shebangLine = ""
+            shebangLine = "",
         }
 
         -- Check if script exists

@@ -1,0 +1,49 @@
+# Copyright 2026 Han Li and contributors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# License header check (Apache SkyWalking Eyes). Lua, YAML, TOML, Python and
+# the ignore files take the header as a comment. The checked-in WiX binaries
+# under bin/ are third-party files and keep their own licence.
+header:
+  license:
+    spdx-id: Apache-2.0
+    copyright-owner: Han Li and contributors
+    content: |
+      Copyright 2026 Han Li and contributors
+
+      Licensed under the Apache License, Version 2.0 (the "License");
+      you may not use this file except in compliance with the License.
+      You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+      Unless required by applicable law or agreed to in writing, software
+      distributed under the License is distributed on an "AS IS" BASIS,
+      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+      See the License for the specific language governing permissions and
+      limitations under the License.
+
+  paths-ignore:
+    - '.git'
+    - '**/*.md'
+    - '**/*.json'
+    - '.tool-versions'
+    - 'LICENSE'
+    - '.license.tpl'
+    # Saved pyenv/uv version files that carry no comment syntax of their own.
+    - 'tests/fixtures/**'
+    # Third-party WiX tooling bundled for the Windows installer path.
+    - 'bin/**'
+
+  comment: on-failure
