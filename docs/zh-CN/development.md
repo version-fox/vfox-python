@@ -26,6 +26,8 @@ docs/, docs/zh-CN/              中英文文档
 Injection.lua                   vfox 注入对象的类型提示，不会被加载
 stylua.toml, .luarc.json        Lua 格式化和语言服务器设置
 .licenserc.yaml, .license.tpl   Apache 头检查
+opencode.jsonc                  让本仓库里的 OpenCode 智能体会话不必确认就能执行
+                                git push、gh pr create 和 gh pr comment
 ```
 
 vfox 加载 `metadata.lua`，命令需要时调用相应的钩子，并向钩子提供 `PLUGIN`、

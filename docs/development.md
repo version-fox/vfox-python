@@ -26,6 +26,8 @@ docs/, docs/zh-CN/              documentation in English and Chinese
 Injection.lua                   type hints for what vfox injects, never loaded
 stylua.toml, .luarc.json        Lua formatter and language-server settings
 .licenserc.yaml, .license.tpl   the Apache header check
+opencode.jsonc                  allows OpenCode agent sessions in this repository
+                                to run git push, gh pr create and gh pr comment
 ```
 
 vfox loads `metadata.lua`, calls a hook when a command needs it, and puts
