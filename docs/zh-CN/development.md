@@ -154,7 +154,9 @@ local versions = plugin:Available({})
 `%` junction、退出码传递和每条失败路径。
 
 E2E 任务安装真实的 Python：Linux 上一次源码构建和一次镜像构建，Windows 上一次
-安装包和一次 uv-build，Linux 上还有一次 uv-build。
+安装包和一次 uv-build，Linux 上还有一次 uv-build。它还会在 Linux 上对 runner
+的系统 Python 运行 `vfox link --detect python`，并在两个平台上检查
+`vfox env` 是否按项目的 `.python-version` 选择版本。
 
 本地命令：
 

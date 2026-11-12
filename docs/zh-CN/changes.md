@@ -16,6 +16,8 @@
   Windows 的 E2E 安装。
 - Apache 头、`.gitattributes`（LF）、StyLua、LuaLS 和许可证配置，以及
   Detect、`.python-version`、uv-build、镜像和链接版本的新离线测试。
+- E2E 覆盖 Linux 上的 `vfox link --detect python`，以及 Linux 和 Windows
+  上的项目 `.python-version`。
 - `VFOX_PYTHON_MIRROR` 允许结尾不带 `/`，并忽略空值（CI 对未设置的矩阵项
   会传空值）。
 

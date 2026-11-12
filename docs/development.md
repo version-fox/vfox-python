@@ -173,7 +173,10 @@ It checks native argument encoding, MSI target quoting, the `%` junction,
 exit-code propagation and every failure path.
 
 The E2E workflow installs real Pythons: a source build and a mirror build on
-Linux, an installer and uv-build on Windows, and a uv-build build on Linux.
+Linux, an installer and uv-build on Windows, and a uv-build build on Linux. It
+also runs `vfox link --detect python` against the runner's system Python on
+Linux, and checks that `vfox env` selects a project's `.python-version` on both
+Linux and Windows.
 
 Local commands:
 

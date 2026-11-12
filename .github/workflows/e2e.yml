@@ -55,13 +55,19 @@ jobs:
 
       - name: Install vfox
         env:
-          GITHUB_TOKEN: ${{ github.token }}
+          VFOX_VERSION: 1.1.0
+          VFOX_SHA256: 3b33c3c468b27bc17aecf0d6d3af24fe49fe204972984904a136a47b402a0ee4
         shell: bash
         run: |
-          for _ in {1..10}; do
-            if curl -fsSL https://raw.githubusercontent.com/version-fox/vfox/main/install.sh | bash; then break; fi
-            sleep 5
-          done
+          archive="$RUNNER_TEMP/vfox.tar.gz"
+          curl --fail --silent --show-error --location --output "$archive" \
+            "https://github.com/version-fox/vfox/releases/download/v${VFOX_VERSION}/vfox_${VFOX_VERSION}_linux_x86_64.tar.gz"
+          echo "$VFOX_SHA256  $archive" | sha256sum --check
+          mkdir "$RUNNER_TEMP/vfox"
+          tar --extract --gzip --file "$archive" --directory "$RUNNER_TEMP/vfox" --strip-components=1 \
+            "vfox_${VFOX_VERSION}_linux_x86_64/vfox"
+          echo "$RUNNER_TEMP/vfox" >> "$GITHUB_PATH"
+          export PATH="$RUNNER_TEMP/vfox:$PATH"
           vfox --version
 
       - name: Install plugin
@@ -83,6 +89,39 @@ jobs:
           python_version=$(python -c 'import sys;print(sys.version, sys.path)')
           echo "$python_version"
 
+          if [[ ! $python_version == ${{ matrix.python-version }}* ]]; then
+              exit 1
+          fi
+
+      - name: Adopt the system Python
+        if: matrix.mirror == ''
+        run: |
+          output=$(vfox link --detect python -y)
+          echo "$output"
+          if [[ $output != *"-system"* ]]; then
+              echo "Detect found no system Python"
+              exit 1
+          fi
+          if ! vfox list python | grep -F '(linked'; then
+              echo "vfox list python does not show a linked version"
+              exit 1
+          fi
+
+      - name: Select the installed Python from .python-version
+        run: |
+          project="$RUNNER_TEMP/python-version-project"
+          rm -rf "$project"
+          mkdir -p "$project"
+          printf '%s\n' "${{ matrix.python-version }}" > "$project/.python-version"
+          output=$(cd "$project" && vfox env -s bash)
+          echo "$output"
+          if [[ $output != *"$project/.vfox/sdks/python"* ]]; then
+              echo "vfox env did not use the project .python-version"
+              exit 1
+          fi
+          eval "$output"
+          python_version=$(python -c 'import sys;print(sys.version)')
+          echo "$python_version"
           if [[ ! $python_version == ${{ matrix.python-version }}* ]]; then
               exit 1
           fi
@@ -143,11 +182,22 @@ jobs:
 
       - name: Install vfox
         if: runner.os == 'Windows'
-        shell: powershell
+        shell: pwsh
+        env:
+          VFOX_VERSION: 1.1.0
+          VFOX_SHA256: 1bbec8fffddbb62de0d93030c3f6203c69680662bc65257ca4a5e611cb607d0a
         run: |
-          iex "& {$(irm get.scoop.sh)} -RunAsAdmin"
-          Join-Path (Resolve-Path ~).Path "scoop\shims" >> $Env:GITHUB_PATH
-          scoop install vfox
+          $archive = Join-Path $env:RUNNER_TEMP 'vfox.zip'
+          Invoke-WebRequest -Uri "https://github.com/version-fox/vfox/releases/download/v$($env:VFOX_VERSION)/vfox_$($env:VFOX_VERSION)_windows_x86_64.zip" -OutFile $archive
+          if ((Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLower() -ne $env:VFOX_SHA256) {
+            throw 'vfox archive checksum mismatch'
+          }
+          $directory = Join-Path $env:RUNNER_TEMP 'vfox'
+          Expand-Archive -LiteralPath $archive -DestinationPath $directory
+          $vfox = Get-ChildItem -LiteralPath $directory -Recurse -Filter vfox.exe | Select-Object -First 1
+          if (-not $vfox) { throw 'vfox.exe was not found in the release archive' }
+          $vfox.DirectoryName >> $env:GITHUB_PATH
+          $env:PATH = "$($vfox.DirectoryName);$env:PATH"
           vfox --version
 
       - name: Install plugin
@@ -175,6 +225,31 @@ jobs:
 
           if ($python_version -notlike "${{ matrix.python-version }}*") {
               exit 1
+          }
+
+      - name: Select the installed Python from .python-version
+        if: runner.os == 'Windows'
+        run: |
+          $project = Join-Path $env:RUNNER_TEMP 'python-version-project'
+          Remove-Item -Recurse -Force -LiteralPath $project -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Path $project | Out-Null
+          Set-Content -LiteralPath (Join-Path $project '.python-version') -Value '${{ matrix.python-version }}'
+          Push-Location $project
+          try {
+            $envOutput = (vfox env -s pwsh) -join "`n"
+            if ($LASTEXITCODE -ne 0) { throw 'vfox env failed' }
+            Write-Output $envOutput
+            if ($envOutput -notlike '*python-version-project*') {
+              throw 'vfox env did not use the project .python-version'
+            }
+            Invoke-Expression $envOutput
+            $pythonVersion = python -c 'import sys;print(sys.version)'
+            Write-Output $pythonVersion
+            if ($pythonVersion -notlike '${{ matrix.python-version }}*') {
+              throw "expected Python ${{ matrix.python-version }}, got $pythonVersion"
+            }
+          } finally {
+            Pop-Location
           }
 
       - name: Select an available uv-build Python 3.10 version

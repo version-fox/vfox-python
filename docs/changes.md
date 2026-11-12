@@ -19,6 +19,8 @@
 - Apache headers, `.gitattributes` (LF), StyLua, LuaLS and license
   configuration, and new offline tests for Detect, `.python-version`, uv-build,
   the mirror and linked versions.
+- E2E coverage for `vfox link --detect python` on Linux and for a project
+  `.python-version` on Linux and Windows.
 - `VFOX_PYTHON_MIRROR` accepts a URL without a trailing slash and ignores an
   empty value, which is what CI passes for an unset matrix entry.
 
