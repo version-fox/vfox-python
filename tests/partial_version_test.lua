@@ -83,6 +83,29 @@ for _, case in ipairs(cases) do
     assert(got == case[2], case[1] .. " selected " .. tostring(got) .. ", want " .. tostring(case[2]))
 end
 
+-- A source suffix is not part of the release. -opt does not make a name
+-- free-threaded, and -uv keeps a free-threaded release free-threaded.
+local linked = set({ "3.12.8-opt", "3.13.1t-uv", "3.14.0a4t-uv" })
+local linkedCases = {
+    { "3.12", "3.12.8-opt" },
+    { "3.13", nil }, -- 3.13.1t-uv is free-threaded, so a plain request skips it
+    { "3.13t", "3.13.1t-uv" },
+    { "3.14t", nil }, -- 3.14.0a4t-uv is a pre-release
+}
+for _, case in ipairs(linkedCases) do
+    local got = python_version.find_release(linked, case[1])
+    assert(got == case[2], case[1] .. " selected " .. tostring(got) .. ", want " .. tostring(case[2]))
+end
+
+-- .python-version resolves a release line the way vfox use does, while an
+-- exact version or a bare prefix still reaches a linked name.
+assert(python_version.find_installed(set({ "3.13.0", "3.13.1t" }), "3.13") == "3.13.0")
+assert(python_version.find_installed(set({ "3.13.1t", "3.13.0" }), "3.13t") == "3.13.1t")
+assert(python_version.find_installed(set({ "3.14.0a4" }), "3.14") == nil)
+assert(python_version.find_installed(set({ "3.14.0a4" }), "3.14.0a4") == "3.14.0a4")
+assert(python_version.find_installed(set({ "3.12.8-opt" }), "3.12") == "3.12.8-opt")
+assert(python_version.find_installed(set({ "3.12.8-system" }), "3.12.8") == "3.12.8-system")
+
 -- PreInstall: a partial request reads the version list, an exact one does not.
 local before = reads
 local package = plugin:PreInstall({ version = "3.12" })

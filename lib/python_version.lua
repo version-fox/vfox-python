@@ -116,11 +116,13 @@ function python_version.parse_request(text)
     return value
 end
 
---- Finds the installed name a request selects. The exact name wins; then the
---- newest installed version that starts with the request. A request of
---- "system" takes the newest linked system Python. When two names share a
---- version, a bare install comes before a source-suffixed one, as vfox's own
---- matching does.
+--- Finds the installed name a request selects. The exact name wins. A release
+--- line such as "3.13" is resolved as find_release resolves it for vfox use, so
+--- it never selects a free-threaded or pre-release name. Any other request is
+--- matched as a prefix, so an exact version such as "3.12.8" still selects a
+--- linked "3.12.8-system". A request of "system" takes the newest linked system
+--- Python. When two names share a version, a bare install comes before a
+--- source-suffixed one, as vfox's own matching does.
 function python_version.find_installed(installed, request)
     if type(request) ~= "string" or request == "" then
         return nil
@@ -138,6 +140,10 @@ function python_version.find_installed(installed, request)
 
     if installed[request] then
         return request
+    end
+
+    if python_version.is_partial(request) then
+        return python_version.find_release(installed, request)
     end
 
     local best, best_rank
@@ -188,13 +194,15 @@ function python_version.is_partial(request)
     return request:match("^%d+$") ~= nil or request:match("^%d+%.%d+t?$") ~= nil
 end
 
---- Splits a name into the text before a free-threaded `t` suffix, whether the
---- name has that suffix, and whether it is a pre-release. "3.13.18t" is
---- free-threaded; "3.16.0a2" is a pre-release, recognised by a letter right
---- after a digit. A source suffix such as "-system" is neither.
+--- Splits a name into its release, whether the release is free-threaded, and
+--- whether it is a pre-release. The source suffix (-system, -opt, -uv, ...) is
+--- not part of the release, so it is removed first: "3.12.8-opt" is not
+--- free-threaded, and "3.13.1t-uv" is. "3.13.18t" is free-threaded; "3.16.0a2"
+--- is a pre-release, recognised by a letter right after a digit.
 local function releaseOf(name)
-    local free = name:sub(-1) == "t"
-    local release = free and name:sub(1, -2) or name
+    local base = name:match("^[^-]+") or name
+    local free = base:sub(-1) == "t"
+    local release = free and base:sub(1, -2) or base
     return release, free, release:find("%d%a") ~= nil
 end
 
