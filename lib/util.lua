@@ -290,12 +290,41 @@ function windowsInstallMsi(path, url, version, filename)
     createPythonAliases(qInstallPath, version)
 end
 
+-- Burn writes its own log for the layout. Print the end of it, so a failed layout
+-- explains itself in the install output. Reading the log must never hide the error.
+local function printInstallerLog(logPath)
+    local ok, err = pcall(function()
+        local file = io.open(logPath, "r")
+        if not file then
+            print("No installer log was written to " .. logPath)
+            return
+        end
+        local lines = {}
+        while true do
+            local line = file:read("*l")
+            if line == nil then
+                break
+            end
+            lines[#lines + 1] = line
+            if #lines > 200 then
+                table.remove(lines, 1)
+            end
+        end
+        file:close()
+        print("Installer log, last lines of " .. logPath .. ":")
+        for _, line in ipairs(lines) do
+            print(line)
+        end
+    end)
+    if not ok then
+        print("Could not read the installer log: " .. tostring(err))
+    end
+end
+
 function windowsInstallExe(path, url, version, filename)
     --- Attention system difference
     local qInstallFile = path .. "\\" .. filename
     local qInstallPath = path
-    -- The bundle writes its packages here; they are installed, then removed.
-    local layoutPath = path .. "\\InstallerLayout"
 
     -- download
     print("Downloading installer...")
@@ -311,10 +340,21 @@ function windowsInstallExe(path, url, version, filename)
     end
 
     -- Layout: the bundle writes its own packages, so no extraction tool is needed.
+    -- Burn expands %VARIABLES% in the layout argument, so the layout goes under TEMP,
+    -- which has no percent signs, instead of under the SDK path that may contain them.
+    local tempRoot = os.getenv("TEMP")
+    if tempRoot == nil or tempRoot == "" or tempRoot:find("%", 1, true) then
+        error("Installer layout needs a TEMP directory without percent signs")
+    end
+    local layoutName = "vfox-python-layout-" .. os.time() .. "-" .. math.random(100000, 999999)
+    local layoutPath = tempRoot .. "\\" .. layoutName
+    local logPath = tempRoot .. "\\" .. layoutName .. ".log"
     print("Creating installer layout...")
-    local command = windowsCommand.native(qInstallFile, { "/quiet", "/layout", layoutPath })
+    local command = windowsCommand.native(qInstallFile, { "/quiet", "/log", logPath, "/layout", layoutPath })
     local exitCode = os.execute(command)
     if exitCode ~= 0 then
+        printInstallerLog(logPath)
+        os.remove(qInstallFile)
         error(
             "Creating installer layout failed: the installer exited with code "
                 .. tostring(exitCode)
@@ -336,6 +376,7 @@ function windowsInstallExe(path, url, version, filename)
     print("Installing python...")
     local listing, listErr = io.popen(windowsCommand.files(layoutPath))
     if not listing then
+        printInstallerLog(logPath)
         error("Failed to list installer packages: " .. tostring(listErr))
     end
     local files = {}
@@ -361,12 +402,15 @@ function windowsInstallExe(path, url, version, filename)
         return listing:close()
     end)
     if not readOk then
+        printInstallerLog(logPath)
         error("Failed to list installer packages: " .. tostring(readErr))
     end
     if not closeOk or listExitCode ~= 0 then
+        printInstallerLog(logPath)
         error("Failed to list installer packages: " .. tostring(listExitCode))
     end
     if #files == 0 then
+        printInstallerLog(logPath)
         error("No installer MSI packages found in: " .. layoutPath)
     end
     for _, file in ipairs(files) do
@@ -379,11 +423,12 @@ function windowsInstallExe(path, url, version, filename)
         os.remove(qInstallPath .. "\\" .. file)
     end
 
-    -- The MSI packages are installed, so the layout is no longer needed.
+    -- The MSI packages are installed, so the layout and its log are no longer needed.
     print("Removing installer layout...")
     if os.execute(windowsCommand.removeTree(layoutPath)) ~= 0 then
         print("Warning: could not remove installer layout: " .. layoutPath)
     end
+    os.remove(logPath)
 
     -- Install pip
     print("Installing pip...")

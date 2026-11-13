@@ -42,6 +42,14 @@ package.preload.json = function()
     return {}
 end
 local oldExecute, oldPopen, oldOpen, oldClose, oldRemove = os.execute, io.popen, io.open, io.close, os.remove
+local oldGetenv = os.getenv
+-- The layout goes under TEMP, so the tests give TEMP a plain Windows path.
+os.getenv = function(name)
+    if name == "TEMP" then
+        return "C:\\Users\\Runner\\AppData\\Local\\Temp"
+    end
+    return oldGetenv(name)
+end
 
 -- Decode the command independently so the test inspects what PowerShell will
 -- execute, rather than only checking a command string prefix.
@@ -173,18 +181,23 @@ local function literalArguments(command)
     return values
 end
 local layoutArguments = literalArguments(state.commands[1])
+local layoutDir = layoutArguments[6] or ""
 assert(
-    #layoutArguments == 4
+    #layoutArguments == 6
         and layoutArguments[1] == path .. "\\python.exe"
         and layoutArguments[2] == "/quiet"
-        and layoutArguments[3] == "/layout"
-        and layoutArguments[4] == path .. "\\InstallerLayout",
-    "the bundle must create its own layout as the first command"
+        and layoutArguments[3] == "/log"
+        and layoutArguments[4]:find("C:\\Users\\Runner\\AppData\\Local\\Temp\\vfox-python-layout-", 1, true) == 1
+        and layoutArguments[4]:sub(-4) == ".log"
+        and layoutArguments[5] == "/layout"
+        and layoutDir:find("C:\\Users\\Runner\\AppData\\Local\\Temp\\vfox-python-layout-", 1, true) == 1
+        and not layoutDir:find("%", 1, true),
+    "the bundle must lay out under TEMP, where Burn cannot expand %USERNAME%, and log beside it"
 )
 local layoutRemoved = false
 for _, command in ipairs(state.commands) do
     if decodeCommand(command):find("Remove-Item", 1, true) then
-        layoutRemoved = literalArguments(command)[1] == path .. "\\InstallerLayout"
+        layoutRemoved = literalArguments(command)[1] == layoutDir
     end
 end
 assert(layoutRemoved, "the installer layout must be removed after installation")
@@ -391,4 +404,5 @@ assert(junction:find("; exit $exitCode", 1, true), "cleanup must precede the MSI
 assert(not pcall(windows.msi, 'C:\\bad"path\\python.msi', path), "invalid Windows quote must fail")
 assert(not pcall(windows.native, "bad\nprogram", {}), "control characters must fail")
 os.execute, io.popen, io.open, io.close, os.remove = oldExecute, oldPopen, oldOpen, oldClose, oldRemove
+os.getenv = oldGetenv
 print("Windows installer command paths and shell expansion regression passed")
