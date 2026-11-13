@@ -239,4 +239,35 @@ function command.removeTree(path)
     )
 end
 
+-- Burn's /layout hands the copy to a clean-room child process and can return before the
+-- child has finished writing the packages. Run the installer, then wait for that child and
+-- return its exit code. The child is found by the layout's unique name, which Burn keeps on
+-- its command line through the log path.
+function command.installerLayout(program, args, needle)
+    local parts = { "&", literal(program) }
+    for _, arg in ipairs(args) do
+        table.insert(parts, literal(arg))
+    end
+    return powershell(table.concat(parts, " ") .. [[; $parentExitCode = $LASTEXITCODE;
+$child = $null;
+for ($waited = 0; $child -eq $null -and $waited -lt 20; $waited++) {
+    $child = Get-CimInstance Win32_Process |
+        Where-Object { $_.CommandLine -and $_.CommandLine.Contains(]] .. literal(needle) .. [[) } |
+        Select-Object -First 1;
+    if ($child -eq $null) { Start-Sleep -Seconds 1 }
+};
+$childExitCode = 0;
+if ($child -ne $null) {
+    try {
+        $process = [Diagnostics.Process]::GetProcessById($child.ProcessId);
+        if (-not $process.WaitForExit(1800000)) { throw 'installer layout did not finish within 30 minutes' };
+        $childExitCode = $process.ExitCode;
+    } catch [ArgumentException] {
+        # The child exited before it could be opened; the caller checks the packages it left.
+    }
+};
+if ($parentExitCode -ne 0) { exit $parentExitCode };
+exit $childExitCode]])
+end
+
 return command

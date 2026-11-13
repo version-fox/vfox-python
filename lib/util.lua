@@ -350,7 +350,10 @@ function windowsInstallExe(path, url, version, filename)
     local layoutPath = tempRoot .. "\\" .. layoutName
     local logPath = tempRoot .. "\\" .. layoutName .. ".log"
     print("Creating installer layout...")
-    local command = windowsCommand.native(qInstallFile, { "/quiet", "/log", logPath, "/layout", layoutPath })
+    -- Burn returns before its clean-room child has written the packages, so the command
+    -- waits for that child and reports its exit code.
+    local command =
+        windowsCommand.installerLayout(qInstallFile, { "/quiet", "/log", logPath, "/layout", layoutPath }, layoutName)
     local exitCode = os.execute(command)
     if exitCode ~= 0 then
         printInstallerLog(logPath)

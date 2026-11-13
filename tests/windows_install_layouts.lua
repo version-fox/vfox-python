@@ -182,8 +182,9 @@ local function literalArguments(command)
 end
 local layoutArguments = literalArguments(state.commands[1])
 local layoutDir = layoutArguments[6] or ""
+local needle = layoutArguments[7] or ""
 assert(
-    #layoutArguments == 6
+    #layoutArguments == 7
         and layoutArguments[1] == path .. "\\python.exe"
         and layoutArguments[2] == "/quiet"
         and layoutArguments[3] == "/log"
@@ -191,8 +192,13 @@ assert(
         and layoutArguments[4]:sub(-4) == ".log"
         and layoutArguments[5] == "/layout"
         and layoutDir:find("C:\\Users\\Runner\\AppData\\Local\\Temp\\vfox-python-layout-", 1, true) == 1
-        and not layoutDir:find("%", 1, true),
+        and not layoutDir:find("%", 1, true)
+        and layoutDir:sub(-#needle) == needle,
     "the bundle must lay out under TEMP, where Burn cannot expand %USERNAME%, and log beside it"
+)
+assert(
+    decodeCommand(state.commands[1]):find("GetProcessById", 1, true),
+    "the layout must wait for Burn's clean-room child, which returns before it has finished"
 )
 local layoutRemoved = false
 for _, command in ipairs(state.commands) do
