@@ -312,10 +312,29 @@ function windowsInstallExe(path, url, version, filename)
     -- Extract
     print("Extracting installer...")
     local wixBin = RUNTIME.pluginDirPath .. "\\bin\\WiX\\dark.exe"
+    -- Antivirus software can quarantine the WiX tools. Name the missing file
+    -- rather than running nothing (issue #297).
+    local wixFile = io.open(wixBin, "r")
+    if not wixFile then
+        error(
+            "WiX dark.exe is missing at "
+                .. wixBin
+                .. ". Antivirus software may have quarantined the plugin files; restore them, exclude "
+                .. RUNTIME.pluginDirPath
+                .. " from scanning, and install again."
+        )
+    end
+    io.close(wixFile)
     local command = windowsCommand.native(wixBin, { "-x", qInstallPath, qInstallFile })
     local exitCode = os.execute(command)
     if exitCode ~= 0 then
-        error("Extract failed")
+        error(
+            "Extract failed: dark.exe exited with code "
+                .. tostring(exitCode)
+                .. " for "
+                .. qInstallFile
+                .. ". If dark.exe printed nothing, antivirus software may have blocked it."
+        )
     end
 
     -- Cleaning up ...
@@ -1195,7 +1214,15 @@ function linuxCompile(ctx)
     print("Building python ...")
     status = os.execute(pyenv_build_path .. " " .. version .. " " .. path)
     if status ~= 0 then
-        error("python build failed")
+        -- python-build only shows the tail of its log, which is ensurepip's
+        -- traceback. The usual cause is a build dependency that is not installed:
+        -- without the zlib headers the build has no zlib module, so ensurepip
+        -- cannot read pip's wheel (issue #550).
+        error(
+            "python build failed. A missing build dependency is the usual cause, for example "
+                .. "zlib1g-dev or libssl-dev on Debian and Ubuntu. The packages for your system are in "
+                .. "https://github.com/version-fox/vfox-python/blob/main/docs/platforms.md"
+        )
     end
     print("Build python success!")
 
@@ -1235,7 +1262,10 @@ function uvBuildInstall(ctx)
     print("Install Python uv-build success!")
 end
 
-function getReleaseForWindows(version)
+--- The python.org installer for the running Windows architecture: the EXE when
+--- python.org publishes one, otherwise the MSI. Returns nil when it publishes
+--- neither, so PreInstall can stop before any download starts.
+function findWindowsInstaller(version)
     local archType = RUNTIME.archType
     local exeArchSuffix = ""
     local msiArchSuffix = ""
@@ -1264,7 +1294,15 @@ function getReleaseForWindows(version)
         return url
     end
     print("url:\t" .. url)
-    error("No available installer found for current version")
+    return nil
+end
+
+function getReleaseForWindows(version)
+    local url = findWindowsInstaller(version)
+    if url == nil then
+        error("No available installer found for current version")
+    end
+    return url
 end
 
 function fixHeaders()

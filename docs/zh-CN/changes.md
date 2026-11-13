@@ -4,6 +4,14 @@
 
 ## 未发布
 
+- 源码构建失败时，报错会指出常见原因：缺少构建依赖，例如 Debian/Ubuntu 上的 `zlib1g-dev`，并链接到
+  平台说明。没有 zlib 头文件时，`make install` 会在 ensurepip 步骤失败。
+- Windows 上，如果 python.org 没有某个版本的安装包（如 3.12.12），`vfox install` 会在下载前
+  停止，不再等下载完成后才失败。
+- `vfox use` 遇到缺少 `bin` 目录的 Python 版本时会停止并提示重新安装，不再对损坏的安装报告
+  “Now using”。
+- Windows EXE 安装解压失败时，错误信息会指出缺失的 WiX `dark.exe`（杀毒软件可能会把它隔离），
+  并报告 `dark.exe` 的退出码。
 - 部分版本号（如 `python@3.12`）在所有模式下都能用于 `vfox install` 和 `vfox use`：安装选出该模式
   列出的最新稳定版（pyenv、python.org 或 uv-build 索引），使用则选出已安装的最新匹配项。uv-build
   安装记录完整版本名，Windows 的 MSI 安装和 EXE 安装一样创建 `python3` 别名。

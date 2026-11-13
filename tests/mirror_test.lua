@@ -16,21 +16,29 @@
 -- with it; the Windows PreInstall check is the simplest request to inspect.
 local test = require("vfox.test")
 
-local requests = 0
+local source = "https://mirror.example/python/3.12.8/Python-3.12.8.tar.xz"
+local installer = "https://mirror.example/python/3.12.8/python-3.12.8-amd64.exe"
+local requests = {}
 local plugin = test.load({
     os = "windows",
     arch = "amd64",
     env = { VFOX_PYTHON_MIRROR = "https://mirror.example/python" },
     http = function(request)
-        requests = requests + 1
+        requests[#requests + 1] = request.url
         assert(request.method == "HEAD", request.method)
-        assert(request.url == "https://mirror.example/python/3.12.8/Python-3.12.8.tar.xz", request.url)
-        return { status_code = 200 }
+        -- Both the source tarball and the Windows EXE exist on this mirror.
+        if request.url == source or request.url == installer then
+            return { status_code = 200 }
+        end
+        return { status_code = 404 }
     end,
 })
 
 local package = plugin:PreInstall({ version = "3.12.8" })
 assert(package.version == "3.12.8", tostring(package.version))
-assert(requests == 1, tostring(requests))
+-- The source release check runs first, then the Windows installer lookup.
+assert(#requests == 2, tostring(#requests))
+assert(requests[1] == source, requests[1])
+assert(requests[2] == installer, requests[2])
 
 print("PASS: VFOX_PYTHON_MIRROR trailing slash and source release check")
