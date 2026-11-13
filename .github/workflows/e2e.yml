@@ -126,11 +126,11 @@ jobs:
               exit 1
           fi
 
-      - name: Select an available uv-build Python 3.10 version
+      - name: Select an available uv-build Python 3.11 version
         if: matrix.mirror == ''
         run: python .github/select-uv-version.py
 
-      - name: Install Python 3.10 with uv-build
+      - name: Install Python 3.11 with uv-build
         if: matrix.mirror == ''
         env:
           VFOX_PYTHON_USE_UV_BUILD: "1"
@@ -140,7 +140,7 @@ jobs:
           vfox use -g python@"$VFOX_TEST_UV_VERSION"
           vfox current
 
-      - name: Check uv-build python 3.10
+      - name: Check uv-build python 3.11
         if: matrix.mirror == ''
         run: |
           eval "$(vfox activate bash)"
@@ -252,11 +252,11 @@ jobs:
             Pop-Location
           }
 
-      - name: Select an available uv-build Python 3.10 version
+      - name: Select an available uv-build Python 3.11 version
         if: matrix.mirror == ''
         run: python .github/select-uv-version.py
 
-      - name: Install Python 3.10 with uv-build
+      - name: Install Python 3.11 with uv-build
         if: runner.os == 'Windows' && matrix.mirror == ''
         env:
           VFOX_PYTHON_USE_UV_BUILD: "1"
@@ -283,7 +283,7 @@ jobs:
               exit 1
           }
 
-      - name: Check uv-build python 3.10
+      - name: Check uv-build python 3.11
         if: runner.os == 'Windows' && matrix.mirror == ''
         run: |
           Invoke-Expression "$(vfox activate pwsh)"

@@ -147,7 +147,16 @@ local function run_lines(command)
     end
     local lines = {}
     local ok = pcall(function()
-        for line in handle:lines() do
+        -- read("*l") works with both GopherLua file handles and vfox's Windows
+        -- io.popen table, which has no lines method on vfox 1.1.0.
+        while true do
+            local line, readErr = handle:read("*l")
+            if line == nil then
+                if readErr ~= nil then
+                    error(readErr)
+                end
+                break
+            end
             line = trim(line)
             if line ~= "" then
                 lines[#lines + 1] = line

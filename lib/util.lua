@@ -179,7 +179,16 @@ function windowsInstallExe(path, url, version, filename)
     end
     local files = {}
     local readOk, readErr = pcall(function()
-        for file in listing:lines() do
+        -- vfox 1.1.0's Windows io.popen handle has read/close but no lines
+        -- method; read("*l") is the portable way to consume it.
+        while true do
+            local file, readLineErr = listing:read("*l")
+            if file == nil then
+                if readLineErr ~= nil then
+                    error(readLineErr)
+                end
+                break
+            end
             if file:match("%.msi$") then
                 files[#files + 1] = file
             end

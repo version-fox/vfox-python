@@ -90,16 +90,16 @@ os.execute = function(command)
 end
 io.popen = function(command)
     local exitCode = os.execute(command)
+    local files, i = state.files or { "core.msi", "stdlib.msi" }, 0
     return {
-        lines = function()
-            local files, i = state.files or { "core.msi", "stdlib.msi" }, 0
-            return function()
-                i = i + 1
-                if state.readFailure and i == 2 then
-                    error("read failed")
-                end
-                return files[i]
+        -- vfox 1.1.0's Windows handle exposes read, not lines.
+        read = function(_, format)
+            assert(format == "*l", format)
+            i = i + 1
+            if state.readFailure and i == 2 then
+                error("read failed")
             end
+            return files[i]
         end,
         close = function()
             state.closeCount = state.closeCount + 1

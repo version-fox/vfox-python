@@ -129,11 +129,10 @@ end
 local function handle(lines)
     local index = 0
     return {
-        lines = function()
-            return function()
-                index = index + 1
-                return lines[index]
-            end
+        read = function(_, format)
+            assert(format == "*l", format)
+            index = index + 1
+            return lines[index]
         end,
         close = function()
             return 0
