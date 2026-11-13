@@ -1,3 +1,17 @@
+-- Copyright 2026 Han Li and contributors
+--
+-- Licensed under the Apache License, Version 2.0 (the "License");
+-- you may not use this file except in compliance with the License.
+-- You may obtain a copy of the License at
+--
+--   http://www.apache.org/licenses/LICENSE-2.0
+--
+-- Unless required by applicable law or agreed to in writing, software
+-- distributed under the License is distributed on an "AS IS" BASIS,
+-- WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-- See the License for the specific language governing permissions and
+-- limitations under the License.
+
 require("util")
 
 -- PreUse hook: Called before switching to a Python version
@@ -6,7 +20,7 @@ function PLUGIN:PreUse(ctx)
     -- Only process on Unix systems (Windows doesn't have shebang issues)
     if OS_TYPE == "windows" then
         return {
-            version = ctx.version
+            version = ctx.version,
         }
     end
 
@@ -30,16 +44,22 @@ function PLUGIN:PreUse(ctx)
     if not targetVersion then
         print("Warning: Target version " .. version .. " not found in installed versions")
         return {
-            version = version
+            version = version,
         }
     end
 
     local installPath = resolvePythonInstallPath(targetVersion.path, version)
+    if isLinkedPythonInstall(targetVersion.path, version) then
+        print("Python " .. version .. " is linked to an installation outside vfox; skipping the health check.")
+        return {
+            version = version,
+        }
+    end
     print("Checking Python installation at: " .. installPath)
 
     -- Perform health check
     local healthReport = checkPythonHealth(installPath, version)
-    
+
     -- Report health status and fix if needed
     local needsRecheck = false
 
@@ -95,6 +115,6 @@ function PLUGIN:PreUse(ctx)
 
     -- Return the version in the correct format
     return {
-        version = version
+        version = version,
     }
 end

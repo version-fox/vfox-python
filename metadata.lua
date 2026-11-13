@@ -1,3 +1,17 @@
+-- Copyright 2026 Han Li and contributors
+--
+-- Licensed under the Apache License, Version 2.0 (the "License");
+-- you may not use this file except in compliance with the License.
+-- You may obtain a copy of the License at
+--
+--   http://www.apache.org/licenses/LICENSE-2.0
+--
+-- Unless required by applicable law or agreed to in writing, software
+-- distributed under the License is distributed on an "AS IS" BASIS,
+-- WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-- See the License for the specific language governing permissions and
+-- limitations under the License.
+
 --- !!! DO NOT EDIT OR RENAME !!!
 PLUGIN = {}
 
@@ -13,7 +27,6 @@ PLUGIN.license = "Apache 2.0"
 --- Plugin description
 PLUGIN.description = "Python language support, https://www.python.org"
 
-
 --- !!! OPTIONAL !!!
 --[[
 NOTE:
@@ -22,13 +35,21 @@ NOTE:
     vfox will not load the plugin and prompt the user to upgrade vfox.
  --]]
 PLUGIN.minRuntimeVersion = "0.4.0"
+
+--- .python-version is written by pyenv, uv and asdf. The plugin reads it when
+--- vfox changes into a project directory.
+PLUGIN.legacyFilenames = {
+    ".python-version",
+}
+
 -- Some things that need user to be attention!
 PLUGIN.notes = {
-    "Mirror Setting:",
-    "You can use VFOX_PYTHON_MIRROR environment variable to set mirror.",
-    "eg: `export VFOX_PYTHON_MIRROR=https://mirrors.huaweicloud.com/python/`",
-    "Set `VFOX_PYTHON_USE_UV_BUILD=1` to use prebuilt Python archives from uv-build.",
-    "Set `VFOX_PYTHON_UV_LIBC=gnu|musl` to override Linux libc detection.",
-    "Set `VFOX_PYTHON_UV_BUILD_MIRROR` to mirror uv-build archive downloads.",
+    "Documentation: https://github.com/version-fox/vfox-python/blob/main/README.md",
+    "Mirror: set VFOX_PYTHON_MIRROR to a python.org mirror, for example",
+    "`export VFOX_PYTHON_MIRROR=https://mirrors.huaweicloud.com/python/`",
+    "uv-build: set VFOX_PYTHON_USE_UV_BUILD=1 to use prebuilt Python archives.",
+    "Set VFOX_PYTHON_UV_LIBC=gnu|musl to override Linux libc detection.",
+    "Set VFOX_PYTHON_UV_BUILD_MIRROR to mirror uv-build archive downloads.",
+    "Already installed Python: `vfox link --detect python` (vfox 1.1.0 or later).",
     " ",
 }
