@@ -84,9 +84,9 @@ directory (`path`) and name (`version`).
 
 - On Linux and macOS, pyenv is cloned into `ctx.rootPath .. "/pyenv"` and
   `python-build <version> <path>` runs. The clone is removed afterwards.
-- On Windows, a CPython EXE writes its MSIs to a local layout with
-  `/quiet /layout`. The MSIs are installed into `path`, the layout is removed,
-  and `ensurepip` bootstraps pip. An MSI is installed directly. Alias executables
+- On Windows, a CPython EXE's MSIs are unpacked from the cabinet inside the
+  installer with `expand.exe`. The MSIs are installed into `path`, the scratch
+  folder is removed, and `ensurepip` bootstraps pip. An MSI is installed directly. Alias executables
   are copied next to `python.exe`.
 - A GraalPy archive is already unpacked by vfox. The hook finds the payload
   under its `graalpy*-<platform>` directory and runs the bundled `ensurepip`.

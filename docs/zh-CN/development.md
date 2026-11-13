@@ -76,8 +76,8 @@ vfox 加载 `metadata.lua`，命令需要时调用相应的钩子，并向钩子
 
 - Linux 和 macOS 上，把 pyenv 克隆到 `ctx.rootPath .. "/pyenv"`，运行
   `python-build <版本> <path>`，结束后删掉克隆。
-- Windows 上，CPython 的 EXE 用 `/quiet /layout` 把里面的 MSI 写到本地目录，把 MSI 安装进
-  `path`，删除该目录，再用 `ensurepip` 装 pip。MSI 直接安装。别名可执行文件复制到
+- Windows 上，CPython 的 EXE 用 Windows 自带的 `expand.exe` 从里面解出 MSI，把 MSI 安装进
+  `path`，删除临时目录，再用 `ensurepip` 装 pip。MSI 直接安装。别名可执行文件复制到
   `python.exe` 旁边。
 - GraalPy 压缩包已经由 vfox 解压；钩子在 `graalpy*-<平台>` 目录下找 payload，
   运行包里自带的 `ensurepip`。Unix 上修 shebang；Windows 上用

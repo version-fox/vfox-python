@@ -290,37 +290,6 @@ function windowsInstallMsi(path, url, version, filename)
     createPythonAliases(qInstallPath, version)
 end
 
--- Burn writes its own log for the layout. Print the end of it, so a failed layout
--- explains itself in the install output. Reading the log must never hide the error.
-local function printInstallerLog(logPath)
-    local ok, err = pcall(function()
-        local file = io.open(logPath, "r")
-        if not file then
-            print("No installer log was written to " .. logPath)
-            return
-        end
-        local lines = {}
-        while true do
-            local line = file:read("*l")
-            if line == nil then
-                break
-            end
-            lines[#lines + 1] = line
-            if #lines > 200 then
-                table.remove(lines, 1)
-            end
-        end
-        file:close()
-        print("Installer log, last lines of " .. logPath .. ":")
-        for _, line in ipairs(lines) do
-            print(line)
-        end
-    end)
-    if not ok then
-        print("Could not read the installer log: " .. tostring(err))
-    end
-end
-
 function windowsInstallExe(path, url, version, filename)
     --- Attention system difference
     local qInstallFile = path .. "\\" .. filename
@@ -339,31 +308,27 @@ function windowsInstallExe(path, url, version, filename)
         error("Downloading installer failed")
     end
 
-    -- Layout: the bundle writes its own packages, so no extraction tool is needed.
-    -- Burn expands %VARIABLES% in the layout argument, so the layout goes under TEMP,
-    -- which has no percent signs, instead of under the SDK path that may contain them.
+    -- Packages: the bundle keeps its MSI packages in a cabinet inside the installer. expand.exe,
+    -- which ships with Windows, unpacks it, so the plugin bundles no extraction tool. The
+    -- scratch folder lives under TEMP, which has no percent signs for the installer to expand.
     local tempRoot = os.getenv("TEMP")
     if tempRoot == nil or tempRoot == "" or tempRoot:find("%", 1, true) then
-        error("Installer layout needs a TEMP directory without percent signs")
+        error("Installer packages need a TEMP directory without percent signs")
     end
-    local layoutName = "vfox-python-layout-" .. os.time() .. "-" .. math.random(100000, 999999)
-    local layoutPath = tempRoot .. "\\" .. layoutName
-    local logPath = tempRoot .. "\\" .. layoutName .. ".log"
-    print("Creating installer layout...")
-    -- Burn returns before its clean-room child has written the packages, so the command
-    -- waits for that child and reports its exit code.
-    local command =
-        windowsCommand.installerLayout(qInstallFile, { "/quiet", "/log", logPath, "/layout", layoutPath }, layoutName)
+    local scratchPath = tempRoot .. "\\vfox-python-" .. os.time() .. "-" .. math.random(100000, 999999)
+    local msiPath = scratchPath .. "\\msi"
+    print("Extracting installer packages...")
+    local command = windowsCommand.bundlePackages(qInstallFile, scratchPath)
     local exitCode = os.execute(command)
     if exitCode ~= 0 then
-        printInstallerLog(logPath)
+        os.execute(windowsCommand.removeTree(scratchPath))
         os.remove(qInstallFile)
         error(
-            "Creating installer layout failed: the installer exited with code "
+            "Extracting installer packages failed: the script exited with code "
                 .. tostring(exitCode)
                 .. " for "
                 .. qInstallFile
-                .. ". If it printed nothing, antivirus software may have blocked it."
+                .. ". Its message above says what went wrong."
         )
     end
 
@@ -372,14 +337,13 @@ function windowsInstallExe(path, url, version, filename)
     os.remove(qInstallFile)
     local files = { "appendpath.msi", "launcher.msi", "path.msi", "pip.msi" }
     for _, file in ipairs(files) do
-        os.remove(layoutPath .. "\\" .. file)
+        os.remove(msiPath .. "\\" .. file)
     end
 
     -- Install msi
     print("Installing python...")
-    local listing, listErr = io.popen(windowsCommand.files(layoutPath))
+    local listing, listErr = io.popen(windowsCommand.files(msiPath))
     if not listing then
-        printInstallerLog(logPath)
         error("Failed to list installer packages: " .. tostring(listErr))
     end
     local files = {}
@@ -405,20 +369,17 @@ function windowsInstallExe(path, url, version, filename)
         return listing:close()
     end)
     if not readOk then
-        printInstallerLog(logPath)
         error("Failed to list installer packages: " .. tostring(readErr))
     end
     if not closeOk or listExitCode ~= 0 then
-        printInstallerLog(logPath)
         error("Failed to list installer packages: " .. tostring(listExitCode))
     end
     if #files == 0 then
-        printInstallerLog(logPath)
-        error("No installer MSI packages found in: " .. layoutPath)
+        error("No installer MSI packages found in: " .. msiPath)
     end
     for _, file in ipairs(files) do
         print("Installing MSI package: " .. file)
-        local command = windowsCommand.msi(layoutPath .. "\\" .. file, qInstallPath)
+        local command = windowsCommand.msi(msiPath .. "\\" .. file, qInstallPath)
         local exitCode = os.execute(command)
         if exitCode ~= 0 then
             error("Install msi failed: " .. file)
@@ -426,12 +387,11 @@ function windowsInstallExe(path, url, version, filename)
         os.remove(qInstallPath .. "\\" .. file)
     end
 
-    -- The MSI packages are installed, so the layout and its log are no longer needed.
-    print("Removing installer layout...")
-    if os.execute(windowsCommand.removeTree(layoutPath)) ~= 0 then
-        print("Warning: could not remove installer layout: " .. layoutPath)
+    -- The MSI packages are installed, so their scratch folder is no longer needed.
+    print("Removing installer packages...")
+    if os.execute(windowsCommand.removeTree(scratchPath)) ~= 0 then
+        print("Warning: could not remove " .. scratchPath)
     end
-    os.remove(logPath)
 
     -- Install pip
     print("Installing pip...")

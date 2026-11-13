@@ -127,7 +127,7 @@ EXE；没有 EXE 时才用 MSI（`python-<版本>.amd64.msi`、`.arm64.msi`，38
 `python-<版本>.msi`）。例如 3.12.10 在 python.org 上只有 EXE，2.7.18 只有 MSI。
 检查顺序见 [平台](platforms.md#windows)。
 
-- `.exe` 安装包用 `/quiet /layout` 把里面的 MSI 写到本地目录。这些 MSI 用
+- `.exe` 安装包用 Windows 自带的 `expand.exe` 解出里面的 MSI。这些 MSI 用
   `msiexec /quiet /a` 安装进 `python-<版本>` 目录；启动器、PATH 和 pip 的 MSI 会被跳过，pip
   用 `ensurepip` 装好。
 - 老版本的 `.msi` 安装包用 `msiexec /quiet /a` 安装进 `python-<版本>` 目录，pip 用

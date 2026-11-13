@@ -172,7 +172,7 @@ require("util")
 local path = "C:\\Users\\Mechael Jackson's & %USERNAME% !\\python-3.14.5"
 windowsInstallExe(path, "https://example.invalid/python.exe", "3.14.5", "python.exe")
 assert(#state.commands >= 7, "installer, enumeration, MSI, pip and aliases must be exercised")
--- The bundle writes its own layout as the first command, and the layout is removed afterwards.
+-- The packages come from the installer's own cabinet, unpacked by expand.exe under TEMP.
 local function literalArguments(command)
     local values = {}
     for encoded in decodeCommand(command):gmatch("FromBase64String%('([A-Za-z0-9+/=]*)'%)") do
@@ -180,33 +180,27 @@ local function literalArguments(command)
     end
     return values
 end
-local layoutArguments = literalArguments(state.commands[1])
-local layoutDir = layoutArguments[6] or ""
-local needle = layoutArguments[7] or ""
+local extractScript = decodeCommand(state.commands[1])
+local extractArguments = literalArguments(state.commands[1])
+local scratchDir = extractArguments[2] or ""
 assert(
-    #layoutArguments == 7
-        and layoutArguments[1] == path .. "\\python.exe"
-        and layoutArguments[2] == "/quiet"
-        and layoutArguments[3] == "/log"
-        and layoutArguments[4]:find("C:\\Users\\Runner\\AppData\\Local\\Temp\\vfox-python-layout-", 1, true) == 1
-        and layoutArguments[4]:sub(-4) == ".log"
-        and layoutArguments[5] == "/layout"
-        and layoutDir:find("C:\\Users\\Runner\\AppData\\Local\\Temp\\vfox-python-layout-", 1, true) == 1
-        and not layoutDir:find("%", 1, true)
-        and layoutDir:sub(-#needle) == needle,
-    "the bundle must lay out under TEMP, where Burn cannot expand %USERNAME%, and log beside it"
+    extractArguments[1] == path .. "\\python.exe"
+        and scratchDir:find("C:\\Users\\Runner\\AppData\\Local\\Temp\\vfox-python-", 1, true) == 1
+        and not scratchDir:find("%", 1, true),
+    "the packages must be extracted under TEMP, where the installer path has no percent signs"
 )
 assert(
-    decodeCommand(state.commands[1]):find("GetProcessById", 1, true),
-    "the layout must wait for Burn's clean-room child, which returns before it has finished"
+    extractScript:find("expand.exe", 1, true) and extractScript:find("'-F:*'", 1, true),
+    "expand.exe must unpack the installer's cabinets"
 )
-local layoutRemoved = false
+assert(extractScript:find("ReadAllBytes", 1, true), "the installer must be read as bytes, never executed")
+local scratchRemoved = false
 for _, command in ipairs(state.commands) do
     if decodeCommand(command):find("Remove-Item", 1, true) then
-        layoutRemoved = literalArguments(command)[1] == layoutDir
+        scratchRemoved = literalArguments(command)[1] == scratchDir
     end
 end
-assert(layoutRemoved, "the installer layout must be removed after installation")
+assert(scratchRemoved, "the extracted packages must be removed after installation")
 reset()
 windowsInstallMsi(path, "https://example.invalid/python.msi", "3.4.4", "python.msi")
 -- The MSI, ensurepip, six python aliases and six venv launcher aliases.
@@ -239,7 +233,7 @@ state.failOn = 3
 local msiOk, msiErr = pcall(windowsInstallMsi, path, "https://example.invalid/python.msi", "3.4.4", "python.msi")
 assert(not msiOk and tostring(msiErr):find("Failed to create Python executable alias", 1, true), tostring(msiErr))
 for _, failure in ipairs({
-    { 1, "Creating installer layout failed" },
+    { 1, "Extracting installer packages failed" },
     { 3, "Install msi failed" },
     { 7, "executable alias" },
 }) do
