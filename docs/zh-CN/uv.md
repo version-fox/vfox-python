@@ -5,18 +5,22 @@
 这里有两个互不相干的东西都叫 uv：
 
 1. **uv-build** 是这个插件可以安装的预编译 CPython 包，用来代替源码编译或
-   Windows 安装包。
+   Windows 安装包。它不需要编译器或构建依赖。
 2. **uv 这个工具** 会在 `uv python dir` 下安装、管理自己的 Python。
    `vfox link --detect python` 会纳入这些 Python，两个工具可以共用一个解释器。
 
 ## uv-build
 
-安装前设置 `VFOX_PYTHON_USE_UV_BUILD=1`：
+安装前设置 `VFOX_PYTHON_USE_UV_BUILD=1`。部分版本号会解析成 uv-build 索引里最新的对应版本，
+所以 `python@3.12` 装的是最新的 3.12，`python@3.13t` 装的是最新的 3.13 自由线程版本：
 
 ```bash
 export VFOX_PYTHON_USE_UV_BUILD=1
-vfox install python@3.12.2
+vfox install python@3.12
 ```
+
+这条路径不需要源码构建所需的任何 `apt` 包，也不需要 `sudo`。在 Ubuntu 上，跳过
+[平台](platforms.md#linux-构建依赖) 里的 apt 步骤，设置这个变量后直接安装即可。
 
 插件向 `https://vault.vfox.dev/python/uv-build` 询问当前平台、架构和 libc 的
 构建，然后把包地址和 SHA-256 交给 vfox。vfox 下载、校验、解压，再调用
@@ -26,7 +30,10 @@ vfox install python@3.12.2
 - Windows 上，如果包里带了 `ensurepip` 却没有 pip 命令，会安装 pip，并生成
   `pip.cmd`、`pip3.cmd` 两个 shim。
 
-列表里只有 CPython 的包。插件按这个顺序优先：
+列表里只有 CPython 的包。GraalPy 和其他实现不在 uv-build 里；在这个模式下
+执行 `vfox install python@graalpy-24.2.0` 会失败，并提示取消
+`VFOX_PYTHON_USE_UV_BUILD`。GraalPy 的安装路径见 [GraalPy](graalpy.md)。插件按
+这个顺序优先：
 
 1. `install_only_stripped`
 2. `install_only`

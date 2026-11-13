@@ -83,6 +83,12 @@ function python_version.parse_request(text)
         return nil
     end
 
+    -- GraalPy version names already carry their implementation and release,
+    -- such as graalpy-24.2.0 or graalpy3.13-community-25.5.5.
+    if value:match("^graalpy[%w%.]*%-") or value:match("^graalpython%-") then
+        return value
+    end
+
     local implementation = value:match("^([A-Za-z][A-Za-z0-9]*)%-")
     if implementation then
         implementation = implementation:lower()
@@ -170,6 +176,82 @@ end
 --- link` would refuse.
 function python_version.is_valid_name(name)
     return type(name) == "string" and name ~= "latest" and name:match("^[A-Za-z0-9][A-Za-z0-9._+%-]*$") ~= nil
+end
+
+--- Whether a request names a release line rather than one release: "3", "3.12"
+--- or "3.13t". Such a request is resolved against the versions that exist. An
+--- exact request, such as "3.12.2" or "3.14.0a4t", is used as it is.
+function python_version.is_partial(request)
+    if type(request) ~= "string" then
+        return false
+    end
+    return request:match("^%d+$") ~= nil or request:match("^%d+%.%d+t?$") ~= nil
+end
+
+--- Splits a name into the text before a free-threaded `t` suffix, whether the
+--- name has that suffix, and whether it is a pre-release. "3.13.18t" is
+--- free-threaded; "3.16.0a2" is a pre-release, recognised by a letter right
+--- after a digit. A source suffix such as "-system" is neither.
+local function releaseOf(name)
+    local free = name:sub(-1) == "t"
+    local release = free and name:sub(1, -2) or name
+    return release, free, release:find("%d%a") ~= nil
+end
+
+--- Whether a name is a bare version rather than one with a source suffix.
+local function isBare(name)
+    return not name:find("-", 1, true)
+end
+
+--- Whether `name` should replace `best` as the answer to a partial request: the
+--- newer release wins, and for the same release a bare name beats a suffixed
+--- one, so 3.12.16 is chosen over 3.12.16-system.
+local function beats(name, best)
+    if best == nil then
+        return true
+    end
+    local order = python_version.compare(name, best)
+    if order ~= 0 then
+        return order > 0
+    end
+    if isBare(name) ~= isBare(best) then
+        return isBare(name)
+    end
+    return name < best
+end
+
+--- Picks the name a request selects from a set of names (name -> true):
+---
+---   3.12 selects the newest stable 3.12.x, such as 3.12.16 over 3.12.9
+---   3    selects the newest stable 3.x, never a free-threaded or pre-release name
+---   3.13 never selects 3.13.18t; 3.13t selects only free-threaded names
+---   3.16 selects nothing when only the pre-release 3.16.0a2 exists
+---   3.1 selects nothing: the request must end at a dot, so 3.10 does not match
+---
+--- An exact name returns itself. A partial request that matches nothing returns
+--- nil, and the caller keeps the request so the error names what was asked for.
+function python_version.find_release(names, request)
+    if type(request) ~= "string" or request == "" then
+        return nil
+    end
+    if names[request] then
+        return request
+    end
+    if not python_version.is_partial(request) then
+        return nil
+    end
+
+    local wantRelease, wantFree = releaseOf(request)
+    local best
+    for name in pairs(names) do
+        local release, free, pre = releaseOf(name)
+        local prefix = release:sub(1, #wantRelease) == wantRelease
+        local boundary = release:sub(#wantRelease + 1, #wantRelease + 1) == "."
+        if prefix and boundary and free == wantFree and not pre and beats(name, best) then
+            best = name
+        end
+    end
+    return best
 end
 
 return python_version

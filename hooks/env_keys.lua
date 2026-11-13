@@ -15,7 +15,25 @@
 require("util")
 function PLUGIN:EnvKeys(ctx)
     local mainPath = ctx.path
+    local version = (ctx.main and ctx.main.version)
+        or (ctx.sdkInfo and ctx.sdkInfo["python"] and ctx.sdkInfo["python"].version)
+        or ""
+
     if RUNTIME.osType == "windows" then
+        if isGraalPyVersion(version) then
+            -- GraalPy keeps python.exe under bin, like a Unix prefix.
+            local prefix = resolvePythonInstallPath(mainPath, version)
+            return {
+                {
+                    key = "PATH",
+                    value = prefix .. "\\bin",
+                },
+                {
+                    key = "PATH",
+                    value = prefix .. "\\Scripts",
+                },
+            }
+        end
         return {
             {
                 key = "PATH",
@@ -27,10 +45,14 @@ function PLUGIN:EnvKeys(ctx)
             },
         }
     else
+        local prefix = mainPath
+        if isGraalPyVersion(version) then
+            prefix = resolvePythonInstallPath(mainPath, version)
+        end
         return {
             {
                 key = "PATH",
-                value = mainPath .. "/bin",
+                value = prefix .. "/bin",
             },
         }
     end

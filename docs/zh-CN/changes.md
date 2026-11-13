@@ -4,6 +4,20 @@
 
 ## 未发布
 
+- 部分版本号（如 `python@3.12`）在所有模式下都能用于 `vfox install` 和 `vfox use`：安装选出该模式
+  列出的最新稳定版（pyenv、python.org 或 uv-build 索引），使用则选出已安装的最新匹配项。uv-build
+  安装记录完整版本名，Windows 的 MSI 安装和 EXE 安装一样创建 `python3` 别名。
+- 支持 GraalPy：Linux、macOS 和 Windows amd64 都从 Oracle 官方的发布压缩包安装
+  Oracle GraalVM 和 Community 两种发行版；Linux 和 macOS 的版本列表仍然来自
+  pyenv。版本备注会标出发行版。Windows arm64/386 和 uv-build 仍然只支持
+  CPython。
+- `vfox link --detect python` 会纳入 GraalPy，命名为
+  `graalpy[-community][<python>]-<release>-<来源>`。
+- Windows 上的 GraalPy 安装可以按 PEP 514 注册给 `py.exe` 使用；`SysVersion`
+  是 Python 语言版本，不写 `WindowedExecutablePath`。
+- E2E 新增 `tests/e2e/` 下的 Linux 和 Windows 容器镜像，从 Oracle 的发布包
+  安装 GraalPy，并检查 `python`、`pip` 和 `.python-version`，与原有 runner
+  矩阵并存。
 - `vfox link --detect python` 纳入系统、uv、pyenv、asdf、mise、Conda、
   Homebrew、Nix、Snap、python.org、Store 和 py 启动器的 Python（需要 vfox
   1.1.0 或更高版本）。链接进来的版本命名为 `<版本>-<来源>`。
@@ -20,10 +34,13 @@
   上的项目 `.python-version`。
 - `VFOX_PYTHON_MIRROR` 允许结尾不带 `/`，并忽略空值（CI 对未设置的矩阵项
   会传空值）。
-- Windows 安装可以通过 `VFOX_PYTHON_REGISTER_PY_LAUNCHER=1`，按 PEP 514 注册
-  到 vfox 自己的 `VersionFox` company key，供 `py.exe` 使用。插件不写
+- Windows 安装默认会按 PEP 514 注册到 vfox 自己的 `VersionFox` company key，供
+  `py.exe` 使用；设置 `VFOX_PYTHON_REGISTER_PY_LAUNCHER=0` 可以关闭。插件不写
   `PythonCore`；`py -3.x` 仍然只选 PythonCore，vfox 的版本用
-  `py -V:VersionFox/<版本>`。`PreUninstall` 在注册项仍指向该版本时删除它。
+  `py -V:VersionFox/<版本>` 选中。`PreUninstall` 在注册项仍指向该版本时删除它。
+- Windows 上老版本的 MSI 安装（如 3.4.4）需要该版本构建时对应的 Visual C++ 运行库。
+  `ensurepip` 以退出码 `-1073741515` 退出时，安装失败，输出会指出缺少的运行库；3.4 的 x64
+  运行库和安装步骤见 [平台](platforms.md#windows)。
 
 ## 0.6.2
 

@@ -19,7 +19,18 @@ function PLUGIN:Available(ctx)
     end
 
     if OS_TYPE == "windows" then
-        return parseWindowsVersions()
+        local result = parseWindowsVersions()
+        -- GraalPy is a second upstream. A GitHub API failure must not take the
+        -- python.org list down with it.
+        local ok, graalPy = pcall(parseGraalPyWindowsVersions)
+        if ok then
+            for _, item in ipairs(graalPy) do
+                result[#result + 1] = item
+            end
+        else
+            print("Warning: Could not list GraalPy releases: " .. tostring(graalPy))
+        end
+        return result
     else
         return parseVersionFromPyenv()
     end

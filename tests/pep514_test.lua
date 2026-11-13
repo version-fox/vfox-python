@@ -30,7 +30,7 @@ end
 local plugin = test.load({
     os = "windows",
     arch = "amd64",
-    env = { VFOX_PYTHON_REGISTER_PY_LAUNCHER = "1" },
+    env = {},
 })
 
 local pep514 = require("pep514")
@@ -141,12 +141,20 @@ local path = "C:\\Users\\Mechael Jackson's & %USERNAME% !\\python-3.14.5"
 local ctx = { rootPath = "C:\\vfox", sdkInfo = { python = { path = path, version = "3.14.5" } } }
 
 setRegisterEnv(nil)
-assert(pep514.enabled() == false, "registration must be opt-in")
+assert(pep514.enabled(), "registration must be on by default on Windows")
+setRegisterEnv("")
+assert(pep514.enabled(), "an empty registration setting must keep the default")
 setRegisterEnv("1")
 assert(pep514.enabled(), "truthy registration setting must enable registration")
 setRegisterEnv("YES")
 assert(pep514.enabled(), "case-insensitive registration setting must enable registration")
 setRegisterEnv("0")
+assert(pep514.enabled() == false, "falsey registration setting must not enable registration")
+setRegisterEnv("false")
+assert(pep514.enabled() == false, "falsey registration setting must not enable registration")
+setRegisterEnv("no")
+assert(pep514.enabled() == false, "falsey registration setting must not enable registration")
+setRegisterEnv("off")
 assert(pep514.enabled() == false, "falsey registration setting must not enable registration")
 
 assert(pep514.tagFor("3.14.5", "amd64") == "3.14.5")
@@ -162,7 +170,7 @@ pep514.register(ctx)
 assert(#state.commands == 1, "enabled registration must run one PowerShell command")
 local values, script = literals(state.commands[1])
 assert(values[1] == "Software\\Python\\VersionFox\\3.14.5", values[1])
-assert(values[2] == path, values[2])
+assert(valueOf(values, "InstallPath") == path, valueOf(values, "InstallPath"))
 assert(valueOf(values, "DisplayName") == "Python 3.14.5 (vfox)")
 assert(valueOf(values, "SysVersion") == "3.14")
 assert(valueOf(values, "SysArchitecture") == "64bit")
@@ -181,13 +189,32 @@ reset()
 setRegisterEnv("1")
 pep514.register({ sdkInfo = { python = { path = nestedRoot, version = "3.14.5" } } })
 values = literals(state.commands[1])
-assert(values[2] == nestedPath, "uv-build archives must use the nested Python prefix")
+assert(valueOf(values, "InstallPath") == nestedPath, "uv-build archives must use the nested Python prefix")
+nestedExecutable = nil
+
+local graalpyRoot = "C:\\vfox\\v-graalpy-community-24.2.0"
+local graalpyPrefix = graalpyRoot .. "\\graalpy-community-24.2.0-windows-amd64"
+nestedExecutable = graalpyPrefix .. "\\bin\\python.exe"
+reset()
+setRegisterEnv("1")
+pep514.register({ sdkInfo = { python = { path = graalpyRoot, version = "graalpy-community-24.2.0" } } })
+values = literals(state.commands[1])
+assert(valueOf(values, "InstallPath") == graalpyPrefix, valueOf(values, "InstallPath"))
+assert(valueOf(values, "DisplayName") == "GraalPy Community 24.2.0 (vfox)")
+assert(valueOf(values, "SysVersion") == "3.11")
+assert(valueOf(values, "ExecutablePath") == graalpyPrefix .. "\\bin\\python.exe")
+assert(valueOf(values, "WindowedExecutablePath") == nil, "GraalPy has no pythonw.exe")
 nestedExecutable = nil
 
 reset()
 setRegisterEnv(nil)
 pep514.register(ctx)
-assert(#state.commands == 0, "disabled registration must not run PowerShell")
+assert(#state.commands == 1, "registration must run by default on Windows")
+
+reset()
+setRegisterEnv("0")
+pep514.register(ctx)
+assert(#state.commands == 0, "opt-out registration must not run PowerShell")
 
 reset()
 setRegisterEnv("1")
@@ -216,16 +243,22 @@ assert(
 reset()
 setRegisterEnv(nil)
 pep514.unregister({ main = { name = "python", path = path, version = "3.14.5" } })
-assert(#state.commands == 1, "uninstall must clean up the registration without the opt-in variable")
+assert(#state.commands == 1, "uninstall must clean up the registration while registration is on")
 values, script = literals(state.commands[1])
 assert(values[1] == "Software\\Python\\VersionFox\\3.14.5", values[1])
 assert(values[2] == path, values[2])
 assert(script:find("OpenSubKey", 1, true), "cleanup must read the existing registration")
+assert(script:find("OpenSubKey('InstallPath')", 1, true), "cleanup must read the PEP 514 InstallPath key")
 assert(script:find("GetValue('VfoxManaged')", 1, true), "cleanup must check ownership")
 assert(script:find("GetValue('')", 1, true), "cleanup must check the registered install path")
 assert(script:find("DeleteSubKeyTree", 1, true), "cleanup must remove the owned registration")
 assert(script:find("SubKeyCount", 1, true), "cleanup must remove an empty company key")
 assert(not script:find("PythonCore", 1, true), "cleanup must not touch PythonCore")
+
+reset()
+setRegisterEnv("0")
+pep514.unregister({ main = { name = "python", path = path, version = "3.14.5" } })
+assert(#state.commands == 1, "uninstall must clean up an existing registration when registration is off")
 
 reset()
 RUNTIME.osType = "linux"

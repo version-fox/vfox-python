@@ -43,6 +43,8 @@ header:
     - '.license.tpl'
     # Saved pyenv/uv version files that carry no comment syntax of their own.
     - 'tests/fixtures/**'
+    # go.sum is module checksum data; the Go tool rejects comments in it.
+    - '**/go.sum'
     # Third-party WiX tooling bundled for the Windows installer path.
     - 'bin/**'
 

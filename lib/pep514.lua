@@ -13,6 +13,7 @@
 -- limitations under the License.
 
 local windowsCommand = require("windows_command")
+require("util")
 
 local REGISTRY_ROOT = "Software\\Python\\VersionFox"
 local REGISTER_ENV = "VFOX_PYTHON_REGISTER_PY_LAUNCHER"
@@ -25,13 +26,15 @@ local function isWindows()
     return string.lower(RUNTIME.osType or OS_TYPE or "") == "windows"
 end
 
-local function envEnabled(name)
+-- Registration is on by default on Windows. Setting
+-- VFOX_PYTHON_REGISTER_PY_LAUNCHER=0/false/no/off disables it.
+local function registrationEnabled(name)
     local value = os.getenv(name)
-    if value == nil then
-        return false
+    if value == nil or value == "" then
+        return true
     end
     value = string.lower(value)
-    return value == "1" or value == "true" or value == "yes" or value == "on"
+    return value ~= "0" and value ~= "false" and value ~= "no" and value ~= "off"
 end
 
 local function architectureSuffix(archType)
@@ -72,7 +75,8 @@ local function fileExists(path)
 end
 
 -- uv-build archives unpack below the SDK directory; the MSI installs directly
--- into it. Both layouts must point the launcher at the directory with python.exe.
+-- into it. GraalPy keeps python.exe under bin in its extracted archive. All
+-- layouts must point the launcher at the directory that contains the interpreter.
 local function installPrefix(path, version)
     if fileExists(path .. "\\python.exe") then
         return path
@@ -81,7 +85,48 @@ local function installPrefix(path, version)
     if fileExists(nestedPath .. "\\python.exe") then
         return nestedPath
     end
+    if isGraalPyVersion(version) then
+        local graalPyPath = resolvePythonInstallPath(path, version)
+        if fileExists(graalPyPath .. "\\bin\\python.exe") then
+            return graalPyPath
+        end
+    end
     return path
+end
+
+local function displayName(version)
+    local parsed = parseGraalPyVersion(version)
+    if parsed then
+        local name = parsed.community and "GraalPy Community" or "GraalPy"
+        return name .. " " .. parsed.release .. " (vfox)"
+    end
+    return "Python " .. version .. " (vfox)"
+end
+
+local function executablePath(path, version)
+    if isGraalPyVersion(version) then
+        return path .. "\\bin\\python.exe"
+    end
+    return path .. "\\python.exe"
+end
+
+-- GraalPy release names track the GraalVM release, not the Python language
+-- version. PEP 514 SysVersion has to be the latter.
+local function graalPySysVersion(version)
+    local parsed = parseGraalPyVersion(version)
+    if parsed == nil then
+        return nil
+    end
+    if parsed.pythonMinor then
+        return parsed.pythonMinor
+    end
+    local major = tonumber(parsed.release:match("^(%d+)"))
+    if major == 25 or major == 24 then
+        return "3.11"
+    elseif major == 23 then
+        return "3.10"
+    end
+    return nil
 end
 
 local function registrySubkey(version, archType)
@@ -89,20 +134,29 @@ local function registrySubkey(version, archType)
 end
 
 local function registryValues(version, path)
-    return {
-        { name = "DisplayName", value = "Python " .. version .. " (vfox)" },
-        { name = "SysVersion", value = sysVersion(version) },
+    local tagValues = {
+        { name = "DisplayName", value = displayName(version) },
+        {
+            name = "SysVersion",
+            value = (isGraalPyVersion(version) and graalPySysVersion(version)) or sysVersion(version),
+        },
         { name = "SysArchitecture", value = sysArchitecture(RUNTIME.archType) },
-        { name = "ExecutablePath", value = path .. "\\python.exe" },
-        { name = "WindowedExecutablePath", value = path .. "\\pythonw.exe" },
         { name = "VfoxManaged", value = "1" },
     }
+    local installValues = {
+        { name = "ExecutablePath", value = executablePath(path, version) },
+    }
+    -- GraalPy has no pythonw.exe; PEP 514 treats the value as optional.
+    if not isGraalPyVersion(version) then
+        installValues[#installValues + 1] = { name = "WindowedExecutablePath", value = path .. "\\pythonw.exe" }
+    end
+    return tagValues, installValues
 end
 
 local pep514 = {}
 
 function pep514.enabled()
-    return envEnabled(REGISTER_ENV)
+    return registrationEnabled(REGISTER_ENV)
 end
 
 function pep514.tagFor(version, archType)
@@ -132,8 +186,9 @@ function pep514.register(ctx)
     local subkey = registrySubkey(version, RUNTIME.archType)
 
     print("Registering Python " .. version .. " with the Python launcher...")
+    local tagValues, installValues = registryValues(version, path)
     local ok, result = pcall(function()
-        return os.execute(windowsCommand.registrySet(subkey, path, registryValues(version, path)))
+        return os.execute(windowsCommand.registrySet(subkey, path, tagValues, installValues))
     end)
     if not ok then
         print("Warning: Could not register Python with the Python launcher: " .. tostring(result))

@@ -64,6 +64,12 @@ unpacking. A mirror that serves different bytes fails the install with
 `Checksum error`, which is the intended behaviour: change the index or the
 mirror, do not bypass the check.
 
+## GraalPy
+
+Neither mirror variable applies to GraalPy. Every platform downloads Oracle's
+release archive directly from GitHub and verifies its SHA-256. A proxy is the
+supported way to route those downloads. See [GraalPy](graalpy.md).
+
 ## Proxies
 
 vfox's HTTP client and python-build's `curl`/`wget` use the usual proxy

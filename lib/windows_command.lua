@@ -60,6 +60,47 @@ function command.native(program, args)
     return powershell(table.concat(parts, " ") .. "; exit $LASTEXITCODE")
 end
 
+--- Runs a Python interpreter with its output written to files, prints that
+--- output, and exits with the interpreter's exit code. A failing ensurepip on
+--- an old CPython release printed nothing through the PowerShell host, so a
+--- failure also prints what the start and the install root looked like.
+function command.pythonLogged(program, args)
+    local arguments = {}
+    for _, arg in ipairs(args) do
+        table.insert(arguments, literal(arg))
+    end
+    local script = "$program = "
+        .. literal(program)
+        .. "; $arguments = @("
+        .. table.concat(arguments, ", ")
+        .. [[);
+$root = Split-Path -Parent $program;
+$out = [IO.Path]::GetTempFileName();
+$err = [IO.Path]::GetTempFileName();
+$exitCode = 1;
+try {
+    $process = Start-Process -FilePath $program -ArgumentList $arguments -NoNewWindow -Wait -PassThru -RedirectStandardOutput $out -RedirectStandardError $err;
+    $exitCode = $process.ExitCode;
+} catch {
+    Write-Output ('Could not start the interpreter: ' + $_.Exception.Message);
+} finally {
+    Get-Content -LiteralPath $out | ForEach-Object { Write-Output $_ };
+    Get-Content -LiteralPath $err | ForEach-Object { Write-Output $_ };
+    Remove-Item -LiteralPath $out, $err -Force -ErrorAction SilentlyContinue;
+    if ($exitCode -ne 0) {
+        Write-Output ('Interpreter exit code: ' + $exitCode);
+        if ($exitCode -eq -1073741515) {
+            Write-Output 'Missing DLL (0xC0000135): old CPython releases need the Visual C++ runtime they were built with, such as VC++ 2010 (msvcr100.dll) for 3.4.';
+        }
+        Write-Output ('Interpreter present: ' + (Test-Path -LiteralPath $program));
+        if (Test-Path -LiteralPath $root) {
+            Get-ChildItem -LiteralPath $root -File | Where-Object { $_.Extension -in '.exe', '.dll' } | ForEach-Object { Write-Output ('  ' + $_.Name) };
+        }
+    }
+}; exit $exitCode]]
+    return powershell(script)
+end
+
 function command.msi(file, path)
     local function argument(value)
         if value:find('"', 1, true) then
@@ -120,21 +161,38 @@ end
 
 -- Registry values and paths are passed as UTF-8 base64 literals. The .NET
 -- Registry API avoids PowerShell provider wildcard and default-value syntax.
-function command.registrySet(subkey, defaultValue, values)
+-- PEP 514 puts the install path and the executable values under the
+-- InstallPath subkey; the other values stay on the tag key.
+function command.registrySet(subkey, installPath, tagValues, installValues)
     local lines = {
         "$base = [Microsoft.Win32.Registry]::CurrentUser;",
         "$key = $base.CreateSubKey(" .. literal(subkey) .. ");",
         "if ($null -eq $key) { throw 'Could not create the Python launcher registry key' };",
         "try {",
-        "    $key.SetValue('', " .. literal(defaultValue) .. ", [Microsoft.Win32.RegistryValueKind]::String);",
     }
-    for _, item in ipairs(values) do
+    for _, item in ipairs(tagValues) do
         lines[#lines + 1] = "    $key.SetValue("
             .. literal(item.name)
             .. ", "
             .. literal(item.value)
             .. ", [Microsoft.Win32.RegistryValueKind]::String);"
     end
+    lines[#lines + 1] = "    $install = $key.CreateSubKey(" .. literal("InstallPath") .. ");"
+    lines[#lines + 1] = "    if ($null -eq $install) { throw 'Could not create the InstallPath registry key' };"
+    lines[#lines + 1] = "    try {"
+    lines[#lines + 1] = "        $install.SetValue('', "
+        .. literal(installPath)
+        .. ", [Microsoft.Win32.RegistryValueKind]::String);"
+    for _, item in ipairs(installValues) do
+        lines[#lines + 1] = "        $install.SetValue("
+            .. literal(item.name)
+            .. ", "
+            .. literal(item.value)
+            .. ", [Microsoft.Win32.RegistryValueKind]::String);"
+    end
+    lines[#lines + 1] = "    } finally {"
+    lines[#lines + 1] = "        $install.Close();"
+    lines[#lines + 1] = "    }"
     lines[#lines + 1] = "} finally {"
     lines[#lines + 1] = "    $key.Close();"
     lines[#lines + 1] = "}"
@@ -148,7 +206,13 @@ function command.registryDeleteIfOwned(subkey, expectedPath)
         "$key = $base.OpenSubKey(" .. literal(subkey) .. ");",
         "if ($null -eq $key) { exit 0 };",
         "$managed = $key.GetValue('VfoxManaged');",
-        "$installPath = $key.GetValue('');",
+        "$installPath = $null;",
+        "$install = $key.OpenSubKey('InstallPath');",
+        "if ($null -ne $install) {",
+        "    $installPath = $install.GetValue('');",
+        "    $install.Close();",
+        "}",
+        "if ([string]::IsNullOrEmpty($installPath)) { $installPath = $key.GetValue('') };",
         "$key.Close();",
         "if ($managed -ne '1') { exit 0 };",
         "if ([string]::IsNullOrEmpty($installPath)) { exit 0 };",

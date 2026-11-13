@@ -4,8 +4,9 @@
 
 If a Python is already on the machine, `vfox link --detect python` adopts it
 instead of downloading another copy. It needs vfox 1.1.0 or later
-(`vfox --version`). The plugin looks for CPython, asks each interpreter for its
-version and prefix, and reports the installations it can link:
+(`vfox --version`). The plugin looks for CPython and GraalPy, asks each
+interpreter for its version and prefix, and reports the installations it can
+link:
 
 ```bash
 vfox link --detect python
@@ -28,6 +29,7 @@ removes only the link. `vfox list python` marks linked versions, and
 | Source | Where the plugin looks | Name suffix |
 | --- | --- | --- |
 | `PATH` | `python3` and `python`, or `python.exe` and `python3.exe` | by location |
+| Oracle GraalPy | `~/graalpy*`, `/opt/graalpy*`, `C:\graalpy*`, or `PATH` | `-system` or `-opt` |
 | uv | `UV_PYTHON_INSTALL_DIR`, `uv python dir`, or the uv default directory | `-uv` |
 | pyenv | `$PYENV_ROOT/versions`, default `~/.pyenv/versions` | `-pyenv` |
 | asdf | `$ASDF_DATA_DIR/installs/python`, default `~/.asdf/installs/python` | `-asdf` |
@@ -45,16 +47,22 @@ removes only the link. `vfox list python` marks linked versions, and
 The uv directory is `%APPDATA%\uv\python` on Windows and
 `$XDG_DATA_HOME/uv/python` or `~/.local/share/uv/python` elsewhere.
 
-Only CPython is reported. PyPy, GraalPy, Jython and other implementations are
-left out: this plugin installs CPython, and naming another implementation after
-a CPython version would be misleading.
+CPython and GraalPy are reported. PyPy, Jython and other implementations are
+left out. GraalPy keeps its own name, so a GraalPy 24.2.0 installation becomes
+`graalpy-24.2.0-<source>`, and a Community build becomes
+`graalpy-community-24.2.0-<source>`; from GraalPy 25.1 the name includes the
+Python language version, as in `graalpy3.13-25.5.5-<source>`. Naming a
+non-CPython implementation after a CPython version would be misleading.
 
 ## Names
 
-The name is `<version>-<source>`, such as `3.12.8-system`, `3.13.1-uv` or
-`3.12.10-pythonorg`. A free-threaded build keeps its `t`: `3.14.0a4t-uv`. The
-version comes from the interpreter itself, not from the directory name, so a
-renamed uv directory still reports the right version.
+The name is `<version>-<source>`, such as `3.12.8-system`, `3.13.1-uv`,
+`3.12.10-pythonorg` or `graalpy-24.2.0-pyenv`. A free-threaded CPython build
+keeps its `t`: `3.14.0a4t-uv`. A GraalPy name also records the Community
+edition: `graalpy-community-24.2.0-system`, and from GraalPy 25.1 it includes
+the Python language version: `graalpy3.13-25.5.5-uv`. The version comes from
+the interpreter itself, not from the directory name, so a renamed uv directory
+still reports the right version.
 
 `vfox link` refuses a name that is already taken, and a directory that some
 version already links to. The plugin also skips:

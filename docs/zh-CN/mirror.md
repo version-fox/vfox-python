@@ -59,6 +59,12 @@ export VFOX_PYTHON_UV_BUILD_MIRROR=https://registry.npmmirror.com/-/binary/pytho
 解压前，插件会用 uv-build 索引里的 SHA-256 校验每个包。镜像提供的字节不一致时
 安装会以 `Checksum error` 失败，这是有意的：应该改索引或镜像，不要绕过校验。
 
+## GraalPy
+
+两个镜像变量都不适用于 GraalPy。所有平台都直接从 GitHub 下载 Oracle 的发布
+压缩包，并校验 SHA-256。需要走代理时用下面的代理变量。见
+[GraalPy](graalpy.md)。
+
 ## 代理
 
 vfox 的 HTTP 客户端和 python-build 的 `curl`/`wget` 都认常用的代理变量：

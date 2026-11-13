@@ -13,15 +13,51 @@
 -- limitations under the License.
 
 require("util")
+local python_version = require("python_version")
+
+--- Resolves a partial request such as "3.12" to the newest stable release that
+--- the version list for this mode names. An exact request is returned without
+--- reading the list. A partial request that matches nothing is returned as it
+--- is, so the install reports the request the user typed.
+local function resolvePartialVersion(plugin, requested)
+    if not python_version.is_partial(requested) then
+        return requested
+    end
+    local names = {}
+    for _, item in ipairs(plugin:Available({})) do
+        names[item.version] = true
+    end
+    return python_version.find_release(names, requested) or requested
+end
+
 function PLUGIN:PreInstall(ctx)
     local version = ctx.version
 
     if version == "latest" then
         version = self:Available({})[1].version
     end
+    version = resolvePartialVersion(self, version)
 
     if useUvBuild() then
+        if isGraalPyVersion(version) then
+            error(
+                "uv-build provides CPython only; unset VFOX_PYTHON_USE_UV_BUILD to install "
+                    .. version
+                    .. " from pyenv or Oracle's GraalPy releases."
+            )
+        end
         return uvBuildPreInstall(version)
+    end
+
+    if isGraalPyVersion(version) then
+        if parseGraalPyVersion(version) then
+            return graalPyPreInstall(version)
+        elseif OS_TYPE == "windows" then
+            -- The legacy graalpython-* names have no Windows assets.
+            error("Unsupported GraalPy version on Windows: " .. version)
+        end
+        -- On Linux and macOS the legacy graalpython-* names still go through
+        -- pyenv's python-build definition.
     end
 
     if OS_TYPE == "windows" and not checkIsReleaseVersion(version) then

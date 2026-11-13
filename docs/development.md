@@ -55,16 +55,25 @@ for the older hooks; the newer modules (`python_version`, `detect_python`,
 
 It returns `version`, `url`, `headers`, `sha256` and `note`; vfox downloads the
 URL, verifies `sha256` when present, unpacks the archive and names the install
-after `version`.
+after `version`. A partial version such as `3.12` is resolved first, to the newest
+stable release that `Available({})` names for this mode; an exact version is not
+looked up.
 
 - `version = "latest"` is resolved to `Available({})[1].version`. The list is
-  newest first, so this can be a pre-release.
-- On Windows, a version without an exact EXE or MSI for the architecture is
-  rejected before any download; `Available` should already have filtered it.
+  newest CPython first, so this can be a pre-release; GraalPy is selected by
+  its full name.
+- On Windows, a CPython version without an exact EXE or MSI for the architecture
+  is rejected before any download; `Available` should already have filtered it.
+- A GraalPy version is resolved against Oracle's release assets for the running
+  platform. The hook returns the official archive URL and its SHA-256; Linux and
+  macOS use `linux-*`/`macos-*` tarballs, Windows uses `windows-amd64.zip`.
+  If the GitHub API is rate-limited, the hook constructs the asset URL from the
+  version and verifies its `.sha256` before using it.
 - uv-build mode returns the archive URL and checksum from the index. The
   archive must be HTTPS; an unusable checksum fails the install instead of
-  skipping verification.
-- `note = "uv-build"` is shown by vfox.
+  skipping verification. A GraalPy version is rejected because the index
+  contains CPython only.
+- `note = "uv-build"`, `"GraalPy"` or `"GraalPy Community"` is shown by vfox.
 
 ### PostInstall
 
@@ -73,18 +82,26 @@ directory (`path`) and name (`version`).
 
 - On Linux and macOS, pyenv is cloned into `ctx.rootPath .. "/pyenv"` and
   `python-build <version> <path>` runs. The clone is removed afterwards.
-- On Windows, an EXE is extracted with `bin/WiX/dark.exe`, its MSIs are
+- On Windows, a CPython EXE is extracted with `bin/WiX/dark.exe`, its MSIs are
   installed into `path`, and `ensurepip` bootstraps pip. An MSI is installed
   directly. Alias executables are copied next to `python.exe`.
+- A GraalPy archive is already unpacked by vfox. The hook finds the payload
+  under its `graalpy*-<platform>` directory and runs the bundled `ensurepip`.
+  On Unix it repairs shebangs; on Windows it runs `bin/python.exe` and creates
+  pip shims if the launchers are missing.
 - In uv-build mode, the archive has already been unpacked by vfox; the hook
   finds the payload under `path/python-<version>`, repairs shebangs on Unix and
-  ensures pip on Windows. `resolvePythonInstallPath` handles both layouts.
+  ensures pip on Windows. `resolvePythonInstallPath` handles the MSI, uv-build
+  and GraalPy layouts.
 - Paths outside `ctx.rootPath` are rejected for uv-build, so a malformed index
   cannot make the hook write elsewhere.
-- With `VFOX_PYTHON_REGISTER_PY_LAUNCHER=1`, the hook registers the version
-  under `HKCU\Software\Python\VersionFox\<tag>` following PEP 514. The tag is
+- Unless `VFOX_PYTHON_REGISTER_PY_LAUNCHER` is `0`, `false`, `no` or `off`, the
+  hook registers the version under `HKCU\Software\Python\VersionFox\<tag>`
+  following PEP 514. The tag is
   the full version, with `-32`/`-arm64` for non-default architectures; several
-  patch releases can coexist. It never writes `PythonCore`.
+  patch releases can coexist. It never writes `PythonCore`. For GraalPy,
+  `SysVersion` is the Python language version and the optional
+  `WindowedExecutablePath` is omitted.
 
 ### PreUninstall
 
@@ -92,17 +109,20 @@ directory (`path`) and name (`version`).
 the hook removes `HKCU\Software\Python\VersionFox\<tag>` only when
 `VfoxManaged` is `1` and the registered `InstallPath` still matches the version
 directory. It also removes the empty `VersionFox` company key. The hook runs
-even when `VFOX_PYTHON_REGISTER_PY_LAUNCHER` is unset, so disabling
-registration does not leave old entries behind on uninstall.
+even when `VFOX_PYTHON_REGISTER_PY_LAUNCHER=0` has turned registration off, so
+disabling registration does not leave old entries behind on uninstall.
 
-`lib/pep514.lua` resolves the MSI layout (`path/python.exe`) and the uv-build
-layout (`path/python-<version>/python.exe`) before reading or writing the
+`lib/pep514.lua` resolves the MSI layout (`path/python.exe`), the uv-build
+layout (`path/python-<version>/python.exe`) and the GraalPy layout
+(`path/graalpy*-windows-amd64/bin/python.exe`) before reading or writing the
 registration.
 
 ### PreUse
 
-Before switching to a version, the hook checks `bin/pip`, `bin/pip3` and
-`bin/easy_install`, and repairs shebangs that still point at
+A partial version such as `3.12` is resolved first, to the newest installed
+name that matches (`find_release` in `lib/python_version.lua`); vfox passes the
+request through unchanged. Then, before switching to a version, the hook checks
+`bin/pip`, `bin/pip3` and `bin/easy_install`, and repairs shebangs that still point at
 `.version-fox/temp/...`. A linked version (`vfox link`) is skipped: its
 installation belongs to its owner, and missing packaging tools are normal for a
 system Python. `isLinkedPythonInstall` tests the `python-<version>` link in the
@@ -110,8 +130,11 @@ version directory with `test -L`.
 
 ### EnvKeys
 
-- Unix: `PATH = ctx.path .. "/bin"`.
-- Windows: `PATH = ctx.path` and `PATH = ctx.path .. "\\Scripts"`.
+- Unix: `PATH = ctx.path .. "/bin"`; for GraalPy, `<prefix>/bin` with the
+  prefix resolved from the extracted archive.
+- Windows CPython: `PATH = ctx.path` and `PATH = ctx.path .. "\\Scripts"`.
+- Windows GraalPy: `PATH = <prefix>\\bin` and `PATH = <prefix>\\Scripts`, where
+  `<prefix>` is resolved from the extracted archive.
 
 A linked system Python at `/usr` therefore puts `/usr/bin` on `PATH`, where the
 command is `python3`, not `python`. The plugin does not create aliases in a
@@ -128,14 +151,17 @@ already linked.
 `lib/detect_python.lua`:
 
 - collects candidate executables from `PATH` and known directories (uv, pyenv,
-  asdf, mise, Conda, Homebrew, `/usr`, `/usr/local`, `/opt`, Windows
-  `Programs\Python`, `C:\Python*`, the py launcher and the Store),
+  asdf, mise, Conda, Homebrew, `/usr`, `/usr/local`, `/opt`, `~/graalpy*`,
+  Windows `Programs\Python`, `C:\Python*`, `C:\graalpy*`, the py launcher and
+  the Store),
 - queries each interpreter once with `-E -s -c` and a one-line program,
 - asks for `sys.version`, `sys.prefix`, `sys.base_prefix`, the real executable
-  and `sys.abiflags`,
-- skips non-CPython, virtual environments, vfox's own directory and root
-  prefixes,
-- names the result `<version>[-t]-<source>`.
+  and `sys.abiflags`, plus `__graalpython__.get_graalvm_version()` and the
+  Oracle/Community edition for GraalPy,
+- skips PyPy and other implementations, virtual environments, vfox's own
+  directory and root prefixes,
+- names the result `<version>[-t]-<source>` for CPython and
+  `graalpy[-community][<python>]-<release>-<source>` for GraalPy.
 
 The interpreter prints UTF-8 paths as hex (`PREFIX_HEX=...`) so a non-ASCII
 user name survives the Windows console and pipe encodings. The Python program
@@ -196,11 +222,13 @@ executes the real shell scripts in `PostInstall` against stubbed process calls.
 It checks native argument encoding, MSI target quoting, the `%` junction,
 exit-code propagation and every failure path.
 
-The E2E workflow installs real Pythons: a source build and a mirror build on
-Linux, an installer and uv-build on Windows, and a uv-build build on Linux. It
-also runs `vfox link --detect python` against the runner's system Python on
-Linux, and checks that `vfox env` selects a project's `.python-version` on both
-Linux and Windows.
+The E2E suite lives in `tests/e2e` and is written in Go. The Linux package
+installs CPython from source, through the mirror, through uv-build and GraalPy,
+and also runs `vfox link --detect` and a project `.python-version` on the
+runner. The Windows package installs CPython and uv-build, installs GraalPy
+with PEP 514 registration, and checks `.python-version`. Both packages also
+drive the same GraalPy checks in Docker containers through testcontainers-go.
+See [E2E](e2e.md) for the layout and the local commands.
 
 Local commands:
 
@@ -209,6 +237,9 @@ vfox plugin test .
 go run github.com/yuin/gopher-lua/cmd/glua@v1.1.1 tests/windows_install_layouts.lua
 stylua --check .
 lua-language-server --check . --checklevel=Warning
+cd tests/e2e && go test -v ./linux
+cd tests/e2e && go test -v ./windows
+VFOX_SKIP_CONTAINER_E2E=1 go test -v ./linux
 ```
 
 ## Checks
@@ -221,7 +252,7 @@ lua-language-server --check . --checklevel=Warning
 | Apache headers | Apache SkyWalking Eyes | `license.yml` |
 | Hook tests | `vfox plugin test .` on Linux and Windows | `test.yml` |
 | Windows command paths | GopherLua | `test.yml` |
-| Real installs | E2E on Linux and Windows | `e2e.yml` |
+| Native and container E2E | Go tests on Linux and Windows | `e2e.yml` |
 
 `stylua.toml` uses four spaces, a 120-column limit and Unix line endings;
 `.gitattributes` keeps checkouts LF so the check agrees with Windows. LuaLS
@@ -242,7 +273,7 @@ is missing.
 - `lint.yml` runs StyLua, LuaLS and actionlint.
 - `license.yml` runs the header check.
 - `e2e.yml` builds and installs real Pythons on Linux and Windows, including a
-  mirror and uv-build matrix.
+  mirror, uv-build and GraalPy, plus the Windows PEP 514 check.
 - `publish.yaml` calls the shared plugin-manifest workflow.
 
 ## Release
@@ -273,7 +304,8 @@ checks. Re-run the original failed job to resume a failed publication.
 | `VFOX_PYTHON_USE_UV_BUILD` | Available, PreInstall, PostInstall | use uv-build archives |
 | `VFOX_PYTHON_UV_LIBC` | Available, PreInstall | `gnu` or `musl` override |
 | `VFOX_PYTHON_UV_BUILD_MIRROR` | PreInstall | HTTPS mirror for uv-build archives |
-| `VFOX_PYTHON_REGISTER_PY_LAUNCHER` | PostInstall, PreUninstall | register Windows installs under `HKCU\Software\Python\VersionFox`; opt-in |
+| `VFOX_PYTHON_REGISTER_PY_LAUNCHER` | PostInstall, PreUninstall | register Windows installs under `HKCU\Software\Python\VersionFox`; on by default, `0`, `false`, `no` or `off` disables |
+| `GITHUB_TOKEN`, `GH_TOKEN` | Available | raise the GitHub API limit for the Windows GraalPy release list |
 | `UV_PYTHON_INSTALL_DIR` | Detect | uv's Python directory |
 | `PYENV_ROOT` | Detect | pyenv root |
 | `ASDF_DATA_DIR` | Detect | asdf data directory |
@@ -291,7 +323,8 @@ checks. Re-run the original failed job to resume a failed publication.
 - Detect runs local interpreters; it is not a sandbox. Venvs are skipped, but a
   Python with a slow sitecustomize delays detection because there is no
   per-command timeout.
-- Only CPython is detected. Other implementations are out of scope.
+- Only CPython and GraalPy are detected. PyPy, Jython and other
+  implementations are out of scope.
 - A linked version follows its target; if the distribution moves it, the
   version name and the interpreter can disagree until Detect is run again.
 - The plugin does not manage virtual environments. Use `venv`, `uv venv` or

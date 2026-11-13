@@ -13,18 +13,33 @@
 -- limitations under the License.
 
 require("util")
+local python_version = require("python_version")
+
+--- A partial request such as "3.12" names the newest installed 3.12.x. vfox
+--- passes the request through, so the hook has to return the installed name.
+local function resolveInstalledVersion(requested, installedSdks)
+    if not python_version.is_partial(requested) then
+        return requested
+    end
+    local names = {}
+    for name in pairs(installedSdks or {}) do
+        names[name] = true
+    end
+    return python_version.find_release(names, requested) or requested
+end
 
 -- PreUse hook: Called before switching to a Python version
 -- This ensures the target version is healthy and has correct shebang lines
 function PLUGIN:PreUse(ctx)
+    local version = resolveInstalledVersion(ctx.version, ctx.installedSdks)
+
     -- Only process on Unix systems (Windows doesn't have shebang issues)
     if OS_TYPE == "windows" then
         return {
-            version = ctx.version,
+            version = version,
         }
     end
 
-    local version = ctx.version
     local previousVersion = ctx.previousVersion
     local scope = ctx.scope
     local cwd = ctx.cwd

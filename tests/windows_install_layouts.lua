@@ -16,6 +16,8 @@ package.path = "./lib/?.lua;" .. package.path
 RUNTIME = { osType = "windows", archType = "amd64", pluginDirPath = "C:\\Plugin's & %USERNAME% ! store" }
 OS_TYPE = "windows"
 local state = { commands = {}, closeCount = 0 }
+-- Answers for the installer HEAD requests, keyed by URL; other URLs are 404.
+local heads = {}
 local function reset()
     for key in pairs(state) do
         state[key] = nil
@@ -27,6 +29,9 @@ package.preload.http = function()
     return {
         download_file = function()
             return nil
+        end,
+        head = function(request)
+            return { status_code = heads[request.url] or 404 }, nil
         end,
     }
 end
@@ -42,7 +47,7 @@ local oldExecute, oldPopen, oldOpen, oldClose, oldRemove = os.execute, io.popen,
 -- execute, rather than only checking a command string prefix.
 local alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
 local function decodeBase64(value)
-    local result, accumulator, bits = {}, 0, 0
+    local chunks, result, accumulator, bits = {}, {}, 0, 0
     for char in value:gmatch(".") do
         if char == "=" then
             break
@@ -55,9 +60,16 @@ local function decodeBase64(value)
             local scale = 2 ^ bits
             result[#result + 1] = string.char(math.floor(accumulator / scale))
             accumulator = accumulator % scale
+            -- Flush in chunks: one table slot per byte overflows GopherLua's registry
+            -- on the longer PowerShell scripts.
+            if #result >= 256 then
+                chunks[#chunks + 1] = table.concat(result)
+                result = {}
+            end
         end
     end
-    return table.concat(result)
+    chunks[#chunks + 1] = table.concat(result)
+    return table.concat(chunks)
 end
 local function decodeCommand(value)
     local payload = assert(
@@ -66,12 +78,17 @@ local function decodeCommand(value)
     )
     local utf16 = decodeBase64(payload)
     assert(#utf16 % 2 == 0, "incomplete UTF-16LE code unit")
-    local bytes = {}
+    local chunks, bytes = {}, {}
     for i = 1, #utf16, 2 do
         assert(utf16:byte(i) < 128 and utf16:byte(i + 1) == 0, "script must use ASCII UTF-16LE")
         bytes[#bytes + 1] = utf16:sub(i, i)
+        if #bytes >= 256 then
+            chunks[#chunks + 1] = table.concat(bytes)
+            bytes = {}
+        end
     end
-    local script = table.concat(bytes)
+    chunks[#chunks + 1] = table.concat(bytes)
+    local script = table.concat(chunks)
     assert(script:find("$ErrorActionPreference = 'Stop'; ", 1, true) == 1, "error preference must execute")
     assert(
         script:find("$ProgressPreference = 'SilentlyContinue'; ", 1, true),
@@ -80,6 +97,29 @@ local function decodeCommand(value)
     return script
 end
 
+-- Returns the destination of every Copy-Item command, in the order they ran.
+local function copyTargets()
+    local targets = {}
+    for _, command in ipairs(state.commands) do
+        local script = decodeCommand(command)
+        if script:find("Copy-Item", 1, true) then
+            local values = {}
+            for encoded in script:gmatch("FromBase64String%('([A-Za-z0-9+/=]*)'%)") do
+                values[#values + 1] = decodeBase64(encoded)
+            end
+            targets[#targets + 1] = values[2]
+        end
+    end
+    return targets
+end
+local function contains(list, value)
+    for _, item in ipairs(list) do
+        if item == value then
+            return true
+        end
+    end
+    return false
+end
 os.execute = function(command)
     state.commands[#state.commands + 1] = command
     -- Native paths must never be expanded as cmd variables or tokenized on spaces.
@@ -126,7 +166,35 @@ windowsInstallExe(path, "https://example.invalid/python.exe", "3.14.5", "python.
 assert(#state.commands >= 7, "installer, enumeration, MSI, pip and aliases must be exercised")
 reset()
 windowsInstallMsi(path, "https://example.invalid/python.msi", "3.4.4", "python.msi")
-assert(#state.commands == 2, "MSI and ensurepip must both run")
+-- The MSI, ensurepip, six python aliases and six venv launcher aliases.
+assert(#state.commands == 14, "MSI, pip and every alias must run: " .. #state.commands)
+-- pip runs through the logging wrapper, with the interpreter and its arguments intact.
+local pip = decodeCommand(state.commands[2])
+local pipValues = {}
+for encoded in pip:gmatch("FromBase64String%('([A-Za-z0-9+/=]*)'%)") do
+    pipValues[#pipValues + 1] = decodeBase64(encoded)
+end
+assert(pipValues[1] == path .. "\\python.exe", tostring(pipValues[1]))
+assert(
+    table.concat(pipValues, " ", 2) == "-E -s -m ensurepip -U --default-pip",
+    "pip arguments changed: " .. table.concat(pipValues, " ", 2)
+)
+assert(pip:find("-RedirectStandardError", 1, true), "pip output must go to a file")
+local msiTargets = copyTargets()
+for _, name in ipairs({
+    "python3.exe",
+    "python34.exe",
+    "python3.4.exe",
+    "pythonw3.exe",
+    "pythonw34.exe",
+    "pythonw3.4.exe",
+}) do
+    assert(contains(msiTargets, path .. "\\" .. name), "MSI install must create " .. name)
+end
+reset()
+state.failOn = 3
+local msiOk, msiErr = pcall(windowsInstallMsi, path, "https://example.invalid/python.msi", "3.4.4", "python.msi")
+assert(not msiOk and tostring(msiErr):find("Failed to create Python executable alias", 1, true), tostring(msiErr))
 for _, failure in ipairs({ { 1, "Extract failed" }, { 3, "Install msi failed" }, { 6, "executable alias" } }) do
     reset()
     state.failOn = failure[1]
@@ -156,6 +224,63 @@ for _, failure in ipairs({
     assert(state.closeCount == 1, failure.name .. ": listing handle must be closed")
     assert(#state.commands == 2, failure.name .. ": no MSI or pip may run before enumeration succeeds")
 end
+-- Installer selection: python.org's EXE wins when it publishes one for the
+-- architecture, the MSI is the fallback, and a release with neither fails.
+local base = "https://www.python.org/ftp/python/"
+-- Replaces the URLs that answer 200. The table is mutated rather than
+-- reassigned: the preload's closure keeps the table it first captured.
+local function setHeads(urls)
+    for url in pairs(heads) do
+        heads[url] = nil
+    end
+    for _, url in ipairs(urls) do
+        heads[url] = 200
+    end
+end
+
+local function selectInstaller(version, arch, published)
+    setHeads(published)
+    RUNTIME.archType = arch
+    local ok, result = pcall(getReleaseForWindows, version)
+    RUNTIME.archType = "amd64"
+    if ok then
+        return result
+    end
+    return nil, tostring(result)
+end
+assert(
+    selectInstaller(
+        "3.12.2",
+        "amd64",
+        { base .. "3.12.2/python-3.12.2-amd64.exe", base .. "3.12.2/python-3.12.2.amd64.msi" }
+    ) == base .. "3.12.2/python-3.12.2-amd64.exe",
+    "EXE must win over MSI"
+)
+assert(
+    selectInstaller("3.4.4", "amd64", { base .. "3.4.4/python-3.4.4.amd64.msi" })
+        == base .. "3.4.4/python-3.4.4.amd64.msi",
+    "MSI must be the fallback"
+)
+assert(
+    selectInstaller("3.12.2", "arm64", { base .. "3.12.2/python-3.12.2-arm64.exe" })
+        == base .. "3.12.2/python-3.12.2-arm64.exe"
+)
+assert(
+    selectInstaller("3.12.2", "arm64", { base .. "3.12.2/python-3.12.2.arm64.msi" })
+        == base .. "3.12.2/python-3.12.2.arm64.msi"
+)
+assert(selectInstaller("3.12.2", "386", { base .. "3.12.2/python-3.12.2.exe" }) == base .. "3.12.2/python-3.12.2.exe")
+assert(selectInstaller("3.12.2", "386", { base .. "3.12.2/python-3.12.2.msi" }) == base .. "3.12.2/python-3.12.2.msi")
+local missing, missingErr = selectInstaller("3.12.2", "amd64", {})
+assert(missing == nil and tostring(missingErr):find("No available installer found", 1, true), tostring(missingErr))
+
+-- The dispatcher takes the same route: an MSI-only release runs the MSI path.
+reset()
+setHeads({ base .. "3.4.4/python-3.4.4.amd64.msi" })
+windowsInstall({ sdkInfo = { python = { path = path, version = "3.4.4" } } })
+assert(#state.commands == 14, "the MSI route must run the MSI, pip and every alias: " .. #state.commands)
+setHeads({})
+
 local windows = require("windows_command")
 for _, value in ipairs({
     "",
@@ -178,6 +303,16 @@ for _, value in ipairs({
         "native argument changed after payload decoding"
     )
     assert(script:find("; exit $LASTEXITCODE", 1, true), "native exit status must propagate")
+end
+do
+    local logged = decodeCommand(windows.pythonLogged("C:\\MSI files & %TEMP% !\\python.exe", { "-m", "ensurepip" }))
+    local values = {}
+    for encoded in logged:gmatch("FromBase64String%('([A-Za-z0-9+/=]*)'%)") do
+        values[#values + 1] = decodeBase64(encoded)
+    end
+    assert(values[1] == "C:\\MSI files & %TEMP% !\\python.exe", "the interpreter path must reach PowerShell unchanged")
+    assert(table.concat(values, " ", 2) == "-m ensurepip", "the interpreter arguments must reach PowerShell unchanged")
+    assert(logged:find("; exit $exitCode", 1, true), "the interpreter exit code must propagate")
 end
 for _, case in ipairs({
     {

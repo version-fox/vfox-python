@@ -4,6 +4,22 @@
 
 ## Unreleased
 
+- Partial versions such as `python@3.12` resolve in `vfox install` and `vfox use` for every
+  mode. Install picks the newest stable release that the mode lists (pyenv, python.org or the
+  uv-build index); use picks the newest installed match. uv-build installs are recorded under
+  their full version, and Windows MSI installs create the same `python3` aliases as EXE installs.
+- GraalPy is supported: Oracle GraalVM and Community distributions install from
+  Oracle's official archives on Linux, macOS and Windows amd64. The Linux and
+  macOS version list still comes from pyenv. Version notes mark the
+  distribution. Windows arm64 and 386, and uv-build, remain CPython-only.
+- `vfox link --detect python` adopts GraalPy installations and names them
+  `graalpy[-community][<python>]-<release>-<source>`.
+- Windows GraalPy installs can be registered with `py.exe` through PEP 514;
+  `SysVersion` is the Python language version and `WindowedExecutablePath` is
+  omitted.
+- E2E now includes Linux and Windows container images in `tests/e2e/` that
+  install GraalPy from Oracle's archives and check `python`, `pip` and
+  `.python-version`, alongside the existing runner matrix.
 - `vfox link --detect python` adopts system, uv, pyenv, asdf, mise, Conda,
   Homebrew, Nix, Snap, python.org, Store and py-launcher Pythons (vfox 1.1.0
   or later). Linked versions are named `<version>-<source>`.
@@ -23,12 +39,17 @@
   `.python-version` on Linux and Windows.
 - `VFOX_PYTHON_MIRROR` accepts a URL without a trailing slash and ignores an
   empty value, which is what CI passes for an unset matrix entry.
-- Windows installs can be registered with `py.exe` through PEP 514 under
-  vfox's own `VersionFox` company key with
-  `VFOX_PYTHON_REGISTER_PY_LAUNCHER=1`. The plugin never writes `PythonCore`;
-  `py -3.x` remains PythonCore-only and vfox versions use
-  `py -V:VersionFox/<version>`. `PreUninstall` removes the entry when it still
-  points at the version.
+- Windows installs are registered with `py.exe` through PEP 514 under vfox's
+  own `VersionFox` company key by default; set
+  `VFOX_PYTHON_REGISTER_PY_LAUNCHER=0` to turn this off. The plugin never writes
+  `PythonCore`; `py -3.x` remains PythonCore-only, and vfox versions are selected
+  with `py -V:VersionFox/<version>`. `PreUninstall` removes the entry when it
+  still points at the version.
+- Windows MSI installs of old CPython releases, such as 3.4.4, need the Visual C++
+  runtime that the release was built with. When `ensurepip` exits with
+  `-1073741515`, the install fails and its output names the missing runtime. The
+  x64 redistributable for 3.4 and the install steps are in
+  [platforms.md](platforms.md#windows).
 
 ## 0.6.2
 

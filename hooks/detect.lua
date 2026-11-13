@@ -14,10 +14,10 @@
 
 local detect = require("detect_python")
 
---- Finds CPython installations that are already on the machine and that vfox
---- did not install, for `vfox link --detect python`. Each result is named the
---- way `vfox install` names a Python, with the source appended, such as
---- 3.12.8-system or 3.13.1-uv.
+--- Finds CPython and GraalPy installations that are already on the machine and
+--- that vfox did not install, for `vfox link --detect python`. Each result is
+--- named the way `vfox install` names a Python, with the source appended, such
+--- as 3.12.8-system, 3.13.1-uv or graalpy-24.2.0-system.
 function PLUGIN:Detect(ctx)
     return detect.find_all()
 end
