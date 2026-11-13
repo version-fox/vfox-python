@@ -162,6 +162,7 @@ jobs:
           eval "$(vfox activate bash)"
           vfox install python@graalpy-24.2.0
           vfox use -g python@graalpy-24.2.0
+          eval "$(vfox env -s bash)"
           python -c 'import sys; assert sys.implementation.name == "graalpy", sys.implementation.name; print(sys.version)'
           python -m pip --version
           pip --version
@@ -321,6 +322,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           vfox use -g python@graalpy3.13-community-25.5.5
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Invoke-Expression "$(vfox env -s pwsh)"
           vfox current
           $implementation = python -c 'import sys; print(sys.implementation.name, sys.version)'
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

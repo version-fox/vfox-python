@@ -35,7 +35,10 @@ RUN $ErrorActionPreference = 'Stop'; `
     if ($hash -ne $env:VFOX_SHA256) { throw "vfox checksum mismatch: $hash" }; `
     Expand-Archive -LiteralPath C:\vfox.zip -DestinationPath C:\vfox -Force; `
     Remove-Item C:\vfox.zip; `
-    if (-not (Test-Path C:\vfox\vfox.exe)) { throw 'vfox.exe is missing' }
+    $vfox = Get-ChildItem -LiteralPath C:\vfox -Recurse -Filter vfox.exe | Select-Object -First 1; `
+    if (-not $vfox) { throw 'vfox.exe is missing' }; `
+    Move-Item -LiteralPath $vfox.FullName -Destination C:\vfox\vfox.exe -Force; `
+    if (-not (Test-Path C:\vfox\vfox.exe)) { throw 'vfox.exe is missing after the move' }
 
 ENV PATH="C:\vfox;C:\Program Files\PowerShell\7;${PATH}"
 
