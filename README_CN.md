@@ -154,6 +154,7 @@ uv-build 的下载可以走 `VFOX_PYTHON_UV_BUILD_MIRROR`。两个变量和镜�
 **参与开发**
 
 - [从源码安装](docs/zh-CN/install-from-source.md)：在下一个版本发布前试用 `main`
+- [端到端测试](docs/zh-CN/e2e.md)：Linux/Windows 容器套件和 runner 矩阵
 - [开发](docs/zh-CN/development.md)：目录结构、钩子、测试、检查和发布
 
 ## 致谢

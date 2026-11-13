@@ -223,6 +223,11 @@ The Windows GraalPy install also checks PEP 514 registration. It runs `vfox
 link --detect python` against the runner's system Python on Linux, and checks
 that `vfox env` selects a project's `.python-version` on both Linux and Windows.
 
+The workflow also builds and runs the container suite from `tests/e2e/`: an
+Ubuntu image and a Windows Server Core image install GraalPy from Oracle's
+archives and check `python`, `pip` and `.python-version`. See [E2E](e2e.md) for
+the images, the Windows-host requirement and the local commands.
+
 Local commands:
 
 ```bash
@@ -230,6 +235,8 @@ vfox plugin test .
 go run github.com/yuin/gopher-lua/cmd/glua@v1.1.1 tests/windows_install_layouts.lua
 stylua --check .
 lua-language-server --check . --checklevel=Warning
+docker build --file tests/e2e/linux/Dockerfile --tag vfox-python-e2e-linux .
+docker run --rm vfox-python-e2e-linux
 ```
 
 ## Checks
@@ -242,6 +249,7 @@ lua-language-server --check . --checklevel=Warning
 | Apache headers | Apache SkyWalking Eyes | `license.yml` |
 | Hook tests | `vfox plugin test .` on Linux and Windows | `test.yml` |
 | Windows command paths | GopherLua | `test.yml` |
+| Container E2E | Docker on Linux and Windows | `e2e.yml` |
 | Real installs | E2E on Linux and Windows | `e2e.yml` |
 
 `stylua.toml` uses four spaces, a 120-column limit and Unix line endings;

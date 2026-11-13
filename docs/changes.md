@@ -13,6 +13,9 @@
 - Windows GraalPy installs can be registered with `py.exe` through PEP 514;
   `SysVersion` is the Python language version and `WindowedExecutablePath` is
   omitted.
+- E2E now includes Linux and Windows container images in `tests/e2e/` that
+  install GraalPy from Oracle's archives and check `python`, `pip` and
+  `.python-version`, alongside the existing runner matrix.
 - `vfox link --detect python` adopts system, uv, pyenv, asdf, mise, Conda,
   Homebrew, Nix, Snap, python.org, Store and py-launcher Pythons (vfox 1.1.0
   or later). Linked versions are named `<version>-<source>`.

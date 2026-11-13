@@ -168,6 +168,8 @@ uv-build downloads can go through `VFOX_PYTHON_UV_BUILD_MIRROR`. See
 
 - [Install from source](docs/install-from-source.md): trying `main` before the
   next release
+- [End-to-end tests](docs/e2e.md): the Linux and Windows container suites and
+  the runner matrix
 - [Development](docs/development.md): layout, hooks, tests, checks and release
 
 ## Thanks

@@ -337,3 +337,41 @@ jobs:
           if ($registered -notmatch 'graalpy3\.13-community-25\.5\.5') {
               throw 'GraalPy was not registered with the Python launcher'
           }
+
+  e2e-container-linux:
+    name: Linux container (${{ matrix.graalpy }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        graalpy: [graalpy-24.2.0, graalpy-community-24.2.0]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Build the container
+        run: docker build --file tests/e2e/linux/Dockerfile --tag vfox-python-e2e-linux .
+      - name: Run the container
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GRAALPY_VERSION: ${{ matrix.graalpy }}
+        run: docker run --rm --env GITHUB_TOKEN --env GRAALPY_VERSION vfox-python-e2e-linux
+
+  e2e-container-windows:
+    name: Windows container
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Build the container
+        shell: pwsh
+        run: docker build --file tests/e2e/windows/Dockerfile --tag vfox-python-e2e-windows .
+      - name: Run the container
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GRAALPY_VERSION: graalpy3.13-community-25.5.5
+        run: docker run --rm --env GITHUB_TOKEN --env GRAALPY_VERSION vfox-python-e2e-windows

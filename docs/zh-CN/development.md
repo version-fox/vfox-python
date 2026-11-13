@@ -193,6 +193,11 @@ E2E 任务安装真实的 Python：Linux 上一次源码构建和一次镜像构
 运行 `vfox link --detect python`，并在两个平台上检查 `vfox env` 是否按项目的
 `.python-version` 选择版本。
 
+工作流还会构建并运行 `tests/e2e/` 里的容器套件：Ubuntu 镜像和 Windows Server
+Core 镜像从 Oracle 的发布包安装 GraalPy，并检查 `python`、`pip` 和
+`.python-version`。镜像、Windows 主机要求和本地命令见
+[端到端测试](e2e.md)。
+
 本地命令：
 
 ```bash
@@ -200,6 +205,8 @@ vfox plugin test .
 go run github.com/yuin/gopher-lua/cmd/glua@v1.1.1 tests/windows_install_layouts.lua
 stylua --check .
 lua-language-server --check . --checklevel=Warning
+docker build --file tests/e2e/linux/Dockerfile --tag vfox-python-e2e-linux .
+docker run --rm vfox-python-e2e-linux
 ```
 
 ## 检查
@@ -212,6 +219,7 @@ lua-language-server --check . --checklevel=Warning
 | Apache 头 | Apache SkyWalking Eyes | `license.yml` |
 | 钩子测试 | 在 Linux 和 Windows 上 `vfox plugin test .` | `test.yml` |
 | Windows 命令路径 | GopherLua | `test.yml` |
+| 容器 E2E | Linux 和 Windows 上的 Docker | `e2e.yml` |
 | 真实安装 | Linux 和 Windows 的 E2E | `e2e.yml` |
 
 `stylua.toml` 用四空格、120 列、Unix 换行；`.gitattributes` 让 checkout 保持
