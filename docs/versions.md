@@ -118,7 +118,9 @@ system
   selects a free-threaded (`t`) or pre-release install. `3.13t` selects a
   free-threaded one; a pre-release needs its full name, such as `3.14.0a4`.
 - `cpython-3.12.8` selects `3.12.8`, or its linked `3.12.8-system` when only
-  that is installed.
+  that is installed. When several installs share the version, the bare name
+  wins, then the name that sorts first, so `3.12.8-local` is chosen over
+  `3.12.8-system`; write the full name to choose another.
 - The `+freethreaded` form selects the `t` version.
 - `system` selects the newest linked `-system` version.
 - GraalPy names such as `graalpy-24.2.0` and

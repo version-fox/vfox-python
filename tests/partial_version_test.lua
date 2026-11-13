@@ -106,6 +106,18 @@ assert(python_version.find_installed(set({ "3.14.0a4" }), "3.14.0a4") == "3.14.0
 assert(python_version.find_installed(set({ "3.12.8-opt" }), "3.12") == "3.12.8-opt")
 assert(python_version.find_installed(set({ "3.12.8-system" }), "3.12.8") == "3.12.8-system")
 
+-- Installs of one version: the bare name first, then the name that sorts first.
+-- The result must not depend on the order in which the names are given.
+assert(python_version.find_installed(set({ "3.12.8-system", "3.12.8-local" }), "3.12.8") == "3.12.8-local")
+assert(python_version.find_installed(set({ "3.12.8-local", "3.12.8-system" }), "3.12.8") == "3.12.8-local")
+assert(python_version.find_installed(set({ "3.13.1t-system", "3.13.1-system" }), "system") == "3.13.1-system")
+assert(python_version.find_installed(set({ "3.13.1-system", "3.13.1t-system" }), "system") == "3.13.1-system")
+assert(python_version.newest({ "3.12.8-system", "3.12.8-local" }) == "3.12.8-local")
+assert(python_version.newest({ "3.12.8-local", "3.12.8-system" }) == "3.12.8-local")
+assert(python_version.newest({ "3.12.8-local", "3.12.8" }) == "3.12.8")
+assert(python_version.newest({ "3.12.8", "3.12.8-local" }) == "3.12.8")
+assert(python_version.find_release(set({ "3.12.8-system", "3.12.8-local" }), "3.12") == "3.12.8-local")
+
 -- PreInstall: a partial request reads the version list, an exact one does not.
 local before = reads
 local package = plugin:PreInstall({ version = "3.12" })

@@ -45,11 +45,14 @@ function python_version.compare(left, right)
     return 0
 end
 
---- Returns the newest name in a list, or nil for an empty list.
+--- Returns the newest name in a list, or nil for an empty list. Names of the
+--- same version are ordered by name, so a bare version comes before a suffixed
+--- one, and the result does not depend on the order of the list.
 function python_version.newest(names)
     local best
     for _, name in ipairs(names) do
-        if not best or python_version.compare(name, best) > 0 then
+        local order = best and python_version.compare(name, best) or 1
+        if not best or order > 0 or order == 0 and name < best then
             best = name
         end
     end
@@ -122,7 +125,8 @@ end
 --- matched as a prefix, so an exact version such as "3.12.8" still selects a
 --- linked "3.12.8-system". A request of "system" takes the newest linked system
 --- Python. When two names share a version, a bare install comes before a
---- source-suffixed one, as vfox's own matching does.
+--- source-suffixed one. Otherwise the name that sorts first wins, so the result
+--- does not depend on the order the names are listed.
 function python_version.find_installed(installed, request)
     if type(request) ~= "string" or request == "" then
         return nil
@@ -160,7 +164,9 @@ function python_version.find_installed(installed, request)
             end
             if rank then
                 local order = best and python_version.compare(name, best) or 1
-                if not best or order > 0 or order == 0 and rank > best_rank then
+                local ahead = order > 0 or order == 0 and rank > best_rank
+                local tied = order == 0 and rank == best_rank and name < best
+                if not best or ahead or tied then
                     best, best_rank = name, rank
                 end
             end

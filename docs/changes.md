@@ -12,6 +12,10 @@
   the rule `vfox use` follows: it no longer selects a free-threaded (`t`) or
   pre-release install. `3.13t` still selects a free-threaded install; a
   pre-release needs its full name, such as `3.14.0a4`.
+- When two installs share a version, such as `3.12.8-local` and
+  `3.12.8-system`, `.python-version`, the `latest_installed` fallback and
+  `system` pick the bare name first, then the name that sorts first. Before,
+  the choice depended on the order in which the names were listed.
 
 ## 0.6.3
 

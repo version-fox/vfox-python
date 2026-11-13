@@ -194,7 +194,9 @@ entry falls back to the newest installed name.
 A partial version such as `3.13` in a `.python-version` file is resolved with
 `find_release`, the function PreUse uses, so it never selects a free-threaded
 or pre-release name. Other requests, such as `3.12.8`, are matched as a prefix,
-so a linked `3.12.8-system` still counts.
+so a linked `3.12.8-system` still counts. When several names share a version,
+the bare name wins, then the name that sorts first, so the result does not
+depend on the order the names are listed.
 
 ### windows_command
 
