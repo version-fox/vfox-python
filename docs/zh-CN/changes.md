@@ -20,6 +20,10 @@
   上的项目 `.python-version`。
 - `VFOX_PYTHON_MIRROR` 允许结尾不带 `/`，并忽略空值（CI 对未设置的矩阵项
   会传空值）。
+- Windows 安装可以通过 `VFOX_PYTHON_REGISTER_PY_LAUNCHER=1`，按 PEP 514 注册
+  到 vfox 自己的 `VersionFox` company key，供 `py.exe` 使用。插件不写
+  `PythonCore`；`py -3.x` 仍然只选 PythonCore，vfox 的版本用
+  `py -V:VersionFox/<版本>`。`PreUninstall` 在注册项仍指向该版本时删除它。
 
 ## 0.6.2
 

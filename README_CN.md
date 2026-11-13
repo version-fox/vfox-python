@@ -54,6 +54,10 @@ Windows 上，python.org 没有为仅提供源码的安全版本发布安装包�
 `VFOX_PYTHON_USE_UV_BUILD=1` 后，Linux、macOS 和 Windows 都改为下载 uv-build
 的预编译包，详见 [docs/zh-CN/uv.md](docs/zh-CN/uv.md)。
 
+`py.exe` 不读取 `PATH`。安装前设置 `VFOX_PYTHON_REGISTER_PY_LAUNCHER=1`，
+版本会注册到 vfox 自己的 PEP 514 key 下，详见
+[Windows Python 启动器](docs/zh-CN/windows-launcher.md)。
+
 ## 本机已有的 Python
 
 如果本机已经有 Python——系统包管理器、uv、pyenv、asdf、mise、Conda、Homebrew
@@ -112,6 +116,7 @@ uv-build 的下载可以走 `VFOX_PYTHON_UV_BUILD_MIRROR`。两个变量和镜�
 - [uv 与 uv-build](docs/zh-CN/uv.md)：预编译包、uv 管理的 Python，以及让 uv 配合 vfox 选中的解释器
 - [本机已有的 Python](docs/zh-CN/link.md)：`vfox link --detect python`、它会纳入的系统与 uv 安装，以及安全用法
 - [平台](docs/zh-CN/platforms.md)：哪些版本从源码编译、哪些直接下载，以及 Linux 需要的构建依赖
+- [Windows Python 启动器](docs/zh-CN/windows-launcher.md)：可选的 `py.exe` PEP 514 注册
 - [镜像](docs/zh-CN/mirror.md)：python.org 和 uv-build 的镜像
 - [变更记录](docs/zh-CN/changes.md)：每个版本改了什么
 

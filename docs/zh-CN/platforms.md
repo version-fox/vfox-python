@@ -97,6 +97,9 @@ x86_64 Python，装进同一个 vfox 目录。
 - 支持带空格、`%`、`!` 和单引号的路径。参数通过 base64 编码的 PowerShell 传递；
   路径里有 `%` 时，MSI 还会经过一个临时 junction，因为 Windows Installer 在
   复制文件时会展开 `%`。见 [development.md](development.md) 和 Windows CI 任务。
+- 设置 `VFOX_PYTHON_REGISTER_PY_LAUNCHER=1` 后，安装会按 PEP 514 注册到
+  `HKCU\Software\Python\VersionFox`，供 `py.exe` 使用。插件不写 `PythonCore`；
+  见 [windows-launcher.md](windows-launcher.md)。
 
 ## uv-build
 

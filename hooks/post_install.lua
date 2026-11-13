@@ -13,14 +13,17 @@
 -- limitations under the License.
 
 require("util")
+local pep514 = require("pep514")
 function PLUGIN:PostInstall(ctx)
+    local result
     if useUvBuild() then
-        return uvBuildInstall(ctx)
+        result = uvBuildInstall(ctx)
+    elseif OS_TYPE == "windows" then
+        result = windowsInstall(ctx)
+    else
+        result = linuxCompile(ctx)
     end
 
-    if OS_TYPE == "windows" then
-        return windowsInstall(ctx)
-    else
-        return linuxCompile(ctx)
-    end
+    pep514.register(ctx)
+    return result
 end

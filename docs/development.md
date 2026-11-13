@@ -9,12 +9,14 @@ metadata.lua                    plugin name, version, notes and .python-version
 hooks/available.lua             vfox search
 hooks/pre_install.lua           vfox install: choose the release and name it
 hooks/post_install.lua          vfox install: build, run the installer or unpack uv-build
+hooks/pre_uninstall.lua         vfox uninstall: remove the PEP 514 registration
 hooks/env_keys.lua              PATH for the selected Python
 hooks/pre_use.lua               vfox use: repair shebangs, skip linked installs
 hooks/parse_legacy_file.lua     .python-version
 hooks/detect.lua                vfox link --detect: find Pythons on the machine
 lib/util.lua                    versions, downloads, Windows install, uv-build, shebangs
 lib/windows_command.lua         base64 PowerShell commands and the MSI junction
+lib/pep514.lua                  Windows Python launcher registration
 lib/python_version.lua          version parsing and installed-name matching
 lib/detect_python.lua           the Detect hook's sources and filtering
 tests/*_test.lua                offline hook tests, run by vfox plugin test
@@ -34,7 +36,7 @@ vfox loads `metadata.lua`, calls a hook when a command needs it, and puts
 `PLUGIN`, `RUNTIME` (`osType`, `archType`, `version`, `pluginDirPath`) and
 `OS_TYPE`/`ARCH_TYPE` in scope. `lib/util.lua` is a script that defines globals
 for the older hooks; the newer modules (`python_version`, `detect_python`,
-`windows_command`) return tables.
+`windows_command`, `pep514`) return tables.
 
 ## What runs for a command
 
@@ -45,7 +47,7 @@ for the older hooks; the newer modules (`python_version`, `detect_python`,
 | `vfox use python@3.12.2` | `PreUse` returns the installed name to select. `EnvKeys` provides `PATH` |
 | `cd` into a directory with `.python-version` | `ParseLegacyFile` |
 | `vfox link --detect python` | `Detect` returns the Pythons already on the machine |
-| `vfox uninstall python@3.12.2` | no plugin hook; vfox removes the version directory |
+| `vfox uninstall python@3.12.2` | `PreUninstall` removes the PEP 514 registration; vfox removes the version directory |
 
 ## Contracts that cost time
 
@@ -79,6 +81,23 @@ directory (`path`) and name (`version`).
   ensures pip on Windows. `resolvePythonInstallPath` handles both layouts.
 - Paths outside `ctx.rootPath` are rejected for uv-build, so a malformed index
   cannot make the hook write elsewhere.
+- With `VFOX_PYTHON_REGISTER_PY_LAUNCHER=1`, the hook registers the version
+  under `HKCU\Software\Python\VersionFox\<tag>` following PEP 514. The tag is
+  the full version, with `-32`/`-arm64` for non-default architectures; several
+  patch releases can coexist. It never writes `PythonCore`.
+
+### PreUninstall
+
+`ctx.main` has the version directory (`path`) and name (`version`). On Windows,
+the hook removes `HKCU\Software\Python\VersionFox\<tag>` only when
+`VfoxManaged` is `1` and the registered `InstallPath` still matches the version
+directory. It also removes the empty `VersionFox` company key. The hook runs
+even when `VFOX_PYTHON_REGISTER_PY_LAUNCHER` is unset, so disabling
+registration does not leave old entries behind on uninstall.
+
+`lib/pep514.lua` resolves the MSI layout (`path/python.exe`) and the uv-build
+layout (`path/python-<version>/python.exe`) before reading or writing the
+registration.
 
 ### PreUse
 
@@ -166,6 +185,9 @@ local versions = plugin:Available({})
 - `os.execute` and `io.popen` are disabled until a test replaces them. The
   Detect tests stub `io.open` and `io.popen` to model files and commands; the
   PreUse test stubs `io.popen`.
+- The PEP 514 test stubs `os.execute` and `io.open`, so it checks registration
+  and cleanup command generation on Linux and Windows without writing the
+  registry.
 - A file that does not call `test.load()` fails; a run that finds no test file
   fails.
 
@@ -251,6 +273,7 @@ checks. Re-run the original failed job to resume a failed publication.
 | `VFOX_PYTHON_USE_UV_BUILD` | Available, PreInstall, PostInstall | use uv-build archives |
 | `VFOX_PYTHON_UV_LIBC` | Available, PreInstall | `gnu` or `musl` override |
 | `VFOX_PYTHON_UV_BUILD_MIRROR` | PreInstall | HTTPS mirror for uv-build archives |
+| `VFOX_PYTHON_REGISTER_PY_LAUNCHER` | PostInstall, PreUninstall | register Windows installs under `HKCU\Software\Python\VersionFox`; opt-in |
 | `UV_PYTHON_INSTALL_DIR` | Detect | uv's Python directory |
 | `PYENV_ROOT` | Detect | pyenv root |
 | `ASDF_DATA_DIR` | Detect | asdf data directory |
