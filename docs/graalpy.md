@@ -78,12 +78,13 @@ downloads.
 
 ## PEP 514 and `py.exe`
 
-With `VFOX_PYTHON_REGISTER_PY_LAUNCHER=1` set before installation, a Windows
-GraalPy is registered under `HKCU\Software\Python\VersionFox`, like CPython. The
-PEP 514 `SysVersion` is the Python language version (`3.11` or `3.13`), not the
-GraalPy release, so `py -V:VersionFox/graalpy3.13-25.5.5` can select it. GraalPy
-has no `pythonw.exe`, so the optional `WindowedExecutablePath` value is omitted.
-See [Windows Python launcher](windows-launcher.md).
+Like CPython, a Windows GraalPy install is registered under
+`HKCU\Software\Python\VersionFox` by default; `VFOX_PYTHON_REGISTER_PY_LAUNCHER=0`
+turns that off. The PEP 514 `SysVersion` is the Python language version (`3.11`
+or `3.13`), not the GraalPy release, so `py -V:VersionFox/graalpy3.13-25.5.5` can
+select it. GraalPy has no `pythonw.exe`, so the optional
+`WindowedExecutablePath` value is omitted. See
+[Windows Python launcher](windows-launcher.md).
 
 ## Existing GraalPy installations
 

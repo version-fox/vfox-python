@@ -62,9 +62,6 @@ RUN $ErrorActionPreference = 'Stop'; `
 
 ENV PATH="C:\vfox;C:\Program Files\PowerShell\7;${PATH}"
 
-COPY metadata.lua C:\e2e\metadata.lua
-COPY hooks C:\e2e\hooks
-COPY lib C:\e2e\lib
-COPY tests/e2e/windows/run.ps1 C:\e2e\run.ps1
-
-ENTRYPOINT ["C:/Program Files/PowerShell/7/pwsh.exe", "-NoProfile", "-File", "C:/e2e/run.ps1"]
+# The Go test drives every scenario through pwsh exec calls; the container
+# only has to stay alive.
+CMD ["powershell", "-NoProfile", "-Command", "while ($true) { Start-Sleep 3600 }"]

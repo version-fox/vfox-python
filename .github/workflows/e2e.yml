@@ -29,353 +29,41 @@ concurrency:
   group: e2e-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# The suites live in tests/e2e: the Go tests drive vfox, the plugin, the
+# host installs and the Docker containers; this file only provisions Go.
 jobs:
-  test-on-linux:
-    name: Install Python ${{ matrix.python-version }} on Linux
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
-    env:
-      GITHUB_TOKEN: ${{ github.token }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest]
-        python-version: [3.12.2]
-        mirror: ["", "https://mirrors.huaweicloud.com/python/"]
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Compress build files
-        uses: thedoctor0/zip-release@0.7.6
-        with:
-          type: "zip"
-          directory: "./"
-          filename: "release.zip"
-          exclusions: "*.git* manifest.json"
-
-      - name: Install vfox
-        env:
-          VFOX_VERSION: 1.1.0
-          VFOX_SHA256: 3b33c3c468b27bc17aecf0d6d3af24fe49fe204972984904a136a47b402a0ee4
-        shell: bash
-        run: |
-          archive="$RUNNER_TEMP/vfox.tar.gz"
-          curl --fail --silent --show-error --location --output "$archive" \
-            "https://github.com/version-fox/vfox/releases/download/v${VFOX_VERSION}/vfox_${VFOX_VERSION}_linux_x86_64.tar.gz"
-          echo "$VFOX_SHA256  $archive" | sha256sum --check
-          mkdir "$RUNNER_TEMP/vfox"
-          tar --extract --gzip --file "$archive" --directory "$RUNNER_TEMP/vfox" --strip-components=1 \
-            "vfox_${VFOX_VERSION}_linux_x86_64/vfox"
-          echo "$RUNNER_TEMP/vfox" >> "$GITHUB_PATH"
-          export PATH="$RUNNER_TEMP/vfox:$PATH"
-          vfox --version
-
-      - name: Install plugin
-        run: |
-          vfox add --source ./release.zip
-
-      - name: Install Python ${{ matrix.python-version }}
-        env:
-          VFOX_PYTHON_MIRROR: ${{ matrix.mirror }}
-        run: |
-          eval "$(vfox activate bash)"
-          vfox install python@${{ matrix.python-version }}
-          vfox use -g python@${{ matrix.python-version }}
-          vfox current
-
-      - name: Check python ${{ matrix.python-version }}
-        run: |
-          eval "$(vfox activate bash)"
-          python_version=$(python -c 'import sys;print(sys.version, sys.path)')
-          echo "$python_version"
-
-          if [[ ! $python_version == ${{ matrix.python-version }}* ]]; then
-              exit 1
-          fi
-
-      - name: Adopt the system Python
-        if: matrix.mirror == ''
-        run: |
-          output=$(vfox link --detect python -y)
-          echo "$output"
-          if [[ $output != *"-system"* ]]; then
-              echo "Detect found no system Python"
-              exit 1
-          fi
-          if ! vfox list python | grep -F '(linked'; then
-              echo "vfox list python does not show a linked version"
-              exit 1
-          fi
-
-      - name: Select the installed Python from .python-version
-        run: |
-          project="$RUNNER_TEMP/python-version-project"
-          rm -rf "$project"
-          mkdir -p "$project"
-          printf '%s\n' "${{ matrix.python-version }}" > "$project/.python-version"
-          output=$(cd "$project" && vfox env -s bash)
-          echo "$output"
-          if [[ $output != *"$project/.vfox/sdks/python"* ]]; then
-              echo "vfox env did not use the project .python-version"
-              exit 1
-          fi
-          eval "$output"
-          python_version=$(python -c 'import sys;print(sys.version)')
-          echo "$python_version"
-          if [[ ! $python_version == ${{ matrix.python-version }}* ]]; then
-              exit 1
-          fi
-
-      - name: Select an available uv-build Python 3.11 version
-        if: matrix.mirror == ''
-        run: python .github/select-uv-version.py
-
-      - name: Install Python 3.11 with uv-build
-        if: matrix.mirror == ''
-        env:
-          VFOX_PYTHON_USE_UV_BUILD: "1"
-        run: |
-          eval "$(vfox activate bash)"
-          vfox install python@"$VFOX_TEST_UV_VERSION"
-          vfox use -g python@"$VFOX_TEST_UV_VERSION"
-          vfox current
-
-      - name: Check uv-build python 3.11
-        if: matrix.mirror == ''
-        run: |
-          eval "$(vfox activate bash)"
-          python_version=$(python -c 'import sys;print(sys.version)')
-          echo "$python_version"
-
-          if [[ ! $python_version == "$VFOX_TEST_UV_VERSION"* ]]; then
-              exit 1
-          fi
-
-          python -m pip --version
-          pip --version
-
-      - name: Install GraalPy 24.2.0
-        if: matrix.mirror == ''
-        run: |
-          eval "$(vfox activate bash)"
-          vfox install python@graalpy-24.2.0
-          vfox use -g python@graalpy-24.2.0
-          eval "$(vfox env -s bash)"
-          python -c 'import sys; assert sys.implementation.name == "graalpy", sys.implementation.name; print(sys.version)'
-          python -m pip --version
-          pip --version
-
-  test-on-windows:
-    name: Install Python ${{ matrix.python-version }} on Windows
-    defaults:
-      run:
-        shell: pwsh
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
-    env:
-      GITHUB_TOKEN: ${{ github.token }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [windows-latest]
-        python-version: [3.12.2]
-        mirror: ["", "https://mirrors.huaweicloud.com/python/"]
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Compress build files
-        uses: thedoctor0/zip-release@0.7.6
-        with:
-          type: "zip"
-          directory: "./"
-          filename: "release.zip"
-          exclusions: "*.git* manifest.json"
-
-      - name: Install vfox
-        if: runner.os == 'Windows'
-        shell: pwsh
-        env:
-          VFOX_VERSION: 1.1.0
-          VFOX_SHA256: 1bbec8fffddbb62de0d93030c3f6203c69680662bc65257ca4a5e611cb607d0a
-        run: |
-          $archive = Join-Path $env:RUNNER_TEMP 'vfox.zip'
-          Invoke-WebRequest -Uri "https://github.com/version-fox/vfox/releases/download/v$($env:VFOX_VERSION)/vfox_$($env:VFOX_VERSION)_windows_x86_64.zip" -OutFile $archive
-          if ((Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLower() -ne $env:VFOX_SHA256) {
-            throw 'vfox archive checksum mismatch'
-          }
-          $directory = Join-Path $env:RUNNER_TEMP 'vfox'
-          Expand-Archive -LiteralPath $archive -DestinationPath $directory
-          $vfox = Get-ChildItem -LiteralPath $directory -Recurse -Filter vfox.exe | Select-Object -First 1
-          if (-not $vfox) { throw 'vfox.exe was not found in the release archive' }
-          $vfox.DirectoryName >> $env:GITHUB_PATH
-          $env:PATH = "$($vfox.DirectoryName);$env:PATH"
-          vfox --version
-
-      - name: Install plugin
-        if: runner.os == 'Windows'
-        run: |
-          Invoke-Expression "$(vfox activate pwsh)"
-          vfox add --source ./release.zip
-
-      - name: Install Python ${{ matrix.python-version }}
-        if: runner.os == 'Windows'
-        env:
-          VFOX_PYTHON_MIRROR: ${{ matrix.mirror }}
-        run: |
-          Invoke-Expression "$(vfox activate pwsh)"
-          vfox install python@${{ matrix.python-version }}
-          vfox use -g python@${{ matrix.python-version }}
-          vfox current
-
-      - name: Check python ${{ matrix.python-version }}
-        if: runner.os == 'Windows'
-        run: |
-          Invoke-Expression "$(vfox activate pwsh)"
-          $python_version = $(python -c 'import sys;print(sys.version, sys.path)')
-          Write-Output $python_version
-
-          if ($python_version -notlike "${{ matrix.python-version }}*") {
-              exit 1
-          }
-
-      - name: Select the installed Python from .python-version
-        if: runner.os == 'Windows'
-        run: |
-          $project = Join-Path $env:RUNNER_TEMP 'python-version-project'
-          Remove-Item -Recurse -Force -LiteralPath $project -ErrorAction SilentlyContinue
-          New-Item -ItemType Directory -Path $project | Out-Null
-          Set-Content -LiteralPath (Join-Path $project '.python-version') -Value '${{ matrix.python-version }}'
-          Push-Location $project
-          try {
-            $envOutput = (vfox env -s pwsh) -join "`n"
-            if ($LASTEXITCODE -ne 0) { throw 'vfox env failed' }
-            Write-Output $envOutput
-            if ($envOutput -notlike '*python-version-project*') {
-              throw 'vfox env did not use the project .python-version'
-            }
-            Invoke-Expression $envOutput
-            $pythonVersion = python -c 'import sys;print(sys.version)'
-            Write-Output $pythonVersion
-            if ($pythonVersion -notlike '${{ matrix.python-version }}*') {
-              throw "expected Python ${{ matrix.python-version }}, got $pythonVersion"
-            }
-          } finally {
-            Pop-Location
-          }
-
-      - name: Select an available uv-build Python 3.11 version
-        if: matrix.mirror == ''
-        run: python .github/select-uv-version.py
-
-      - name: Install Python 3.11 with uv-build
-        if: runner.os == 'Windows' && matrix.mirror == ''
-        env:
-          VFOX_PYTHON_USE_UV_BUILD: "1"
-        run: |
-          Invoke-Expression "$(vfox activate pwsh)"
-          vfox install "python@$env:VFOX_TEST_UV_VERSION"
-          if ($LASTEXITCODE -ne 0) {
-            exit $LASTEXITCODE
-          }
-          vfox use -g "python@$env:VFOX_TEST_UV_VERSION"
-          if ($LASTEXITCODE -ne 0) {
-            exit $LASTEXITCODE
-          }
-          vfox current
-          $python_version = $(python -c 'import sys;print(sys.version)')
-          if ($LASTEXITCODE -ne 0) {
-              Write-Error "failed to run python after uv-build install"
-              exit $LASTEXITCODE
-          }
-          Write-Output $python_version
-
-          if ($python_version -notlike "$env:VFOX_TEST_UV_VERSION*") {
-              Write-Error "expected uv-build python $env:VFOX_TEST_UV_VERSION, got $python_version"
-              exit 1
-          }
-
-      - name: Check uv-build python 3.11
-        if: runner.os == 'Windows' && matrix.mirror == ''
-        run: |
-          Invoke-Expression "$(vfox activate pwsh)"
-          $python_version = $(python -c 'import sys;print(sys.version)')
-          Write-Output $python_version
-
-          if ($python_version -notlike "$env:VFOX_TEST_UV_VERSION*") {
-              exit 1
-          }
-
-          python -m pip --version
-          pip --version
-
-      - name: Install GraalPy 25.5.5
-        if: runner.os == 'Windows' && matrix.mirror == ''
-        env:
-          VFOX_PYTHON_REGISTER_PY_LAUNCHER: "1"
-        run: |
-          Invoke-Expression "$(vfox activate pwsh)"
-          vfox install python@graalpy3.13-community-25.5.5
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          vfox use -g python@graalpy3.13-community-25.5.5
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          Invoke-Expression "$(vfox env -s pwsh)"
-          vfox current
-          $implementation = (python -c 'import sys; print(sys.implementation.name)').Trim()
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          Write-Output $implementation
-          if ($implementation -ne 'graalpy') {
-              throw "expected GraalPy, got $implementation"
-          }
-          python -c 'import sys; print(sys.version)'
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python -m pip --version
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          pip --version
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          $registered = (py -0p) -join "`n"
-          Write-Output $registered
-          if ($registered -notmatch 'graalpy3\.13-community-25\.5\.5') {
-              throw 'GraalPy was not registered with the Python launcher'
-          }
-
-  e2e-container-linux:
-    name: Linux container (${{ matrix.graalpy }})
+  e2e-linux:
+    name: E2E on Linux
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix:
-        graalpy: [graalpy-24.2.0, graalpy-community-24.2.0]
+    timeout-minutes: 90
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
-      - name: Build the container
-        run: docker build --file tests/e2e/linux/Dockerfile --tag vfox-python-e2e-linux .
-      - name: Run the container
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-          GRAALPY_VERSION: ${{ matrix.graalpy }}
-        run: docker run --rm --env GITHUB_TOKEN --env GRAALPY_VERSION vfox-python-e2e-linux
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.27.1"
+          cache: false
+      - name: Run the Linux E2E suite
+        run: go test -v -timeout 85m ./linux
+        working-directory: tests/e2e
 
-  e2e-container-windows:
-    name: Windows container
+  e2e-windows:
+    name: E2E on Windows
     runs-on: windows-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
-      - name: Build the container
-        shell: pwsh
-        run: docker build --file tests/e2e/windows/Dockerfile --tag vfox-python-e2e-windows .
-      - name: Run the container
-        shell: pwsh
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-          GRAALPY_VERSION: graalpy3.13-community-25.5.5
-        run: docker run --rm --env GITHUB_TOKEN --env GRAALPY_VERSION vfox-python-e2e-windows
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.27.1"
+          cache: false
+      - name: Run the Windows E2E suite
+        run: go test -v -timeout 85m ./windows
+        working-directory: tests/e2e

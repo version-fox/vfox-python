@@ -126,12 +126,20 @@ missing or unreadable entry falls back to the newest installed Python.
 
 ## Windows installers
 
-Windows uses the python.org installer rather than compiling:
+Windows uses the python.org installer rather than compiling. The EXE is used
+when python.org publishes `python-<version>-amd64.exe` for the release
+(`-arm64.exe` on ARM64, `python-<version>.exe` on 386). The MSI
+(`python-<version>.amd64.msi`, `.arm64.msi`, or `python-<version>.msi` on 386)
+is used only when there is no EXE. For example, python.org publishes only an EXE
+for 3.12.10, and only an MSI for 2.7.18. See [platforms.md](platforms.md#windows)
+for the order of the checks.
 
-- `.exe` installers are extracted with the bundled WiX `dark.exe`, and the MSIs
-  inside are installed into the version directory. pip is bootstrapped with
+- `.exe` installers are extracted with the bundled WiX `dark.exe`. The MSIs
+  inside are installed into the version directory with `msiexec /quiet /a`; the
+  launcher, PATH and pip MSIs are skipped, and pip is bootstrapped with
   `ensurepip`.
-- `.msi` installers (older releases) are installed directly with `msiexec`.
+- `.msi` installers (older releases) are installed into the version directory
+  with `msiexec /quiet /a`, and pip is bootstrapped with `ensurepip`.
 - Alias executables such as `python3.exe` and `python3.12.exe` are created next
   to `python.exe`, because the python.org installer normally creates them in a
   shared directory outside the target.

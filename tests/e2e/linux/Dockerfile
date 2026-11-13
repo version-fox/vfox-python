@@ -41,11 +41,6 @@ RUN set -o errexit -o nounset -o xtrace; \
     ln -s /opt/vfox/vfox /usr/local/bin/vfox; \
     vfox --version
 
-COPY metadata.lua /e2e/metadata.lua
-COPY hooks /e2e/hooks
-COPY lib /e2e/lib
-COPY tests/e2e/linux/run.sh /e2e/run.sh
-
-RUN chmod +x /e2e/run.sh
-
-ENTRYPOINT ["/e2e/run.sh"]
+# The Go test drives every scenario through exec calls; the container only
+# has to stay alive.
+CMD ["sleep", "infinity"]

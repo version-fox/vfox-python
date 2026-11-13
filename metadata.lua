@@ -53,6 +53,7 @@ PLUGIN.notes = {
     "GraalPy: install python@graalpy-24.2.0 or python@graalpy-community-24.2.0.",
     "GraalPy on Windows is amd64 only; uv-build provides CPython only.",
     "Already installed Python: `vfox link --detect python` (vfox 1.1.0 or later).",
-    "Windows launcher: set VFOX_PYTHON_REGISTER_PY_LAUNCHER=1 to register installs with PEP 514.",
+    "Windows launcher: installs are registered with PEP 514 automatically.",
+    "Set VFOX_PYTHON_REGISTER_PY_LAUNCHER=0 to disable Windows launcher registration.",
     " ",
 }

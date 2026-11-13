@@ -62,9 +62,9 @@ cover them. `VFOX_PYTHON_USE_UV_BUILD=1` switches to prebuilt uv-build archives
 on Linux, macOS and Windows; uv-build contains CPython only. See
 [docs/uv.md](docs/uv.md).
 
-`py.exe` does not read `PATH`. Set
-`VFOX_PYTHON_REGISTER_PY_LAUNCHER=1` before installing to register the version
-under vfox's own PEP 514 key; see [Windows Python
+`py.exe` does not read `PATH`. Windows installs are registered automatically
+under vfox's own PEP 514 key, so `py -V:VersionFox/<version>` can select them.
+Set `VFOX_PYTHON_REGISTER_PY_LAUNCHER=0` to opt out; see [Windows Python
 launcher](docs/windows-launcher.md).
 
 ## GraalPy
@@ -120,14 +120,17 @@ echo graalpy-24.2.0 > .python-version
 
 ## uv
 
-uv-build is the optional prebuilt source:
+uv-build is the optional prebuilt source. Its index lists exact versions, so
+install a name that `vfox search python` shows while the variable is set; a
+partial name such as `python@3.12` does not resolve in this mode:
 
 ```bash
 export VFOX_PYTHON_USE_UV_BUILD=1
-vfox install python@3.12.2
+vfox install python@3.12.16
 ```
 
-On Linux the libc is detected automatically; set `VFOX_PYTHON_UV_LIBC=gnu` or
+uv-build needs no compiler or build dependencies. On Linux the libc is
+detected automatically; set `VFOX_PYTHON_UV_LIBC=gnu` or
 `VFOX_PYTHON_UV_LIBC=musl` to override it. uv-managed Pythons from
 `uv python install` are picked up by `vfox link --detect python` like any other
 installation. See [docs/uv.md](docs/uv.md) for the archive and for how to make
@@ -159,8 +162,8 @@ uv-build downloads can go through `VFOX_PYTHON_UV_BUILD_MIRROR`. See
   system and uv installations it adopts, and how to use them safely
 - [Platforms](docs/platforms.md): what is built from source, what is downloaded,
   and the build dependencies Linux needs
-- [Windows Python launcher](docs/windows-launcher.md): opt-in PEP 514
-  registration for `py.exe`
+- [Windows Python launcher](docs/windows-launcher.md): PEP 514 registration
+  for `py.exe`, on by default, with examples of selecting vfox installs
 - [Mirror](docs/mirror.md): python.org and uv-build mirrors
 - [Changes](docs/changes.md): what each release changed
 

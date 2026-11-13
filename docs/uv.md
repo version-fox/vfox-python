@@ -5,19 +5,26 @@
 There are two independent things called uv here:
 
 1. **uv-build** is the prebuilt CPython archive this plugin can install instead
-   of compiling from source or running a Windows installer.
+   of compiling from source or running a Windows installer. It needs no
+   compiler or build dependencies.
 2. **uv the tool** installs and manages Pythons of its own under
    `uv python dir`. `vfox link --detect python` adopts those, and the two tools
    can share one interpreter.
 
 ## uv-build
 
-Set `VFOX_PYTHON_USE_UV_BUILD=1` before installing:
+Set `VFOX_PYTHON_USE_UV_BUILD=1` before installing. The index lists exact
+versions, so install a name that `vfox search python` shows while the variable
+is set; a partial name such as `python@3.12` does not resolve in this mode:
 
 ```bash
 export VFOX_PYTHON_USE_UV_BUILD=1
-vfox install python@3.12.2
+vfox install python@3.12.16
 ```
+
+This path needs none of the `apt` packages a source build needs, and no `sudo`.
+On Ubuntu, skip the apt step in [platforms.md](platforms.md#linux-build-dependencies)
+and install with this variable set.
 
 The plugin asks `https://vault.vfox.dev/python/uv-build` for the builds of the
 running platform, architecture and libc, then hands vfox the archive URL and its

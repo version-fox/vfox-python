@@ -71,11 +71,11 @@ Windows 上，`vfox search python` 通过 GitHub API 读取 GraalPy 发布列表
 
 ## PEP 514 与 `py.exe`
 
-安装前设置 `VFOX_PYTHON_REGISTER_PY_LAUNCHER=1`，Windows 上的 GraalPy 会和
-CPython 一样注册到 `HKCU\Software\Python\VersionFox`。PEP 514 的 `SysVersion`
-使用 Python 语言版本（`3.11` 或 `3.13`），不是 GraalPy 的 release，所以可以用
-`py -V:VersionFox/graalpy3.13-25.5.5` 选中。GraalPy 没有 `pythonw.exe`，因此
-可选的 `WindowedExecutablePath` 不会写入。见
+Windows 上的 GraalPy 和 CPython 一样，默认注册到
+`HKCU\Software\Python\VersionFox`；设置 `VFOX_PYTHON_REGISTER_PY_LAUNCHER=0` 可以关闭。
+PEP 514 的 `SysVersion` 使用 Python 语言版本（`3.11` 或 `3.13`），不是 GraalPy 的
+release，所以可以用 `py -V:VersionFox/graalpy3.13-25.5.5` 选中。GraalPy 没有
+`pythonw.exe`，因此可选的 `WindowedExecutablePath` 不会写入。见
 [Windows Python 启动器](windows-launcher.md)。
 
 ## 本机已有的 GraalPy

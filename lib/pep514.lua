@@ -26,13 +26,15 @@ local function isWindows()
     return string.lower(RUNTIME.osType or OS_TYPE or "") == "windows"
 end
 
-local function envEnabled(name)
+-- Registration is on by default on Windows. Setting
+-- VFOX_PYTHON_REGISTER_PY_LAUNCHER=0/false/no/off disables it.
+local function registrationEnabled(name)
     local value = os.getenv(name)
-    if value == nil then
-        return false
+    if value == nil or value == "" then
+        return true
     end
     value = string.lower(value)
-    return value == "1" or value == "true" or value == "yes" or value == "on"
+    return value ~= "0" and value ~= "false" and value ~= "no" and value ~= "off"
 end
 
 local function architectureSuffix(archType)
@@ -154,7 +156,7 @@ end
 local pep514 = {}
 
 function pep514.enabled()
-    return envEnabled(REGISTER_ENV)
+    return registrationEnabled(REGISTER_ENV)
 end
 
 function pep514.tagFor(version, archType)

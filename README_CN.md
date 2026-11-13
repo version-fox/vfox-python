@@ -58,8 +58,9 @@ Windows 上，python.org 没有为仅提供源码的安全版本发布安装包�
 的预编译包；uv-build 只包含 CPython。详见
 [docs/zh-CN/uv.md](docs/zh-CN/uv.md)。
 
-`py.exe` 不读取 `PATH`。安装前设置 `VFOX_PYTHON_REGISTER_PY_LAUNCHER=1`，
-版本会注册到 vfox 自己的 PEP 514 key 下，详见
+`py.exe` 不读取 `PATH`。Windows 上的安装会自动注册到 vfox 自己的 PEP 514
+key 下，因此可以用 `py -V:VersionFox/<版本>` 选中。设置
+`VFOX_PYTHON_REGISTER_PY_LAUNCHER=0` 可以关闭注册，详见
 [Windows Python 启动器](docs/zh-CN/windows-launcher.md)。
 
 ## GraalPy
@@ -113,17 +114,19 @@ echo graalpy-24.2.0 > .python-version
 
 ## uv
 
-uv-build 是可选的预编译来源：
+uv-build 是可选的预编译来源。它的索引只列出确切版本，所以请安装设置该变量后
+`vfox search python` 列出的名字；在这种模式下，`python@3.12` 这样的部分名字不会解析：
 
 ```bash
 export VFOX_PYTHON_USE_UV_BUILD=1
-vfox install python@3.12.2
+vfox install python@3.12.16
 ```
 
-Linux 上会自动识别 libc；要覆盖识别结果，设置
-`VFOX_PYTHON_UV_LIBC=gnu` 或 `VFOX_PYTHON_UV_LIBC=musl`。`uv python install`
-装的 Python 和别的安装一样，会被 `vfox link --detect python` 找到。预编译包
-的细节，以及怎样让 uv 使用 vfox 选中的解释器而不是再下载一份，见
+uv-build 不需要编译器或构建依赖。Linux 上会自动识别 libc；要覆盖识别结果，
+设置 `VFOX_PYTHON_UV_LIBC=gnu` 或 `VFOX_PYTHON_UV_LIBC=musl`。
+`uv python install` 装的 Python 和别的安装一样，会被
+`vfox link --detect python` 找到。预编译包的细节，以及怎样让 uv 使用 vfox
+选中的解释器而不是再下载一份，见
 [docs/zh-CN/uv.md](docs/zh-CN/uv.md)。
 
 ## 镜像
@@ -147,7 +150,7 @@ uv-build 的下载可以走 `VFOX_PYTHON_UV_BUILD_MIRROR`。两个变量和镜�
 - [uv 与 uv-build](docs/zh-CN/uv.md)：预编译包、uv 管理的 Python，以及让 uv 配合 vfox 选中的解释器
 - [本机已有的 Python](docs/zh-CN/link.md)：`vfox link --detect python`、它会纳入的系统与 uv 安装，以及安全用法
 - [平台](docs/zh-CN/platforms.md)：哪些版本从源码编译、哪些直接下载，以及 Linux 需要的构建依赖
-- [Windows Python 启动器](docs/zh-CN/windows-launcher.md)：可选的 `py.exe` PEP 514 注册
+- [Windows Python 启动器](docs/zh-CN/windows-launcher.md)：默认开启的 `py.exe` PEP 514 注册，并附选中 vfox 版本的示例
 - [镜像](docs/zh-CN/mirror.md)：python.org 和 uv-build 的镜像
 - [变更记录](docs/zh-CN/changes.md)：每个版本改了什么
 

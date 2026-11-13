@@ -2,63 +2,80 @@
 
 [中文](zh-CN/e2e.md) | [English](e2e.md)
 
-There are two E2E layers:
+`tests/e2e` is a Go module. Its Linux and Windows packages drive vfox, the
+plugin and real installs with the Go testing framework, both on the runner and
+in Docker containers. `.github/workflows/e2e.yml` only installs Go and runs
+`go test`; the install commands and every assertion are in Go.
 
-1. **Container suite** in `tests/e2e/` runs real installs inside a Linux
-   container and a Windows container. It is the isolated path that checks the
-   GraalPy download, `ensurepip`, `PATH` and `.python-version` behavior.
-2. **Runner suite** in `.github/workflows/e2e.yml` runs the broader matrix
-   natively on GitHub-hosted Linux and Windows runners: CPython source builds,
-   the python.org and Huawei mirrors, uv-build, `vfox link --detect` and PEP 514
-   registration.
+## Layout
 
-Both are triggered by pull requests. The offline Lua hook tests live in
-`test.yml` and are described in [development.md](development.md).
+| Path | Purpose |
+| --- | --- |
+| `common/` | builds the plugin zip, installs vfox 1.1.0, runs host commands, reads the uv-build index, asserts |
+| `linux/e2e_test.go` | `TestNativeE2E`: source build, mirror, uv-build, GraalPy, `vfox link --detect`, `.python-version` |
+| `linux/container_test.go` | `TestContainerE2E`: a bare Ubuntu 24.04 container for uv-build, and one for each GraalPy release |
+| `linux/Dockerfile` | Ubuntu 24.04 with `ca-certificates`, `curl`, `tar`, `xz-utils` and `zip`; no compiler and no `-dev` packages |
+| `windows/e2e_test.go` | `TestNativeE2E`: python.org EXE installer, mirror, uv-build, GraalPy with launcher registration, `.python-version` |
+| `windows/container_test.go` | `TestContainerE2E`: a Server Core container with PowerShell 7, the Visual C++ runtime and vfox, GraalPy |
+| `windows/Dockerfile`, `windows/bootstrap-tools.ps1` | provision the Server Core image: PowerShell 7, the Visual C++ runtime and vfox |
 
-## Linux container
+The Dockerfiles only provision the environment. The Go tests copy the plugin
+into the container and drive every step from there.
 
-The image starts from Ubuntu 24.04, installs vfox 1.1.0 from the checksum-pinned
-release archive, copies the plugin source, and runs GraalPy end to end:
+## What the subtests check
+
+Linux, on the runner:
+
+- `source build`: CPython 3.12.2 built from source.
+- `mirror`: CPython 3.12.1 from the huaweicloud mirror.
+- `uv-build`: the newest CPython 3.11 uv-build archive, with pip.
+- `graalpy`: GraalPy 24.2.0, asserted by implementation name.
+- `link`: `vfox link --detect python` adopts an installed Python, and `vfox list` shows it as linked.
+- `python-version`: a project `.python-version` naming the uv-build CPython wins over the global GraalPy. The check prints the implementation name, so GraalPy cannot pass it.
+
+Linux, in containers:
+
+- `uv-build without build packages`: the uv-build CPython imports `ssl`, `sqlite3`, `bz2`, `lzma`, `ctypes`, `readline`, `curses`, `zlib` and `hashlib`, and pip runs. This is the check behind the answer in [platforms.md](platforms.md#linux-build-dependencies): uv-build needs no apt packages.
+- `graalpy-24.2.0` and `graalpy-community-24.2.0`: GraalPy installs and runs with pip, and a `.python-version` selects the uv-build CPython over the global GraalPy.
+
+Windows, on the runner:
+
+- `installer`: CPython 3.12.2, and the download URL is the EXE, `python-3.12.2-amd64.exe`.
+- `mirror`, `uv-build`, `graalpy`, `python-version`: as on Linux. The GraalPy subtest finds its entry in `py -0p`, because launcher registration is on by default.
+
+Windows, in a container: GraalPy 25.5.5 (Community, Python 3.13).
+
+## Run
 
 ```bash
-docker build --file tests/e2e/linux/Dockerfile --tag vfox-python-e2e-linux .
-docker run --rm -e GRAALPY_VERSION=graalpy-24.2.0 vfox-python-e2e-linux
+cd tests/e2e
+go test -v ./linux
+go test -v ./windows   # on a Windows host with Docker in Windows container mode
 ```
 
-The workflow runs the matrix `graalpy-24.2.0` and
-`graalpy-community-24.2.0`. Each run checks:
+Set `VFOX_SKIP_CONTAINER_E2E=1` to run only the native suite, for example on a
+machine without Docker:
 
-- `vfox add` accepts the plugin built from the checkout,
-- `vfox install` downloads Oracle's archive and verifies its SHA-256,
-- `python -V` and `sys.implementation.name` report GraalPy,
-- `python -m pip` and `pip` both work,
-- a project `.python-version` selects the installed GraalPy.
-
-## Windows container
-
-The image starts from Windows Server Core, installs PowerShell 7, vfox 1.1.0
-and the plugin, then installs GraalPy amd64:
-
-```powershell
-docker build --file tests/e2e/windows/Dockerfile --tag vfox-python-e2e-windows .
-docker run --rm -e GRAALPY_VERSION=graalpy3.13-community-25.5.5 vfox-python-e2e-windows
+```bash
+VFOX_SKIP_CONTAINER_E2E=1 go test -v ./linux
 ```
 
-Windows containers need a Windows host in Windows-container mode. The base
-image is `mcr.microsoft.com/windows/servercore:ltsc2025-KB5122871-amd64`, the
-same image the Java plugin uses in CI, so the host and container OS versions
-match on `windows-latest`.
+`-run` selects subtests. `python-version` needs the `uv-build` subtest to run
+first, so include both:
 
-The Windows run checks the same install, `python`, `pip` and `.python-version`
-behavior. PEP 514 registration is checked by the runner suite, because the
-Server Core image has no Python launcher.
+```bash
+go test -v -run 'TestNativeE2E/^(uv-build|graalpy|python-version)$' ./linux
+```
 
-## Environment knobs
+Requirements:
 
-| Variable | Default | Meaning |
-| --- | --- | --- |
-| `GRAALPY_VERSION` | Linux `graalpy-24.2.0`; Windows `graalpy3.13-community-25.5.5` | GraalPy version to install |
-| `GITHUB_TOKEN`, `GH_TOKEN` | unset | raise the GitHub API limit when listing GraalPy releases |
-
-The installs retry three times because GitHub release downloads occasionally
-end with a transient EOF.
+- The `source build` and `mirror` subtests need the Linux build packages from
+  [platforms.md](platforms.md#linux-build-dependencies). The GitHub
+  `ubuntu-latest` runner has them: the CI source builds install nothing extra. A
+  development machine may not, and those two subtests fail without them. The
+  uv-build, GraalPy and container subtests need none of them.
+- The Windows container test needs Docker in Windows container mode. The
+  `windows-latest` runner provides it.
+- `GITHUB_TOKEN` or `GH_TOKEN` is optional. When set, GraalPy installs use it for
+  GitHub API requests and avoid the anonymous rate limit. Without it, the plugin
+  falls back to the asset URL it builds itself.

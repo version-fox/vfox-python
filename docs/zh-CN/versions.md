@@ -115,11 +115,17 @@ system
 
 ## Windows 安装包
 
-Windows 上不编译，直接用 python.org 的安装包：
+Windows 上不编译，直接用 python.org 的安装包。该版本发布了
+`python-<版本>-amd64.exe`（ARM64 为 `-arm64.exe`，386 为 `python-<版本>.exe`）时使用
+EXE；没有 EXE 时才用 MSI（`python-<版本>.amd64.msi`、`.arm64.msi`，386 为
+`python-<版本>.msi`）。例如 3.12.10 在 python.org 上只有 EXE，2.7.18 只有 MSI。
+检查顺序见 [平台](platforms.md#windows)。
 
-- `.exe` 安装包用插件自带的 WiX `dark.exe` 解开，再把里面的 MSI 安装进版本
-  目录，并用 `ensurepip` 装好 pip。
-- 老版本的 `.msi` 安装包直接用 `msiexec` 安装。
+- `.exe` 安装包用插件自带的 WiX `dark.exe` 解开。里面的 MSI 用
+  `msiexec /quiet /a` 安装进版本目录；启动器、PATH 和 pip 的 MSI 会被跳过，pip
+  用 `ensurepip` 装好。
+- 老版本的 `.msi` 安装包用 `msiexec /quiet /a` 安装进版本目录，pip 用
+  `ensurepip` 装好。
 - python.org 安装包通常把 `python3.exe`、`python3.12.exe` 之类的别名放在目标
   目录外面，插件会在 `python.exe` 旁边补上这些别名。
 - 带空格、百分号、`!` 和引号的路径通过 base64 参数的 PowerShell 命令处理，

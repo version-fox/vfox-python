@@ -5,18 +5,22 @@
 这里有两个互不相干的东西都叫 uv：
 
 1. **uv-build** 是这个插件可以安装的预编译 CPython 包，用来代替源码编译或
-   Windows 安装包。
+   Windows 安装包。它不需要编译器或构建依赖。
 2. **uv 这个工具** 会在 `uv python dir` 下安装、管理自己的 Python。
    `vfox link --detect python` 会纳入这些 Python，两个工具可以共用一个解释器。
 
 ## uv-build
 
-安装前设置 `VFOX_PYTHON_USE_UV_BUILD=1`：
+安装前设置 `VFOX_PYTHON_USE_UV_BUILD=1`。索引只列出确切版本，所以请安装设置该变量后
+`vfox search python` 列出的名字；在这种模式下，`python@3.12` 这样的部分名字不会解析：
 
 ```bash
 export VFOX_PYTHON_USE_UV_BUILD=1
-vfox install python@3.12.2
+vfox install python@3.12.16
 ```
+
+这条路径不需要源码构建所需的任何 `apt` 包，也不需要 `sudo`。在 Ubuntu 上，跳过
+[平台](platforms.md#linux-构建依赖) 里的 apt 步骤，设置这个变量后直接安装即可。
 
 插件向 `https://vault.vfox.dev/python/uv-build` 询问当前平台、架构和 libc 的
 构建，然后把包地址和 SHA-256 交给 vfox。vfox 下载、校验、解压，再调用

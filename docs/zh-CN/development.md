@@ -84,7 +84,8 @@ vfox 加载 `metadata.lua`，命令需要时调用相应的钩子，并向钩子
   payload，Unix 上修 shebang，Windows 上确保 pip 可用。
   `resolvePythonInstallPath` 处理 MSI、uv-build 和 GraalPy 三种布局。
 - uv-build 会拒绝 `ctx.rootPath` 之外的路径，避免错误的索引让钩子写到别处。
-- 设置 `VFOX_PYTHON_REGISTER_PY_LAUNCHER=1` 时，钩子按 PEP 514 把版本注册到
+- 除非 `VFOX_PYTHON_REGISTER_PY_LAUNCHER` 设为 `0`、`false`、`no` 或 `off`，钩子都会按
+  PEP 514 把版本注册到
   `HKCU\Software\Python\VersionFox\<tag>`。tag 用完整版本号，非默认架构加
   `-32`/`-arm64`，多个补丁版本可以并存。它不会写 `PythonCore`。GraalPy 的
   `SysVersion` 用 Python 语言版本，并省略可选的 `WindowedExecutablePath`。
@@ -95,7 +96,7 @@ vfox 加载 `metadata.lua`，命令需要时调用相应的钩子，并向钩子
 `VfoxManaged` 为 `1` 且注册的 `InstallPath` 仍指向该版本目录时，删除
 `HKCU\Software\Python\VersionFox\<tag>`；如果 `VersionFox` company key 已经
 没有子项，也一并删除。即使 `VFOX_PYTHON_REGISTER_PY_LAUNCHER` 已取消，钩子
-仍会运行，所以关闭注册不会在卸载时留下旧项。
+仍会运行，所以即使 `VFOX_PYTHON_REGISTER_PY_LAUNCHER=0` 关闭了注册，卸载也不会留下旧项。
 
 `lib/pep514.lua` 在读写信之前会识别 MSI 布局（`path/python.exe`）、uv-build
 布局（`path/python-<版本>/python.exe`）和 GraalPy 布局
@@ -187,15 +188,11 @@ local versions = plugin:Available({})
 下执行 `PostInstall` 里真实的 shell 脚本。它检查原生参数编码、MSI 目标引号、
 `%` junction、退出码传递和每条失败路径。
 
-E2E 任务安装真实的 Python：Linux 上一次源码构建和一次镜像构建，Windows 上一次
-安装包和一次 uv-build，两个平台上都还有一次 uv-build 和一次 GraalPy。Windows
-的 GraalPy 安装还会检查 PEP 514 注册。它会在 Linux 上对 runner 的系统 Python
-运行 `vfox link --detect python`，并在两个平台上检查 `vfox env` 是否按项目的
-`.python-version` 选择版本。
-
-工作流还会构建并运行 `tests/e2e/` 里的容器套件：Ubuntu 镜像和 Windows Server
-Core 镜像从 Oracle 的发布包安装 GraalPy，并检查 `python`、`pip` 和
-`.python-version`。镜像、Windows 主机要求和本地命令见
+E2E 套件在 `tests/e2e` 里，使用 Go 编写。Linux 包在 runner 上安装 CPython
+源码构建、镜像构建、uv-build 和 GraalPy，还会运行 `vfox link --detect` 和项目
+的 `.python-version`。Windows 包安装 CPython 和 uv-build，安装带 PEP 514 注册的
+GraalPy，并检查 `.python-version`。两个包也通过 testcontainers-go 在 Docker
+容器里跑同样的 GraalPy 检查。目录结构和本地命令见
 [端到端测试](e2e.md)。
 
 本地命令：
@@ -205,8 +202,9 @@ vfox plugin test .
 go run github.com/yuin/gopher-lua/cmd/glua@v1.1.1 tests/windows_install_layouts.lua
 stylua --check .
 lua-language-server --check . --checklevel=Warning
-docker build --file tests/e2e/linux/Dockerfile --tag vfox-python-e2e-linux .
-docker run --rm vfox-python-e2e-linux
+cd tests/e2e && go test -v ./linux
+cd tests/e2e && go test -v ./windows
+VFOX_SKIP_CONTAINER_E2E=1 go test -v ./linux
 ```
 
 ## 检查
@@ -219,8 +217,7 @@ docker run --rm vfox-python-e2e-linux
 | Apache 头 | Apache SkyWalking Eyes | `license.yml` |
 | 钩子测试 | 在 Linux 和 Windows 上 `vfox plugin test .` | `test.yml` |
 | Windows 命令路径 | GopherLua | `test.yml` |
-| 容器 E2E | Linux 和 Windows 上的 Docker | `e2e.yml` |
-| 真实安装 | Linux 和 Windows 的 E2E | `e2e.yml` |
+| 原生和容器 E2E | Linux 和 Windows 上的 Go 测试 | `e2e.yml` |
 
 `stylua.toml` 用四空格、120 列、Unix 换行；`.gitattributes` 让 checkout 保持
 LF，这样 Windows 上的检查和 Linux 一致。LuaLS 读 `.luarc.json`，里面声明了
@@ -268,7 +265,7 @@ vfox 的全局变量，只关闭 `duplicate-set-field`（测试会有意替换 `
 | `VFOX_PYTHON_USE_UV_BUILD` | Available、PreInstall、PostInstall | 使用 uv-build 预编译包 |
 | `VFOX_PYTHON_UV_LIBC` | Available、PreInstall | 覆盖 `gnu` / `musl` 识别 |
 | `VFOX_PYTHON_UV_BUILD_MIRROR` | PreInstall | uv-build 包的 HTTPS 镜像 |
-| `VFOX_PYTHON_REGISTER_PY_LAUNCHER` | PostInstall、PreUninstall | 把 Windows 安装注册到 `HKCU\Software\Python\VersionFox`；默认关闭 |
+| `VFOX_PYTHON_REGISTER_PY_LAUNCHER` | PostInstall、PreUninstall | 把 Windows 安装注册到 `HKCU\Software\Python\VersionFox`；默认开启，`0`、`false`、`no`、`off` 关闭 |
 | `GITHUB_TOKEN`、`GH_TOKEN` | Available | 提高 Windows GraalPy 发布列表的 GitHub API 限额 |
 | `UV_PYTHON_INSTALL_DIR` | Detect | uv 的 Python 目录 |
 | `PYENV_ROOT` | Detect | pyenv 根目录 |

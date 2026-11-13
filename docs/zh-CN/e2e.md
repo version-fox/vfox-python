@@ -2,57 +2,77 @@
 
 [中文](e2e.md) | [English](../e2e.md)
 
-E2E 分两层：
+`tests/e2e` 是一个 Go module。Linux 和 Windows 包用 Go 测试框架驱动 vfox、插件和真实
+安装，既在 runner 上跑，也在 Docker 容器里跑。`.github/workflows/e2e.yml` 只安装 Go 并
+运行 `go test`；安装命令和所有断言都在 Go 里。
 
-1. **容器套件**：`tests/e2e/` 在 Linux 容器和 Windows 容器里执行真实安装，隔离
-   验证 GraalPy 下载、`ensurepip`、`PATH` 和 `.python-version` 行为。
-2. **Runner 套件**：`.github/workflows/e2e.yml` 在 GitHub 的 Linux 和 Windows
-   runner 上原生跑更广的矩阵：CPython 源码构建、python.org 和华为镜像、
-   uv-build、`vfox link --detect` 和 PEP 514 注册。
+## 目录
 
-两者都由 pull request 触发。离线 Lua 钩子测试在 `test.yml` 里，见
-[开发](development.md)。
+| 路径 | 作用 |
+| --- | --- |
+| `common/` | 构建插件 zip、安装 vfox 1.1.0、运行主机命令、读取 uv-build 索引、断言 |
+| `linux/e2e_test.go` | `TestNativeE2E`：源码构建、镜像、uv-build、GraalPy、`vfox link --detect`、`.python-version` |
+| `linux/container_test.go` | `TestContainerE2E`：一个没有构建包的 Ubuntu 24.04 容器跑 uv-build，每个 GraalPy 版本各一个容器 |
+| `linux/Dockerfile` | Ubuntu 24.04，只装 `ca-certificates`、`curl`、`tar`、`xz-utils` 和 `zip`；没有编译器，也没有 `-dev` 包 |
+| `windows/e2e_test.go` | `TestNativeE2E`：python.org EXE 安装包、镜像、uv-build、带启动器注册的 GraalPy、`.python-version` |
+| `windows/container_test.go` | `TestContainerE2E`：Server Core 容器，装有 PowerShell 7、Visual C++ 运行时和 vfox，跑 GraalPy |
+| `windows/Dockerfile`、`windows/bootstrap-tools.ps1` | 准备 Server Core 镜像：PowerShell 7、Visual C++ 运行时和 vfox |
 
-## Linux 容器
+Dockerfile 只负责准备环境。Go 测试把插件复制进容器，然后在容器里执行每一步。
 
-镜像基于 Ubuntu 24.04，安装校验和固定的 vfox 1.1.0，复制插件源码，然后完整
-跑一遍 GraalPy：
+## 各子测试检查什么
+
+Linux，在 runner 上：
+
+- `source build`：从源码构建 CPython 3.12.2。
+- `mirror`：从华为云镜像安装 CPython 3.12.1。
+- `uv-build`：最新的 CPython 3.11 uv-build 包，并检查 pip。
+- `graalpy`：GraalPy 24.2.0，按实现名断言。
+- `link`：`vfox link --detect python` 纳入已安装的 Python，`vfox list` 显示为已链接。
+- `python-version`：项目里的 `.python-version` 指向 uv-build 的 CPython，并且优先于全局的
+  GraalPy。检查输出的是实现名，所以 GraalPy 不可能通过这个检查。
+
+Linux，在容器里：
+
+- `uv-build without build packages`：uv-build 的 CPython 能导入 `ssl`、`sqlite3`、`bz2`、
+  `lzma`、`ctypes`、`readline`、`curses`、`zlib` 和 `hashlib`，pip 也能运行。这是
+  [平台](platforms.md#linux-构建依赖) 里“uv-build 不需要 apt 包”这一说法的依据。
+- `graalpy-24.2.0` 和 `graalpy-community-24.2.0`：GraalPy 能安装并运行、pip 可用，并且
+  `.python-version` 能让 uv-build 的 CPython 优先于全局的 GraalPy。
+
+Windows，在 runner 上：
+
+- `installer`：CPython 3.12.2，下载地址是 EXE：`python-3.12.2-amd64.exe`。
+- `mirror`、`uv-build`、`graalpy`、`python-version`：和 Linux 一样。GraalPy 子测试在
+  `py -0p` 里找到自己的项，因为启动器注册默认开启。
+
+Windows，在容器里：GraalPy 25.5.5（Community，Python 3.13）。
+
+## 运行
 
 ```bash
-docker build --file tests/e2e/linux/Dockerfile --tag vfox-python-e2e-linux .
-docker run --rm -e GRAALPY_VERSION=graalpy-24.2.0 vfox-python-e2e-linux
+cd tests/e2e
+go test -v ./linux
+go test -v ./windows   # 在开启了 Windows 容器模式 Docker 的 Windows 主机上
 ```
 
-工作流用 `graalpy-24.2.0` 和 `graalpy-community-24.2.0` 两个版本。每次运行检查：
+设置 `VFOX_SKIP_CONTAINER_E2E=1` 只跑主机原生套件，比如机器上没有 Docker 时：
 
-- `vfox add` 能加载从当前 checkout 构建的插件，
-- `vfox install` 下载 Oracle 的压缩包并校验 SHA-256，
-- `python -V` 和 `sys.implementation.name` 报告 GraalPy，
-- `python -m pip` 和 `pip` 都可用，
-- 项目的 `.python-version` 能选中已安装的 GraalPy。
-
-## Windows 容器
-
-镜像基于 Windows Server Core，安装 PowerShell 7、vfox 1.1.0 和插件，然后安装
-GraalPy amd64：
-
-```powershell
-docker build --file tests/e2e/windows/Dockerfile --tag vfox-python-e2e-windows .
-docker run --rm -e GRAALPY_VERSION=graalpy3.13-community-25.5.5 vfox-python-e2e-windows
+```bash
+VFOX_SKIP_CONTAINER_E2E=1 go test -v ./linux
 ```
 
-Windows 容器需要 Windows 主机并启用 Windows 容器模式。基础镜像是
-`mcr.microsoft.com/windows/servercore:ltsc2025-KB5122871-amd64`，与 Java 插件
-CI 使用的一致，保证 `windows-latest` 上的主机和容器系统版本匹配。
+`-run` 用来选子测试。`python-version` 需要先运行 `uv-build` 子测试，所以两者要一起选：
 
-Windows 运行检查同样的安装、`python`、`pip` 和 `.python-version` 行为。PEP 514
-注册由 runner 套件检查，因为 Server Core 镜像里没有 Python 启动器。
+```bash
+go test -v -run 'TestNativeE2E/^(uv-build|graalpy|python-version)$' ./linux
+```
 
-## 环境变量
+要求：
 
-| 变量 | 默认值 | 含义 |
-| --- | --- | --- |
-| `GRAALPY_VERSION` | Linux `graalpy-24.2.0`；Windows `graalpy3.13-community-25.5.5` | 要安装的 GraalPy 版本 |
-| `GITHUB_TOKEN`、`GH_TOKEN` | 未设置 | 列出 GraalPy 发布时提高 GitHub API 限额 |
-
-GitHub 发布下载偶尔会以瞬时 EOF 结束，所以安装会重试三次。
+- `source build` 和 `mirror` 子测试需要 [平台](platforms.md#linux-构建依赖) 里列出的 Linux
+  构建包。GitHub 的 Ubuntu runner 有这些包；开发机不一定有，缺少时这两个子测试会失败。
+  uv-build、GraalPy 和容器子测试都不需要这些包。
+- Windows 容器测试需要开启 Windows 容器模式的 Docker。`windows-latest` runner 提供它。
+- `GITHUB_TOKEN` 或 `GH_TOKEN` 是可选的。设置后，GraalPy 安装会用它访问 GitHub API，
+  避开匿名访问的限额；不设置时，插件会退回到自己构造的资源地址。

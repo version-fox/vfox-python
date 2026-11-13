@@ -93,8 +93,9 @@ directory (`path`) and name (`version`).
   and GraalPy layouts.
 - Paths outside `ctx.rootPath` are rejected for uv-build, so a malformed index
   cannot make the hook write elsewhere.
-- With `VFOX_PYTHON_REGISTER_PY_LAUNCHER=1`, the hook registers the version
-  under `HKCU\Software\Python\VersionFox\<tag>` following PEP 514. The tag is
+- Unless `VFOX_PYTHON_REGISTER_PY_LAUNCHER` is `0`, `false`, `no` or `off`, the
+  hook registers the version under `HKCU\Software\Python\VersionFox\<tag>`
+  following PEP 514. The tag is
   the full version, with `-32`/`-arm64` for non-default architectures; several
   patch releases can coexist. It never writes `PythonCore`. For GraalPy,
   `SysVersion` is the Python language version and the optional
@@ -106,8 +107,8 @@ directory (`path`) and name (`version`).
 the hook removes `HKCU\Software\Python\VersionFox\<tag>` only when
 `VfoxManaged` is `1` and the registered `InstallPath` still matches the version
 directory. It also removes the empty `VersionFox` company key. The hook runs
-even when `VFOX_PYTHON_REGISTER_PY_LAUNCHER` is unset, so disabling
-registration does not leave old entries behind on uninstall.
+even when `VFOX_PYTHON_REGISTER_PY_LAUNCHER=0` has turned registration off, so
+disabling registration does not leave old entries behind on uninstall.
 
 `lib/pep514.lua` resolves the MSI layout (`path/python.exe`), the uv-build
 layout (`path/python-<version>/python.exe`) and the GraalPy layout
@@ -217,16 +218,13 @@ executes the real shell scripts in `PostInstall` against stubbed process calls.
 It checks native argument encoding, MSI target quoting, the `%` junction,
 exit-code propagation and every failure path.
 
-The E2E workflow installs real Pythons: a source build and a mirror build on
-Linux, an installer and uv-build on Windows, and uv-build and GraalPy on both.
-The Windows GraalPy install also checks PEP 514 registration. It runs `vfox
-link --detect python` against the runner's system Python on Linux, and checks
-that `vfox env` selects a project's `.python-version` on both Linux and Windows.
-
-The workflow also builds and runs the container suite from `tests/e2e/`: an
-Ubuntu image and a Windows Server Core image install GraalPy from Oracle's
-archives and check `python`, `pip` and `.python-version`. See [E2E](e2e.md) for
-the images, the Windows-host requirement and the local commands.
+The E2E suite lives in `tests/e2e` and is written in Go. The Linux package
+installs CPython from source, through the mirror, through uv-build and GraalPy,
+and also runs `vfox link --detect` and a project `.python-version` on the
+runner. The Windows package installs CPython and uv-build, installs GraalPy
+with PEP 514 registration, and checks `.python-version`. Both packages also
+drive the same GraalPy checks in Docker containers through testcontainers-go.
+See [E2E](e2e.md) for the layout and the local commands.
 
 Local commands:
 
@@ -235,8 +233,9 @@ vfox plugin test .
 go run github.com/yuin/gopher-lua/cmd/glua@v1.1.1 tests/windows_install_layouts.lua
 stylua --check .
 lua-language-server --check . --checklevel=Warning
-docker build --file tests/e2e/linux/Dockerfile --tag vfox-python-e2e-linux .
-docker run --rm vfox-python-e2e-linux
+cd tests/e2e && go test -v ./linux
+cd tests/e2e && go test -v ./windows
+VFOX_SKIP_CONTAINER_E2E=1 go test -v ./linux
 ```
 
 ## Checks
@@ -249,8 +248,7 @@ docker run --rm vfox-python-e2e-linux
 | Apache headers | Apache SkyWalking Eyes | `license.yml` |
 | Hook tests | `vfox plugin test .` on Linux and Windows | `test.yml` |
 | Windows command paths | GopherLua | `test.yml` |
-| Container E2E | Docker on Linux and Windows | `e2e.yml` |
-| Real installs | E2E on Linux and Windows | `e2e.yml` |
+| Native and container E2E | Go tests on Linux and Windows | `e2e.yml` |
 
 `stylua.toml` uses four spaces, a 120-column limit and Unix line endings;
 `.gitattributes` keeps checkouts LF so the check agrees with Windows. LuaLS
@@ -302,7 +300,7 @@ checks. Re-run the original failed job to resume a failed publication.
 | `VFOX_PYTHON_USE_UV_BUILD` | Available, PreInstall, PostInstall | use uv-build archives |
 | `VFOX_PYTHON_UV_LIBC` | Available, PreInstall | `gnu` or `musl` override |
 | `VFOX_PYTHON_UV_BUILD_MIRROR` | PreInstall | HTTPS mirror for uv-build archives |
-| `VFOX_PYTHON_REGISTER_PY_LAUNCHER` | PostInstall, PreUninstall | register Windows installs under `HKCU\Software\Python\VersionFox`; opt-in |
+| `VFOX_PYTHON_REGISTER_PY_LAUNCHER` | PostInstall, PreUninstall | register Windows installs under `HKCU\Software\Python\VersionFox`; on by default, `0`, `false`, `no` or `off` disables |
 | `GITHUB_TOKEN`, `GH_TOKEN` | Available | raise the GitHub API limit for the Windows GraalPy release list |
 | `UV_PYTHON_INSTALL_DIR` | Detect | uv's Python directory |
 | `PYENV_ROOT` | Detect | pyenv root |
