@@ -120,21 +120,38 @@ end
 
 -- Registry values and paths are passed as UTF-8 base64 literals. The .NET
 -- Registry API avoids PowerShell provider wildcard and default-value syntax.
-function command.registrySet(subkey, defaultValue, values)
+-- PEP 514 puts the install path and the executable values under the
+-- InstallPath subkey; the other values stay on the tag key.
+function command.registrySet(subkey, installPath, tagValues, installValues)
     local lines = {
         "$base = [Microsoft.Win32.Registry]::CurrentUser;",
         "$key = $base.CreateSubKey(" .. literal(subkey) .. ");",
         "if ($null -eq $key) { throw 'Could not create the Python launcher registry key' };",
         "try {",
-        "    $key.SetValue('', " .. literal(defaultValue) .. ", [Microsoft.Win32.RegistryValueKind]::String);",
     }
-    for _, item in ipairs(values) do
+    for _, item in ipairs(tagValues) do
         lines[#lines + 1] = "    $key.SetValue("
             .. literal(item.name)
             .. ", "
             .. literal(item.value)
             .. ", [Microsoft.Win32.RegistryValueKind]::String);"
     end
+    lines[#lines + 1] = "    $install = $key.CreateSubKey(" .. literal("InstallPath") .. ");"
+    lines[#lines + 1] = "    if ($null -eq $install) { throw 'Could not create the InstallPath registry key' };"
+    lines[#lines + 1] = "    try {"
+    lines[#lines + 1] = "        $install.SetValue('', "
+        .. literal(installPath)
+        .. ", [Microsoft.Win32.RegistryValueKind]::String);"
+    for _, item in ipairs(installValues) do
+        lines[#lines + 1] = "        $install.SetValue("
+            .. literal(item.name)
+            .. ", "
+            .. literal(item.value)
+            .. ", [Microsoft.Win32.RegistryValueKind]::String);"
+    end
+    lines[#lines + 1] = "    } finally {"
+    lines[#lines + 1] = "        $install.Close();"
+    lines[#lines + 1] = "    }"
     lines[#lines + 1] = "} finally {"
     lines[#lines + 1] = "    $key.Close();"
     lines[#lines + 1] = "}"
@@ -148,7 +165,13 @@ function command.registryDeleteIfOwned(subkey, expectedPath)
         "$key = $base.OpenSubKey(" .. literal(subkey) .. ");",
         "if ($null -eq $key) { exit 0 };",
         "$managed = $key.GetValue('VfoxManaged');",
-        "$installPath = $key.GetValue('');",
+        "$installPath = $null;",
+        "$install = $key.OpenSubKey('InstallPath');",
+        "if ($null -ne $install) {",
+        "    $installPath = $install.GetValue('');",
+        "    $install.Close();",
+        "}",
+        "if ([string]::IsNullOrEmpty($installPath)) { $installPath = $key.GetValue('') };",
         "$key.Close();",
         "if ($managed -ne '1') { exit 0 };",
         "if ([string]::IsNullOrEmpty($installPath)) { exit 0 };",

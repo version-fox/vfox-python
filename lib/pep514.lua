@@ -132,21 +132,23 @@ local function registrySubkey(version, archType)
 end
 
 local function registryValues(version, path)
-    local values = {
+    local tagValues = {
         { name = "DisplayName", value = displayName(version) },
         {
             name = "SysVersion",
             value = (isGraalPyVersion(version) and graalPySysVersion(version)) or sysVersion(version),
         },
         { name = "SysArchitecture", value = sysArchitecture(RUNTIME.archType) },
+        { name = "VfoxManaged", value = "1" },
+    }
+    local installValues = {
         { name = "ExecutablePath", value = executablePath(path, version) },
     }
     -- GraalPy has no pythonw.exe; PEP 514 treats the value as optional.
     if not isGraalPyVersion(version) then
-        values[#values + 1] = { name = "WindowedExecutablePath", value = path .. "\\pythonw.exe" }
+        installValues[#installValues + 1] = { name = "WindowedExecutablePath", value = path .. "\\pythonw.exe" }
     end
-    values[#values + 1] = { name = "VfoxManaged", value = "1" }
-    return values
+    return tagValues, installValues
 end
 
 local pep514 = {}
@@ -182,8 +184,9 @@ function pep514.register(ctx)
     local subkey = registrySubkey(version, RUNTIME.archType)
 
     print("Registering Python " .. version .. " with the Python launcher...")
+    local tagValues, installValues = registryValues(version, path)
     local ok, result = pcall(function()
-        return os.execute(windowsCommand.registrySet(subkey, path, registryValues(version, path)))
+        return os.execute(windowsCommand.registrySet(subkey, path, tagValues, installValues))
     end)
     if not ok then
         print("Warning: Could not register Python with the Python launcher: " .. tostring(result))
