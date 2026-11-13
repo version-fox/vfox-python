@@ -42,7 +42,7 @@ end
 ---
 ---   3.12            -> the newest installed 3.12.x
 ---   cpython-3.12.8  -> 3.12.8, or its linked 3.12.8-system
----   system          -> the newest linked system Python
+---   system          -> the newest regular linked system Python
 ---
 --- A version that is not installed selects nothing; vfox leaves the current
 --- version in place rather than installing one behind the user's back.
@@ -61,7 +61,7 @@ function PLUGIN:ParseLegacyFile(ctx)
 
     local name = python_version.find_installed(installed, request)
     if name == nil and ctx.strategy == "latest_installed" then
-        name = python_version.newest(names)
+        name = python_version.newest_installed(names)
     end
     if name == nil then
         return {}

@@ -4,6 +4,27 @@
 
 ## Unreleased
 
+- A partial version such as `python@3.12` now selects a linked install named
+  with `-opt`, such as `3.12.8-opt`, and `python@3.13t` selects a linked
+  free-threaded install, such as `3.13.1t-uv`. The source suffix is no longer
+  read as part of the release.
+- A `.python-version` file that names a partial version such as `3.13` follows
+  the rule `vfox use` follows: it no longer selects a free-threaded (`t`) or
+  pre-release install. `3.13t` still selects a free-threaded install; a
+  pre-release needs its full name, such as `3.14.0a4`.
+- When two installs share a version, such as `3.12.8-local` and
+  `3.12.8-system`, `.python-version`, the `latest_installed` fallback and
+  `system` pick the bare name first, then the name that sorts first. Before,
+  the choice depended on the order in which the names were listed.
+- `system` and the `latest_installed` fallback now choose a regular CPython
+  install. Before, they compared release numbers across every installed name,
+  so `system` picked `graalpy-24.2.0-system` over `3.12.3-system`, and a
+  free-threaded or pre-release install could win on its number alone. Both
+  still fall back to any installed name when no CPython install exists. Name a
+  free-threaded, pre-release or GraalPy install in full to select it.
+
+## 0.6.3
+
 - When a source build fails, the error names the usual cause, a missing build
   dependency such as `zlib1g-dev`, and links to the platform notes. Without the zlib
   headers, `make install` fails in ensurepip.

@@ -4,6 +4,18 @@
 
 ## 未发布
 
+- 部分版本号（如 `python@3.12`）现在会选中名字带 `-opt` 的链接安装，如 `3.12.8-opt`；
+  `python@3.13t` 会选中自由线程的链接安装，如 `3.13.1t-uv`。来源后缀不再被当作版本的一部分。
+- `.python-version` 中的部分版本号（如 `3.13`）与 `vfox use` 遵循同一规则：不再选中自由线程
+  （`t`）或预发布版。`3.13t` 仍然选中自由线程版本；预发布版请写完整名字，如 `3.14.0a4`。
+- 两个安装的版本号相同（如 `3.12.8-local` 和 `3.12.8-system`）时，`.python-version`、`system`
+  和 `latest_installed` 的回退都先选裸版本，其余按名字排序取第一个，不再取决于名字的列出顺序。
+- `system` 和 `latest_installed` 的回退现在只选常规的 CPython 安装。过去它们把所有已安装名字的版本号放在一起比较，
+  所以 `system` 会选中 `graalpy-24.2.0-system` 而不是 `3.12.3-system`，自由线程和预发布版也可能仅凭版本号更大而被选中。
+  没有 CPython 安装时，回退仍然选已安装的任意名字。要选中自由线程、预发布版或 GraalPy，请写完整名字。
+
+## 0.6.3
+
 - 源码构建失败时，报错会指出常见原因：缺少构建依赖，例如 Debian/Ubuntu 上的 `zlib1g-dev`，并链接到
   平台说明。没有 zlib 头文件时，`make install` 会在 ensurepip 步骤失败。
 - Windows 上，如果 python.org 没有某个版本的安装包（如 3.12.12），`vfox install` 会在下载前

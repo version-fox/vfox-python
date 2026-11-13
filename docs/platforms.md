@@ -16,10 +16,11 @@
 The CPython source build takes the pyenv tag and version list, clones pyenv at
 that tag, and runs its `python-build`. It needs a C toolchain and the headers
 Python links against. The Windows path downloads the python.org installer,
-extracts its MSIs with the bundled WiX tools and runs `ensurepip`; it needs no
-compiler. GraalPy is downloaded from Oracle's releases on every supported
-platform and unpacked; it needs no compiler. Linux and macOS have amd64 and
-arm64 assets; Windows only amd64.
+installs its MSIs into the `python-<version>` directory and runs `ensurepip`; for an EXE,
+the bundled WiX tools extract the MSIs first. It needs no compiler. GraalPy is
+downloaded from Oracle's releases on every supported platform and unpacked; it
+needs no compiler. Linux and macOS have amd64 and arm64 assets; Windows only
+amd64.
 
 ## Version coverage
 
@@ -152,8 +153,9 @@ not. It checks in this order:
 2. `python-<version>.amd64.msi`, `python-<version>.arm64.msi`, or, for 32-bit,
    `python-<version>.msi`, when step 1 finds nothing.
 
-If neither exists, the install fails with `No available installer found for
-current version`. Two examples from python.org:
+If neither exists, `vfox install` stops before it downloads anything, with
+`Python <version> has no Windows installer on python.org`. Two examples from
+python.org:
 
 | Version | Published on python.org | Installer used |
 | --- | --- | --- |
@@ -162,7 +164,7 @@ current version`. Two examples from python.org:
 
 - **EXE:** the file is a bundle. The plugin extracts its MSIs with the bundled
   WiX `dark.exe`, deletes `launcher.msi`, `path.msi`, `appendpath.msi` and
-  `pip.msi`, and installs the remaining MSIs into the version directory with
+  `pip.msi`, and installs the remaining MSIs into the `python-<version>` directory with
   `msiexec /quiet /a <msi> TargetDir=<dir>`. It then runs `ensurepip`. Because
   the launcher, PATH and pip MSIs are skipped, a vfox install adds no `py.exe`,
   does not change `PATH`, and gets pip from `ensurepip`.

@@ -15,7 +15,7 @@
 
 CPython 的源码构建取 pyenv 的 tag 和版本列表，把 pyenv 克隆到那个 tag，再运行
 它的 `python-build`。它需要 C 工具链和 Python 链接的头文件。Windows 则下载 python.org
-的安装包，用自带的 WiX 工具解开 MSI，再运行 `ensurepip`，不需要编译器。GraalPy
+的安装包，把其中的 MSI 装进 `python-<版本>` 目录，再运行 `ensurepip`。EXE 需要先用自带的 WiX 工具解出 MSI。不需要编译器。GraalPy
 在所有支持的平台上都从 Oracle 的发布页下载并解压，不需要编译器；Linux 和
 macOS 有 amd64 和 arm64 资源，Windows 只有 amd64。
 
@@ -137,7 +137,7 @@ CPython 来自 python.org。当 python.org 为该架构提供 **EXE** 安装包�
 2. `python-<版本>.amd64.msi`、`python-<版本>.arm64.msi`，32 位则是 `python-<版本>.msi`，
    仅在第 1 步没找到时使用。
 
-两者都不存在时，安装失败，提示 `No available installer found for current version`。
+两者都不存在时，`vfox install` 会在下载任何文件之前停止，并提示 `Python <版本> has no Windows installer on python.org`。
 下面是 python.org 上的两个例子：
 
 | 版本 | python.org 上发布的文件 | 使用的安装包 |
@@ -147,7 +147,7 @@ CPython 来自 python.org。当 python.org 为该架构提供 **EXE** 安装包�
 
 - **EXE：** 这个文件是一个捆绑包。插件用自带的 WiX `dark.exe` 解出其中的 MSI，删除
   `launcher.msi`、`path.msi`、`appendpath.msi` 和 `pip.msi`，再用
-  `msiexec /quiet /a <msi> TargetDir=<目录>` 把其余的 MSI 安装进版本目录，最后运行
+  `msiexec /quiet /a <msi> TargetDir=<目录>` 把其余的 MSI 安装进 `python-<版本>` 目录，最后运行
   `ensurepip`。因为启动器、PATH 和 pip 的 MSI 都被跳过，vfox 的安装不会添加 `py.exe`，
   不改动 `PATH`，pip 由 `ensurepip` 提供。
 - **MSI：** 插件用同样的方式安装 MSI，即 `msiexec /quiet /a <msi> TargetDir=<目录>`，

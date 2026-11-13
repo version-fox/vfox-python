@@ -21,6 +21,7 @@ lib/python_version.lua          version parsing and installed-name matching
 lib/detect_python.lua           the Detect hook's sources and filtering
 tests/*_test.lua                offline hook tests, run by vfox plugin test
 tests/windows_install_layouts.lua  the Windows command paths, with stubbed processes
+tests/e2e/                      Go end-to-end suites for Linux and Windows; see e2e.md
 tests/fixtures/                 .python-version files used by the legacy-file test
 bin/WiX/                        the WiX tools used to extract Windows EXE installers
 .github/workflows/              test, lint, license, e2e and publish
@@ -62,8 +63,10 @@ looked up.
 - `version = "latest"` is resolved to `Available({})[1].version`. The list is
   newest CPython first, so this can be a pre-release; GraalPy is selected by
   its full name.
-- On Windows, a CPython version without an exact EXE or MSI for the architecture
-  is rejected before any download; `Available` should already have filtered it.
+- On Windows, `Available` lists only the exact installer names on the download
+  page. PreInstall still sends a HEAD request for the EXE and then for the MSI,
+  and stops before any download when neither answers 200, with `Python <version>
+  has no Windows installer on python.org`.
 - A GraalPy version is resolved against Oracle's release assets for the running
   platform. The hook returns the official archive URL and its SHA-256; Linux and
   macOS use `linux-*`/`macos-*` tarballs, Windows uses `windows-amd64.zip`.
@@ -128,6 +131,11 @@ installation belongs to its owner, and missing packaging tools are normal for a
 system Python. `isLinkedPythonInstall` tests the `python-<version>` link in the
 version directory with `test -L`.
 
+On Windows the hook returns at once, so none of the checks above run there. On
+Unix, an installation with no `bin` directory stops `vfox use` with an error
+that names the problem and the `vfox uninstall` and `vfox install` commands to
+run again, instead of printing "Now using" for a broken install.
+
 ### EnvKeys
 
 - Unix: `PATH = ctx.path .. "/bin"`; for GraalPy, `<prefix>/bin` with the
@@ -155,9 +163,10 @@ already linked.
   Windows `Programs\Python`, `C:\Python*`, `C:\graalpy*`, the py launcher and
   the Store),
 - queries each interpreter once with `-E -s -c` and a one-line program,
-- asks for `sys.version`, `sys.prefix`, `sys.base_prefix`, the real executable
-  and `sys.abiflags`, plus `__graalpython__.get_graalvm_version()` and the
-  Oracle/Community edition for GraalPy,
+- asks for the Python version and implementation (`platform`), `sys.prefix`,
+  `sys.base_prefix`, the real executable and `sys.abiflags`, plus
+  `__graalpython__.get_graalvm_version()` and the Oracle/Community edition for
+  GraalPy,
 - skips PyPy and other implementations, virtual environments, vfox's own
   directory and root prefixes,
 - names the result `<version>[-t]-<source>` for CPython and
@@ -180,7 +189,15 @@ fails silently.
 
 The hook returns `{ version = name }` or `{}`. A version that is not installed
 selects nothing. With `strategy = "latest_installed"`, an unreadable or missing
-entry falls back to the newest installed name.
+entry falls back to the newest regular CPython install, or else to the newest
+installed name.
+
+A partial version such as `3.13` in a `.python-version` file is resolved with
+`find_release`, the function PreUse uses, so it never selects a free-threaded
+or pre-release name. Other requests, such as `3.12.8`, are matched as a prefix,
+so a linked `3.12.8-system` still counts. When several names share a version,
+the bare name wins, then the name that sorts first, so the result does not
+depend on the order the names are listed.
 
 ### windows_command
 
@@ -227,7 +244,10 @@ installs CPython from source, through the mirror, through uv-build and GraalPy,
 and also runs `vfox link --detect` and a project `.python-version` on the
 runner. The Windows package installs CPython and uv-build, installs GraalPy
 with PEP 514 registration, and checks `.python-version`. Both packages also
-drive the same GraalPy checks in Docker containers through testcontainers-go.
+run GraalPy checks in Docker containers: the Linux package through
+testcontainers-go, the Windows package through the `docker` CLI, because
+testcontainers-go creates a bridge network for every container and a Windows
+engine has no bridge driver.
 See [E2E](e2e.md) for the layout and the local commands.
 
 Local commands:
@@ -268,8 +288,9 @@ is missing.
 ## CI
 
 - `test.yml` runs the offline tests on `ubuntu-latest` and `windows-latest` with
-  vfox 1.1.0 (checksum-pinned), the GopherLua layouts on Linux, and the real
-  Windows MSI installation with paths full of spaces and shell characters.
+  vfox 1.1.0 (checksum-pinned), the GopherLua layouts on Linux, and a real
+  install of CPython 3.14.5 through the EXE installer on Windows, with paths full
+  of spaces and shell characters, driven by the released vfox 1.0.12.
 - `lint.yml` runs StyLua, LuaLS and actionlint.
 - `license.yml` runs the header check.
 - `e2e.yml` builds and installs real Pythons on Linux and Windows, including a
@@ -282,7 +303,11 @@ Maintainers publish from **Actions → Plugin → Run workflow** on the default
 branch. Enter a stable plugin version without the `v` prefix; the shared
 workflow updates `metadata.lua`, creates the version commit and tag, and
 publishes the ZIP and manifest in this repository. Pull requests only run the
-checks. Re-run the original failed job to resume a failed publication.
+checks. Re-run the original failed job to resume a failed publication. No local
+tag or release token is needed. Pushing a `v*` tag also runs the release job; it
+is supported when `PLUGIN.version` in `metadata.lua` already matches the tag. The
+workflows call the shared `version-fox/plugin-manifest-action` at `@v1`, and
+updating that tool does not release this plugin.
 
 ## Adding a detection source
 
