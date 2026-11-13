@@ -32,6 +32,11 @@ import (
 
 const windowsBaseImage = "mcr.microsoft.com/windows/servercore:ltsc2025-KB5122871-amd64"
 
+// pwshPath is PowerShell 7 in the image. The exec process is started from the
+// command line Docker is given, so the full path avoids a PATH lookup, as the
+// image's CMD does.
+const pwshPath = "C:/Program Files/PowerShell/7/pwsh.exe"
+
 // TestContainerE2E builds tests/e2e/windows/Dockerfile once, starts a
 // long-lived Server Core container and drives GraalPy through pwsh exec calls.
 // The assertions stay in Go.
@@ -125,7 +130,7 @@ func execRun(t testing.TB, container, script string, env ...string) (int, string
 	for _, item := range env {
 		args = append(args, "--env", item)
 	}
-	args = append(args, container, "pwsh", "-NoProfile", "-EncodedCommand", encodePowerShell(pwshPrelude+" "+script))
+	args = append(args, container, pwshPath, "-NoProfile", "-EncodedCommand", encodePowerShell(pwshPrelude+" "+script))
 	output, err := exec.Command("docker", args...).CombinedOutput()
 	if err == nil {
 		return 0, string(output)

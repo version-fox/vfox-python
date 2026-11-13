@@ -60,8 +60,9 @@ RUN $ErrorActionPreference = 'Stop'; `
     Move-Item -LiteralPath $vfox.FullName -Destination C:\vfox\vfox.exe -Force; `
     if (-not (Test-Path C:\vfox\vfox.exe)) { throw 'vfox.exe is missing after the move' }
 
-ENV PATH="C:\vfox;C:\Program Files\PowerShell\7;${PATH}"
+ENV PATH="C:\vfox;C:\Program Files\PowerShell\7;C:\Windows\system32;C:\Windows;${PATH}"
 
 # The Go test drives every scenario through pwsh exec calls; the container
-# only has to stay alive.
-CMD ["powershell", "-NoProfile", "-Command", "while ($true) { Start-Sleep 3600 }"]
+# only has to stay alive. pwsh is named by its full path: a bare `powershell`
+# init command failed on the runner with "The system cannot find the file specified".
+CMD ["C:/Program Files/PowerShell/7/pwsh.exe", "-NoProfile", "-Command", "while ($true) { Start-Sleep 3600 }"]
