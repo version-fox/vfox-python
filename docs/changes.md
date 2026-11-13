@@ -4,6 +4,10 @@
 
 ## Unreleased
 
+- Partial versions such as `python@3.12` resolve in `vfox install` and `vfox use` for every
+  mode. Install picks the newest stable release that the mode lists (pyenv, python.org or the
+  uv-build index); use picks the newest installed match. uv-build installs are recorded under
+  their full version, and Windows MSI installs create the same `python3` aliases as EXE installs.
 - GraalPy is supported: Oracle GraalVM and Community distributions install from
   Oracle's official archives on Linux, macOS and Windows amd64. The Linux and
   macOS version list still comes from pyenv. Version notes mark the

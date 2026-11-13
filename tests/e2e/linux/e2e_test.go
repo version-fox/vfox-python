@@ -83,6 +83,9 @@ python -V
 
 	t.Run("uv-build", func(t *testing.T) {
 		uvVersion = common.NewestUvBuildVersion(t)
+		// The request is the minor version: install and use both resolve it to
+		// the newest release of that minor, which python -V then prints in full.
+		minor := common.MinorVersion(uvVersion)
 		output := run(t, map[string]string{"VFOX_PYTHON_USE_UV_BUILD": "1"}, fmt.Sprintf(`
 set -euo pipefail
 eval "$(vfox activate bash)"
@@ -92,8 +95,8 @@ eval "$(vfox env -s bash)"
 python -V
 python -m pip --version
 pip --version
-`, uvVersion, uvVersion))
-		common.RequireContains(t, output, uvVersion, "uv-build Python")
+`, minor, minor))
+		common.RequireContains(t, output, "Python "+uvVersion, "uv-build Python")
 		common.RequireContains(t, output, "pip", "uv-build pip")
 	})
 

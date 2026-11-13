@@ -26,7 +26,7 @@ Linux，在 runner 上：
 
 - `source build`：从源码构建 CPython 3.12.2。
 - `mirror`：从华为云镜像安装 CPython 3.12.1。
-- `uv-build`：最新的 CPython 3.11 uv-build 包，并检查 pip。
+- `uv-build`：`python@3.11` 安装最新的 CPython 3.11 uv-build 包，`vfox use` 选中它，检查完整版本号和 pip。
 - `graalpy`：GraalPy 24.2.0，按实现名断言。
 - `link`：`vfox link --detect python` 纳入已安装的 Python，`vfox list` 显示为已链接。
 - `python-version`：项目里的 `.python-version` 指向 uv-build 的 CPython，并且优先于全局的
@@ -43,6 +43,7 @@ Linux，在容器里：
 Windows，在 runner 上：
 
 - `installer`：CPython 3.12.2，下载地址是 EXE：`python-3.12.2-amd64.exe`。
+- `MSI installer`：CPython 3.4.4，python.org 只发布了它的 MSI。下载地址是 `python-3.4.4.amd64.msi`，`python3` 会解析到插件创建的别名。
 - `mirror`、`uv-build`、`graalpy`、`python-version`：和 Linux 一样。GraalPy 子测试在
   `py -0p` 里找到自己的项，因为启动器注册默认开启。
 

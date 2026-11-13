@@ -176,6 +176,70 @@ function windowsInstall(ctx)
     end
 end
 
+--- Creates python3.exe, python3.12.exe and their pythonw counterparts next to
+--- python.exe, plus the venv launcher aliases when the install has them. The
+--- python.org installers keep these aliases in a shared directory, so every
+--- vfox install makes its own copies for `python3` to resolve after `vfox use`.
+local function createPythonAliases(qInstallPath, version)
+    -- Define paths for executables based on installation path
+    local pythonExePath = qInstallPath .. "\\python.exe"
+    local pythonwExePath = qInstallPath .. "\\pythonw.exe"
+    local venvlauncherExePath = qInstallPath .. "\\Lib\\venv\\scripts\\nt\\python.exe"
+
+    local pattern = "(%d+)%.(%d+)"
+    local major, minor = string.match(version, pattern)
+    local majorMinor = major .. minor
+    local majorDotMinor = major .. "." .. minor
+
+    -- Copy Python executables with versioned names
+    -- python.exe
+    local files = {
+        qInstallPath .. "\\python" .. major .. ".exe",
+        qInstallPath .. "\\python" .. majorMinor .. ".exe",
+        qInstallPath .. "\\python" .. majorDotMinor .. ".exe",
+    }
+    for _, file in ipairs(files) do
+        local command = windowsCommand.copy(pythonExePath, file)
+        if os.execute(command) ~= 0 then
+            error("Failed to create Python executable alias: " .. file)
+        end
+    end
+
+    -- pythonw.exe
+    local files = {
+        qInstallPath .. "\\pythonw" .. major .. ".exe",
+        qInstallPath .. "\\pythonw" .. majorMinor .. ".exe",
+        qInstallPath .. "\\pythonw" .. majorDotMinor .. ".exe",
+    }
+    for _, file in ipairs(files) do
+        local command = windowsCommand.copy(pythonwExePath, file)
+        if os.execute(command) ~= 0 then
+            error("Failed to create Python executable alias: " .. file)
+        end
+    end
+
+    -- Check if venvlauncher exists
+    local file = io.open(venvlauncherExePath, "r")
+    if file then
+        io.close(file)
+        -- python.exe
+        local files = {
+            qInstallPath .. "\\Lib\\venv\\scripts\\nt\\python" .. major .. ".exe",
+            qInstallPath .. "\\Lib\\venv\\scripts\\nt\\python" .. majorMinor .. ".exe",
+            qInstallPath .. "\\Lib\\venv\\scripts\\nt\\python" .. majorDotMinor .. ".exe",
+            qInstallPath .. "\\Lib\\venv\\scripts\\nt\\pythonw" .. major .. ".exe",
+            qInstallPath .. "\\Lib\\venv\\scripts\\nt\\pythonw" .. majorMinor .. ".exe",
+            qInstallPath .. "\\Lib\\venv\\scripts\\nt\\pythonw" .. majorDotMinor .. ".exe",
+        }
+        for _, file in ipairs(files) do
+            local command = windowsCommand.copy(venvlauncherExePath, file)
+            if os.execute(command) ~= 0 then
+                error("Failed to create Python venv executable alias: " .. file)
+            end
+        end
+    end
+end
+
 function windowsInstallMsi(path, url, version, filename)
     -- WARNNING:
     -- The msi installer for python 2.x must be downloaded to another directory
@@ -221,6 +285,8 @@ function windowsInstallMsi(path, url, version, filename)
             error("Install pip failed. exit " .. exitCode)
         end
     end
+
+    createPythonAliases(qInstallPath, version)
 end
 
 function windowsInstallExe(path, url, version, filename)
@@ -322,63 +388,7 @@ function windowsInstallExe(path, url, version, filename)
         end
     end
 
-    -- Define paths for executables based on installation path
-    local pythonExePath = qInstallPath .. "\\python.exe"
-    local pythonwExePath = qInstallPath .. "\\pythonw.exe"
-    local venvlauncherExePath = qInstallPath .. "\\Lib\\venv\\scripts\\nt\\python.exe"
-
-    local pattern = "(%d+)%.(%d+)"
-    local major, minor = string.match(version, pattern)
-    local majorMinor = major .. minor
-    local majorDotMinor = major .. "." .. minor
-
-    -- Copy Python executables with versioned names
-    -- python.exe
-    local files = {
-        qInstallPath .. "\\python" .. major .. ".exe",
-        qInstallPath .. "\\python" .. majorMinor .. ".exe",
-        qInstallPath .. "\\python" .. majorDotMinor .. ".exe",
-    }
-    for _, file in ipairs(files) do
-        local command = windowsCommand.copy(pythonExePath, file)
-        if os.execute(command) ~= 0 then
-            error("Failed to create Python executable alias: " .. file)
-        end
-    end
-
-    -- pythonw.exe
-    local files = {
-        qInstallPath .. "\\pythonw" .. major .. ".exe",
-        qInstallPath .. "\\pythonw" .. majorMinor .. ".exe",
-        qInstallPath .. "\\pythonw" .. majorDotMinor .. ".exe",
-    }
-    for _, file in ipairs(files) do
-        local command = windowsCommand.copy(pythonwExePath, file)
-        if os.execute(command) ~= 0 then
-            error("Failed to create Python executable alias: " .. file)
-        end
-    end
-
-    -- Check if venvlauncher exists
-    local file = io.open(venvlauncherExePath, "r")
-    if file then
-        io.close(file)
-        -- python.exe
-        local files = {
-            qInstallPath .. "\\Lib\\venv\\scripts\\nt\\python" .. major .. ".exe",
-            qInstallPath .. "\\Lib\\venv\\scripts\\nt\\python" .. majorMinor .. ".exe",
-            qInstallPath .. "\\Lib\\venv\\scripts\\nt\\python" .. majorDotMinor .. ".exe",
-            qInstallPath .. "\\Lib\\venv\\scripts\\nt\\pythonw" .. major .. ".exe",
-            qInstallPath .. "\\Lib\\venv\\scripts\\nt\\pythonw" .. majorMinor .. ".exe",
-            qInstallPath .. "\\Lib\\venv\\scripts\\nt\\pythonw" .. majorDotMinor .. ".exe",
-        }
-        for _, file in ipairs(files) do
-            local command = windowsCommand.copy(venvlauncherExePath, file)
-            if os.execute(command) ~= 0 then
-                error("Failed to create Python venv executable alias: " .. file)
-            end
-        end
-    end
+    createPythonAliases(qInstallPath, version)
 end
 
 local pyenvBranch = ""

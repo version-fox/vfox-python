@@ -52,8 +52,8 @@ bare `py` runs:
 
 ```text
  -V:3.13 *        C:\Users\you\AppData\Local\Programs\Python\Python313\python.exe
- -V:VersionFox/3.12.10 C:\Users\you\.vfox\cache\python\v-3.12.10\python.exe
- -V:VersionFox/3.12.9 C:\Users\you\.vfox\cache\python\v-3.12.9\python.exe
+ -V:VersionFox/3.12.10 C:\Users\you\.vfox\cache\python\v-3.12.10\python-3.12.10\python.exe
+ -V:VersionFox/3.12.9 C:\Users\you\.vfox\cache\python\v-3.12.9\python-3.12.9\python.exe
 ```
 
 Two patch releases can coexist because each has its own tag. PythonCore has one
@@ -128,18 +128,17 @@ HKCU\Software\Python\VersionFox\3.12.10
     SysArchitecture = "64bit"
     VfoxManaged = "1"
     InstallPath
-        (Default) = "C:\Users\you\.vfox\cache\python\v-3.12.10"
-        ExecutablePath = "C:\Users\you\.vfox\cache\python\v-3.12.10\python.exe"
-        WindowedExecutablePath = "C:\Users\you\.vfox\cache\python\v-3.12.10\pythonw.exe"
+        (Default) = "C:\Users\you\.vfox\cache\python\v-3.12.10\python-3.12.10"
+        ExecutablePath = "C:\Users\you\.vfox\cache\python\v-3.12.10\python-3.12.10\python.exe"
+        WindowedExecutablePath = "C:\Users\you\.vfox\cache\python\v-3.12.10\python-3.12.10\pythonw.exe"
 ```
 
 The values follow PEP 514. `InstallPath` is the install directory, and
-`ExecutablePath` points at its `python.exe`, which is under `bin\` for GraalPy.
-For the python.org EXE and MSI installers the install directory is the version
-directory itself. uv-build keeps the interpreter one level down, in
-`python-3.12.10\`, and the entries point there.
-`VfoxManaged = "1"` marks entries vfox wrote, and `vfox uninstall` removes only
-those.
+`ExecutablePath` points at the `python.exe` inside it. For CPython, every vfox
+install route (EXE, MSI and uv-build) puts `python.exe` in the `python-<version>`
+directory under the version directory, as the example shows. GraalPy keeps its
+`python.exe` under `bin\`. `VfoxManaged = "1"` marks entries vfox wrote, and
+`vfox uninstall` removes only those.
 
 The tag is the full version, with `-32` or `-arm64` for other architectures, so
 several patch releases can coexist:

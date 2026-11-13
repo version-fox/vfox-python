@@ -133,6 +133,52 @@ fails("3.9.20", "No uv-build prebuilt Python found")
 fails("3.11.11", "Invalid uv-build sha256")
 fails("graalpy-24.2.0", "uv-build provides CPython only")
 
+-- A partial request selects the newest stable release it starts, split at a
+-- dot. The checksum tells the builds apart, so each case checks the archive.
+local function build(version, variant, checksum)
+    local filename = "cpython-"
+        .. version
+        .. "+20241016-x86_64-unknown-linux-gnu-"
+        .. (variant == "freethreaded" and "freethreaded-" or "")
+        .. "install_only_stripped.tar.gz"
+    return {
+        implementation = "cpython",
+        version = version,
+        variant = variant,
+        filename = filename,
+        url = github .. filename,
+        asset = { sha256 = string.rep(checksum, 64) },
+    }
+end
+
+state.items = {
+    build("3.11.18", "default", "1"),
+    build("3.12.9", "default", "2"),
+    build("3.12.16", "default", "3"),
+    build("3.13.18", "default", "4"),
+    build("3.13.18", "freethreaded", "5"),
+    build("3.16.0a2", "default", "6"),
+    build("3.16.0a2", "freethreaded", "7"),
+}
+
+local function selects(version, expectedVersion, checksum)
+    local package = plugin:PreInstall({ version = version })
+    assert(package.version == expectedVersion, version .. " selected " .. tostring(package.version))
+    assert(package.sha256 == string.rep(checksum, 64), version .. " selected the wrong archive")
+end
+
+selects("3.12", "3.12.16", "3") -- newest 3.12, not the lexically larger 3.12.9
+selects("3.12.9", "3.12.9", "2") -- an exact name always wins
+selects("3", "3.13.18", "4") -- the pre-release 3.16.0a2 is never a partial answer
+selects("3.13", "3.13.18", "4") -- a plain minor request never picks free-threaded
+selects("3.13t", "3.13.18t", "5") -- the free-threaded request names its own builds
+selects("3.13.18t", "3.13.18t", "5")
+selects("3.16.0a2", "3.16.0a2", "6")
+selects("3.16.0a2t", "3.16.0a2t", "7")
+fails("3.12.1", "No uv-build prebuilt Python found for version 3.12.1")
+fails("3.1", "No uv-build prebuilt Python found for version 3.1")
+fails("3.16", "No uv-build prebuilt Python found for version 3.16")
+
 state.status = 503
 local ok, err = pcall(function()
     plugin:Available({})

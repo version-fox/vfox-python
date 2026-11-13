@@ -67,6 +67,21 @@ python -V
 		common.RequireContains(t, output, "python-3.12.2-amd64.exe", "installer EXE download")
 	})
 
+	t.Run("MSI installer", func(t *testing.T) {
+		output := run(t, nil, `
+Invoke-Expression "$(vfox activate pwsh)"
+vfox install python@3.4.4
+vfox use -g python@3.4.4
+Invoke-Expression "$(vfox env -s pwsh)"
+python -V
+python3 -V
+`)
+		common.RequireContains(t, output, "Python 3.4.4", "MSI installer Python")
+		// python.org publishes 3.4.4 only as an MSI, so the plugin takes the MSI
+		// route: msiexec into the version directory, then the python3 aliases.
+		common.RequireContains(t, output, "python-3.4.4.amd64.msi", "MSI installer download")
+	})
+
 	t.Run("mirror", func(t *testing.T) {
 		output := run(t, map[string]string{
 			"VFOX_PYTHON_MIRROR": "https://mirrors.huaweicloud.com/python/",
@@ -82,6 +97,9 @@ python -V
 
 	t.Run("uv-build", func(t *testing.T) {
 		uvVersion = common.NewestUvBuildVersion(t)
+		// The request is the minor version, as on Linux: install and use resolve
+		// it to the newest release of that minor.
+		minor := common.MinorVersion(uvVersion)
 		output := run(t, map[string]string{"VFOX_PYTHON_USE_UV_BUILD": "1"}, fmt.Sprintf(`
 Invoke-Expression "$(vfox activate pwsh)"
 vfox install python@%s
@@ -90,8 +108,8 @@ Invoke-Expression "$(vfox env -s pwsh)"
 python -V
 python -m pip --version
 pip --version
-`, uvVersion, uvVersion))
-		common.RequireContains(t, output, uvVersion, "uv-build Python")
+`, minor, minor))
+		common.RequireContains(t, output, "Python "+uvVersion, "uv-build Python")
 		common.RequireContains(t, output, "pip", "uv-build pip")
 	})
 

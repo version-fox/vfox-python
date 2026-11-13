@@ -41,11 +41,12 @@ A free-threaded release is selected with the same `t` suffix on every source:
 
 ```bash
 vfox install python@3.13.1t
-VFOX_PYTHON_USE_UV_BUILD=1 vfox install python@3.13.18t
+VFOX_PYTHON_USE_UV_BUILD=1 vfox install python@3.13t
 ```
 
-The uv-build name is the one `vfox search python` shows while the variable is
-set; its free-threaded names end in `t`, such as `3.13.18t`.
+A partial name resolves in each mode: `python@3.13t` is the newest free-threaded
+3.13 release that the mode lists, and a plain `python@3.13` never picks a
+free-threaded build.
 
 Windows free-threaded releases come through uv-build; the stable installer list
 does not include the `t` builds.
@@ -77,13 +78,15 @@ sudo apt install --assume-yes make build-essential libssl-dev zlib1g-dev \
   libffi-dev liblzma-dev
 ```
 
-To avoid that step on Ubuntu, use uv-build. It needs no `sudo` and no `apt`.
-Install a name that `vfox search python` shows while the variable is set:
+To avoid that step on Ubuntu, use uv-build. It needs no `sudo` and no `apt`:
 
 ```bash
 export VFOX_PYTHON_USE_UV_BUILD=1
-vfox install python@3.12.16
+vfox install python@3.12
 ```
+
+`python@3.12` installs the newest 3.12 release in the uv-build index, and
+`vfox use -g python@3.12` selects it.
 
 Fedora and RHEL, for a source build:
 
@@ -153,10 +156,13 @@ current version`. Two examples from python.org:
   the launcher, PATH and pip MSIs are skipped, a vfox install adds no `py.exe`,
   does not change `PATH`, and gets pip from `ensurepip`.
 - **MSI:** the plugin installs the MSI the same way, with
-  `msiexec /quiet /a <msi> TargetDir=<dir>`, and then runs `ensurepip`.
+  `msiexec /quiet /a <msi> TargetDir=<dir>`, then runs `ensurepip` and creates
+  the same `python3` aliases as the EXE route. python.org publishes 3.4.4 only as
+  an MSI, and the Windows E2E suite installs that release this way.
 
-Both routes leave `python.exe` directly in the version directory, for example
-`%USERPROFILE%\.vfox\cache\python\v-3.12.10\python.exe`.
+Every route leaves `python.exe` in the `python-<version>` directory under the
+version directory, for example
+`%USERPROFILE%\.vfox\cache\python\v-3.12.10\python-3.12.10\python.exe`.
 
 - The installer normally creates `python3.exe`, `python3.12.exe` and their
   `pythonw` counterparts in a shared directory. The plugin creates them next to
@@ -195,10 +201,10 @@ A GraalPy install is a download and unpack: about 150 MB on Linux and 600 MB on
 Windows.
 
 The E2E suites in `tests/e2e` cover these paths. On Linux the runner installs a
-source build, a mirror build, uv-build, GraalPy and `vfox link`, and a bare
-Ubuntu container installs uv-build and GraalPy. On Windows the runner installs
-the EXE installer, a mirror build, uv-build and GraalPy, and a Server Core
-container installs GraalPy.
+source build, a mirror build, uv-build (by its minor version), GraalPy and
+`vfox link`, and a bare Ubuntu container installs uv-build and GraalPy. On Windows
+the runner installs the EXE installer, the MSI-only 3.4.4, a mirror build, uv-build
+and GraalPy, and a Server Core container installs GraalPy.
 
 ## Python 2
 

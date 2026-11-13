@@ -26,6 +26,10 @@ vfox install python@3.12.2     # 正好这个版本
 vfox use python@3.12           # 已安装的 3.12.x 里最新的
 ```
 
+部分版本号两边都会解析。`PreInstall` 选出版本列表里最新的稳定版；`PreUse` 选出已安装里
+最新的匹配项，同一版本时裸名字优先于带 `-system` 等来源后缀的名字。普通请求从不选自由线程
+（`t`）或预发布版，所以 `python@3.13` 不会选到 `python@3.13t`。
+
 `latest` 由 `PreInstall` 解析成 `Available` 返回的第一个版本。列表按从新到旧
 排列，所以它是这个平台列出的最新 CPython 版本；有预发布版时，也可能是一个
 预发布版。GraalPy 需要写出完整版本名。
@@ -142,3 +146,5 @@ uv-build 模式下，索引提供 `display_version` 时用它；否则 `freethre
 构建会加 `t`，也就是 `3.13.1` 配 `variant = "freethreaded"` 时叫 `3.13.1t`。
 列表里只保留有 HTTPS 包地址的 CPython 构建。GraalPy 版本会被拒绝，并提示取消
 `VFOX_PYTHON_USE_UV_BUILD`。详见 [uv.md](uv.md)。
+
+部分版本号（如 `3.12`、`3.13t`）会解析为索引里最新的匹配版本，安装记录的是完整版本名（如 `3.12.16`）。

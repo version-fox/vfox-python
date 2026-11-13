@@ -57,13 +57,13 @@ func TestContainerE2E(t *testing.T) {
 		output := execOK(t, ctx, ctr, `
 set -euo pipefail
 eval "$(vfox activate bash)"
-VFOX_PYTHON_USE_UV_BUILD=1 vfox install "python@$UV_VERSION"
-vfox use -g "python@$UV_VERSION"
+VFOX_PYTHON_USE_UV_BUILD=1 vfox install "python@$UV_MINOR"
+vfox use -g "python@$UV_MINOR"
 eval "$(vfox env -s bash)"
-python -c 'import ssl, sqlite3, bz2, lzma, ctypes, readline, curses, zlib, hashlib; print("stdlib ok")'
+python -c 'import ssl, sqlite3, bz2, lzma, ctypes, readline, curses, zlib, hashlib, sys; print("stdlib ok", sys.version.split()[0])'
 python -m pip --version
-`, "UV_VERSION="+uvVersion)
-		common.RequireContains(t, output, "stdlib ok", "uv-build stdlib without build packages")
+`, "UV_MINOR="+common.MinorVersion(uvVersion))
+		common.RequireContains(t, output, "stdlib ok "+uvVersion, "uv-build stdlib without build packages")
 		common.RequireContains(t, output, "pip", "uv-build pip")
 	})
 

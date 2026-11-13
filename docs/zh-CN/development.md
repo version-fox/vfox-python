@@ -53,7 +53,8 @@ vfox 加载 `metadata.lua`，命令需要时调用相应的钩子，并向钩子
 ### PreInstall
 
 返回 `version`、`url`、`headers`、`sha256` 和 `note`；vfox 下载 URL，有
-`sha256` 时校验，解压后按 `version` 命名。
+`sha256` 时校验，解压后按 `version` 命名。部分版本号（如 `3.12`）会先解析成 `Available({})` 里该模式最新的
+稳定版；精确版本号不会查列表。
 
 - `version = "latest"` 会解析成 `Available({})[1].version`。CPython 在列表最
   前面、从新到旧排列，所以可能是预发布版；GraalPy 要用完整版本名。
@@ -104,7 +105,8 @@ vfox 加载 `metadata.lua`，命令需要时调用相应的钩子，并向钩子
 
 ### PreUse
 
-切换版本前，钩子检查 `bin/pip`、`bin/pip3` 和 `bin/easy_install`，并修正仍指向
+部分版本号（如 `3.12`）会先解析成已安装版本里最新的匹配项（`lib/python_version.lua`
+的 `find_release`），vfox 原样传入请求。然后再做下面的检查。切换版本前，钩子检查 `bin/pip`、`bin/pip3` 和 `bin/easy_install`，并修正仍指向
 `.version-fox/temp/...` 的 shebang。用 `vfox link` 链接进来的版本会跳过：安装
 归它的主人所有，系统 Python 没有打包工具是正常的。`isLinkedPythonInstall` 用
 `test -L` 检查版本目录里的 `python-<版本>` 链接。

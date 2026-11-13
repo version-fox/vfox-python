@@ -27,6 +27,12 @@ vfox install python@3.12.2     # the release itself
 vfox use python@3.12           # newest installed 3.12.x
 ```
 
+A partial name resolves in both directions. `PreInstall` picks the newest stable
+release that the mode's version list names. `PreUse` picks the newest installed
+name that matches, and a bare name beats the same release with a source suffix
+such as `-system`. A plain request never picks a free-threaded (`t`) or
+pre-release name, so `python@3.13` is not `python@3.13t`.
+
 `latest` is resolved by `PreInstall` to the first version `Available` returns.
 The list is newest CPython first, so this is the newest CPython release the
 platform lists, which can be a pre-release when one exists. GraalPy is
@@ -160,3 +166,6 @@ In uv-build mode, `display_version` wins when the index provides it; otherwise a
 "freethreaded"` is `3.13.1t`. Only CPython builds with an HTTPS archive URL are
 listed. A GraalPy version is rejected with a message that asks you to unset
 `VFOX_PYTHON_USE_UV_BUILD`. See [uv.md](uv.md).
+
+A partial name such as `3.12` or `3.13t` resolves to the newest matching release
+in the index, and the install is recorded under the full name, such as `3.12.16`.

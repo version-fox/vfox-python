@@ -11,12 +11,12 @@
 
 ## uv-build
 
-安装前设置 `VFOX_PYTHON_USE_UV_BUILD=1`。索引只列出确切版本，所以请安装设置该变量后
-`vfox search python` 列出的名字；在这种模式下，`python@3.12` 这样的部分名字不会解析：
+安装前设置 `VFOX_PYTHON_USE_UV_BUILD=1`。部分版本号会解析成 uv-build 索引里最新的对应版本，
+所以 `python@3.12` 装的是最新的 3.12，`python@3.13t` 装的是最新的 3.13 自由线程版本：
 
 ```bash
 export VFOX_PYTHON_USE_UV_BUILD=1
-vfox install python@3.12.16
+vfox install python@3.12
 ```
 
 这条路径不需要源码构建所需的任何 `apt` 包，也不需要 `sudo`。在 Ubuntu 上，跳过

@@ -36,11 +36,11 @@ macOS 有 amd64 和 arm64 资源，Windows 只有 amd64。
 
 ```bash
 vfox install python@3.13.1t
-VFOX_PYTHON_USE_UV_BUILD=1 vfox install python@3.13.18t
+VFOX_PYTHON_USE_UV_BUILD=1 vfox install python@3.13t
 ```
 
-uv-build 的名字是设置该变量后 `vfox search python` 列出的那个；它的自由线程版本名字以
-`t` 结尾，比如 `3.13.18t`。
+部分版本号在每种模式下都会解析：`python@3.13t` 选出该模式列出的、最新的 3.13 自由线程版本；
+只写 `python@3.13` 则不会选中自由线程构建。
 
 Windows 的自由线程版本通过 uv-build 提供；稳定安装包列表里没有 `t` 构建。
 
@@ -70,13 +70,14 @@ sudo apt install --assume-yes make build-essential libssl-dev zlib1g-dev \
   libffi-dev liblzma-dev
 ```
 
-想在 Ubuntu 上省掉这一步，就用 uv-build。它不需要 `sudo`，也不需要 `apt`。请安装设置该变量后
-`vfox search python` 列出的名字：
+想在 Ubuntu 上省掉这一步，就用 uv-build。它不需要 `sudo`，也不需要 `apt`：
 
 ```bash
 export VFOX_PYTHON_USE_UV_BUILD=1
-vfox install python@3.12.16
+vfox install python@3.12
 ```
+
+`python@3.12` 会安装 uv-build 索引里最新的 3.12 版本，`vfox use -g python@3.12` 选中它。
 
 Fedora 和 RHEL 的源码构建：
 
@@ -141,10 +142,11 @@ CPython 来自 python.org。当 python.org 为该架构提供 **EXE** 安装包�
   `ensurepip`。因为启动器、PATH 和 pip 的 MSI 都被跳过，vfox 的安装不会添加 `py.exe`，
   不改动 `PATH`，pip 由 `ensurepip` 提供。
 - **MSI：** 插件用同样的方式安装 MSI，即 `msiexec /quiet /a <msi> TargetDir=<目录>`，
-  然后运行 `ensurepip`。
+  然后运行 `ensurepip`，并创建和 EXE 路径相同的 `python3` 别名。python.org 只发布了 3.4.4
+  的 MSI，Windows E2E 套件就用这种方式安装它。
 
-两条路径最终都把 `python.exe` 直接放在版本目录里，比如
-`%USERPROFILE%\.vfox\cache\python\v-3.12.10\python.exe`。
+两种安装路径（以及 uv-build）最终都把 `python.exe` 放在版本目录下的 `python-<版本>` 目录里，
+比如 `%USERPROFILE%\.vfox\cache\python\v-3.12.10\python-3.12.10\python.exe`。
 
 - 安装包通常把 `python3.exe`、`python3.12.exe` 和对应的 `pythonw` 放在共享目录。
   插件会在 `python.exe` 旁边补上这些别名，让选中的版本也有它们。
@@ -178,9 +180,9 @@ Linux 上会自动识别 libc，除非设置了 `VFOX_PYTHON_UV_LIBC`。Windows 
 约 600 MB。
 
 `tests/e2e` 里的 E2E 套件覆盖这些路径。Linux 上，runner 会安装源码构建、镜像构建、
-uv-build、GraalPy 和 `vfox link`；没有构建包的 Ubuntu 容器会安装 uv-build 和 GraalPy。
-Windows 上，runner 会安装 EXE 安装包、镜像构建、uv-build 和 GraalPy；Server Core
-容器会安装 GraalPy。
+按小版本号安装的 uv-build、GraalPy 和 `vfox link`；没有构建包的 Ubuntu 容器会安装 uv-build 和
+GraalPy。Windows 上，runner 会安装 EXE 安装包、只有 MSI 的 3.4.4、镜像构建、uv-build 和
+GraalPy；Server Core 容器会安装 GraalPy。
 
 ## Python 2
 

@@ -4,6 +4,9 @@
 
 ## 未发布
 
+- 部分版本号（如 `python@3.12`）在所有模式下都能用于 `vfox install` 和 `vfox use`：安装选出该模式
+  列出的最新稳定版（pyenv、python.org 或 uv-build 索引），使用则选出已安装的最新匹配项。uv-build
+  安装记录完整版本名，Windows 的 MSI 安装和 EXE 安装一样创建 `python3` 别名。
 - 支持 GraalPy：Linux、macOS 和 Windows amd64 都从 Oracle 官方的发布压缩包安装
   Oracle GraalVM 和 Community 两种发行版；Linux 和 macOS 的版本列表仍然来自
   pyenv。版本备注会标出发行版。Windows arm64/386 和 uv-build 仍然只支持

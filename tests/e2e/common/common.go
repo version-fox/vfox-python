@@ -376,6 +376,16 @@ func NewestUvBuildVersion(t testing.TB) string {
 	return best
 }
 
+// MinorVersion returns the major.minor part of a dotted version, such as
+// "3.11" for "3.11.18".
+func MinorVersion(version string) string {
+	parts := strings.SplitN(version, ".", 3)
+	if len(parts) < 2 {
+		return version
+	}
+	return parts[0] + "." + parts[1]
+}
+
 func versionLess(left, right string) bool {
 	leftParts := strings.Split(left, ".")
 	rightParts := strings.Split(right, ".")

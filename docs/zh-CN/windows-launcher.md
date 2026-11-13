@@ -45,8 +45,8 @@ py -0p
 
 ```text
  -V:3.13 *        C:\Users\you\AppData\Local\Programs\Python\Python313\python.exe
- -V:VersionFox/3.12.10 C:\Users\you\.vfox\cache\python\v-3.12.10\python.exe
- -V:VersionFox/3.12.9 C:\Users\you\.vfox\cache\python\v-3.12.9\python.exe
+ -V:VersionFox/3.12.10 C:\Users\you\.vfox\cache\python\v-3.12.10\python-3.12.10\python.exe
+ -V:VersionFox/3.12.9 C:\Users\you\.vfox\cache\python\v-3.12.9\python-3.12.9\python.exe
 ```
 
 两个补丁版本可以并存，因为每个版本都有自己的 tag。PythonCore 每个 minor 版本只有一个
@@ -116,15 +116,15 @@ HKCU\Software\Python\VersionFox\3.12.10
     SysArchitecture = "64bit"
     VfoxManaged = "1"
     InstallPath
-        (Default) = "C:\Users\you\.vfox\cache\python\v-3.12.10"
-        ExecutablePath = "C:\Users\you\.vfox\cache\python\v-3.12.10\python.exe"
-        WindowedExecutablePath = "C:\Users\you\.vfox\cache\python\v-3.12.10\pythonw.exe"
+        (Default) = "C:\Users\you\.vfox\cache\python\v-3.12.10\python-3.12.10"
+        ExecutablePath = "C:\Users\you\.vfox\cache\python\v-3.12.10\python-3.12.10\python.exe"
+        WindowedExecutablePath = "C:\Users\you\.vfox\cache\python\v-3.12.10\python-3.12.10\pythonw.exe"
 ```
 
-这些值遵循 PEP 514。`InstallPath` 是安装目录，`ExecutablePath` 指向其中的 `python.exe`，
-GraalPy 的在 `bin\` 下。python.org 的 EXE 和 MSI 安装，安装目录就是版本目录本身。uv-build
-把解释器放在下一层的 `python-3.12.10\` 里，注册项指向那里。`VfoxManaged = "1"` 标记
-vfox 写入的项，`vfox uninstall` 只删除这些项。
+这些值遵循 PEP 514。`InstallPath` 是安装目录，`ExecutablePath` 指向其中的 `python.exe`。
+对于 CPython，vfox 的每条安装路径（EXE、MSI 和 uv-build）都把 `python.exe` 放在版本目录下的
+`python-<版本>` 目录里，如示例所示。GraalPy 的 `python.exe` 在 `bin\` 下。`VfoxManaged = "1"`
+标记 vfox 写入的项，`vfox uninstall` 只删除这些项。
 
 tag 使用完整版本号，非默认架构加 `-32` 或 `-arm64`，所以多个补丁版本可以并存：
 

@@ -120,13 +120,12 @@ echo graalpy-24.2.0 > .python-version
 
 ## uv
 
-uv-build is the optional prebuilt source. Its index lists exact versions, so
-install a name that `vfox search python` shows while the variable is set; a
-partial name such as `python@3.12` does not resolve in this mode:
+uv-build is the optional prebuilt source. `python@3.12` installs the newest 3.12
+release in its index:
 
 ```bash
 export VFOX_PYTHON_USE_UV_BUILD=1
-vfox install python@3.12.16
+vfox install python@3.12
 ```
 
 uv-build needs no compiler or build dependencies. On Linux the libc is

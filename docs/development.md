@@ -55,7 +55,9 @@ for the older hooks; the newer modules (`python_version`, `detect_python`,
 
 It returns `version`, `url`, `headers`, `sha256` and `note`; vfox downloads the
 URL, verifies `sha256` when present, unpacks the archive and names the install
-after `version`.
+after `version`. A partial version such as `3.12` is resolved first, to the newest
+stable release that `Available({})` names for this mode; an exact version is not
+looked up.
 
 - `version = "latest"` is resolved to `Available({})[1].version`. The list is
   newest CPython first, so this can be a pre-release; GraalPy is selected by
@@ -117,8 +119,10 @@ registration.
 
 ### PreUse
 
-Before switching to a version, the hook checks `bin/pip`, `bin/pip3` and
-`bin/easy_install`, and repairs shebangs that still point at
+A partial version such as `3.12` is resolved first, to the newest installed
+name that matches (`find_release` in `lib/python_version.lua`); vfox passes the
+request through unchanged. Then, before switching to a version, the hook checks
+`bin/pip`, `bin/pip3` and `bin/easy_install`, and repairs shebangs that still point at
 `.version-fox/temp/...`. A linked version (`vfox link`) is skipped: its
 installation belongs to its owner, and missing packaging tools are normal for a
 system Python. `isLinkedPythonInstall` tests the `python-<version>` link in the

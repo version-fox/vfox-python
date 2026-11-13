@@ -13,13 +13,13 @@ There are two independent things called uv here:
 
 ## uv-build
 
-Set `VFOX_PYTHON_USE_UV_BUILD=1` before installing. The index lists exact
-versions, so install a name that `vfox search python` shows while the variable
-is set; a partial name such as `python@3.12` does not resolve in this mode:
+Set `VFOX_PYTHON_USE_UV_BUILD=1` before installing. A partial name resolves to
+the newest release in the uv-build index, so `python@3.12` installs the newest
+3.12 and `python@3.13t` the newest free-threaded 3.13:
 
 ```bash
 export VFOX_PYTHON_USE_UV_BUILD=1
-vfox install python@3.12.16
+vfox install python@3.12
 ```
 
 This path needs none of the `apt` packages a source build needs, and no `sudo`.

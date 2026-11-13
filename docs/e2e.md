@@ -28,7 +28,7 @@ Linux, on the runner:
 
 - `source build`: CPython 3.12.2 built from source.
 - `mirror`: CPython 3.12.1 from the huaweicloud mirror.
-- `uv-build`: the newest CPython 3.11 uv-build archive, with pip.
+- `uv-build`: `python@3.11` installs the newest CPython 3.11 uv-build archive, `vfox use` selects it, and the check reads the full version and pip.
 - `graalpy`: GraalPy 24.2.0, asserted by implementation name.
 - `link`: `vfox link --detect python` adopts an installed Python, and `vfox list` shows it as linked.
 - `python-version`: a project `.python-version` naming the uv-build CPython wins over the global GraalPy. The check prints the implementation name, so GraalPy cannot pass it.
@@ -41,6 +41,7 @@ Linux, in containers:
 Windows, on the runner:
 
 - `installer`: CPython 3.12.2, and the download URL is the EXE, `python-3.12.2-amd64.exe`.
+- `MSI installer`: CPython 3.4.4, which python.org publishes only as an MSI. The download URL is `python-3.4.4.amd64.msi`, and `python3` resolves to the alias the plugin creates.
 - `mirror`, `uv-build`, `graalpy`, `python-version`: as on Linux. The GraalPy subtest finds its entry in `py -0p`, because launcher registration is on by default.
 
 Windows, in a container: GraalPy 25.5.5 (Community, Python 3.13).

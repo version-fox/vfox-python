@@ -114,12 +114,11 @@ echo graalpy-24.2.0 > .python-version
 
 ## uv
 
-uv-build 是可选的预编译来源。它的索引只列出确切版本，所以请安装设置该变量后
-`vfox search python` 列出的名字；在这种模式下，`python@3.12` 这样的部分名字不会解析：
+uv-build 是可选的预编译来源。`python@3.12` 会安装它的索引里最新的 3.12 版本：
 
 ```bash
 export VFOX_PYTHON_USE_UV_BUILD=1
-vfox install python@3.12.16
+vfox install python@3.12
 ```
 
 uv-build 不需要编译器或构建依赖。Linux 上会自动识别 libc；要覆盖识别结果，
