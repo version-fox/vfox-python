@@ -60,6 +60,29 @@ function command.native(program, args)
     return powershell(table.concat(parts, " ") .. "; exit $LASTEXITCODE")
 end
 
+--- Runs a Python interpreter with its output written to files, prints that
+--- output, and exits with the interpreter's exit code. A failing ensurepip on
+--- an old CPython release printed nothing through the PowerShell host, so the
+--- output goes to files and a failure prints the interpreter's own text.
+function command.pythonLogged(program, args)
+    local arguments = {}
+    for _, arg in ipairs(args) do
+        table.insert(arguments, literal(arg))
+    end
+    local script = "$program = "
+        .. literal(program)
+        .. "; $arguments = @("
+        .. table.concat(arguments, ", ")
+        .. "); $out = [IO.Path]::GetTempFileName(); $err = [IO.Path]::GetTempFileName(); $exitCode = 1; try { "
+        .. "$process = Start-Process -FilePath $program -ArgumentList $arguments -NoNewWindow -Wait -PassThru "
+        .. "-RedirectStandardOutput $out -RedirectStandardError $err; "
+        .. "Get-Content -LiteralPath $out | ForEach-Object { Write-Output $_ }; "
+        .. "Get-Content -LiteralPath $err | ForEach-Object { Write-Output $_ }; "
+        .. "$exitCode = $process.ExitCode } finally { "
+        .. "Remove-Item -LiteralPath $out, $err -Force -ErrorAction SilentlyContinue }; exit $exitCode"
+    return powershell(script)
+end
+
 function command.msi(file, path)
     local function argument(value)
         if value:find('"', 1, true) then

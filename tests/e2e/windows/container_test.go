@@ -44,6 +44,12 @@ func TestContainerE2E(t *testing.T) {
 	if os.Getenv("VFOX_SKIP_CONTAINER_E2E") != "" {
 		t.Skip("container E2E disabled by VFOX_SKIP_CONTAINER_E2E")
 	}
+	// testcontainers reports every Windows host as rootless and gives up on host
+	// discovery unless DOCKER_HOST names the engine. The runner's daemon listens
+	// on the default Docker named pipe.
+	if os.Getenv("DOCKER_HOST") == "" {
+		t.Setenv("DOCKER_HOST", "npipe:////./pipe/docker_engine")
+	}
 	// Ryuk has no Windows image; every container is terminated explicitly.
 	t.Setenv("TESTCONTAINERS_RYUK_DISABLED", "true")
 

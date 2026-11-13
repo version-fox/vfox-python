@@ -276,7 +276,8 @@ function windowsInstallMsi(path, url, version, filename)
     if file then
         io.close(file)
         print("Installing pip...")
-        local command = windowsCommand.native(
+        -- The output goes to files, so a failure prints pip's own error text.
+        local command = windowsCommand.pythonLogged(
             qInstallPath .. "\\python.exe",
             { "-E", "-s", "-m", "ensurepip", "-U", "--default-pip" }
         )

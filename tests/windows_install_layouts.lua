@@ -156,6 +156,18 @@ reset()
 windowsInstallMsi(path, "https://example.invalid/python.msi", "3.4.4", "python.msi")
 -- The MSI, ensurepip, six python aliases and six venv launcher aliases.
 assert(#state.commands == 14, "MSI, pip and every alias must run: " .. #state.commands)
+-- pip runs through the logging wrapper, with the interpreter and its arguments intact.
+local pip = decodeCommand(state.commands[2])
+local pipValues = {}
+for encoded in pip:gmatch("FromBase64String%('([A-Za-z0-9+/=]*)'%)") do
+    pipValues[#pipValues + 1] = decodeBase64(encoded)
+end
+assert(pipValues[1] == path .. "\\python.exe", tostring(pipValues[1]))
+assert(
+    table.concat(pipValues, " ", 2) == "-E -s -m ensurepip -U --default-pip",
+    "pip arguments changed: " .. table.concat(pipValues, " ", 2)
+)
+assert(pip:find("-RedirectStandardError", 1, true), "pip output must go to a file")
 local msiTargets = copyTargets()
 for _, name in ipairs({
     "python3.exe",
@@ -279,6 +291,16 @@ for _, value in ipairs({
         "native argument changed after payload decoding"
     )
     assert(script:find("; exit $LASTEXITCODE", 1, true), "native exit status must propagate")
+end
+do
+    local logged = decodeCommand(windows.pythonLogged("C:\\MSI files & %TEMP% !\\python.exe", { "-m", "ensurepip" }))
+    local values = {}
+    for encoded in logged:gmatch("FromBase64String%('([A-Za-z0-9+/=]*)'%)") do
+        values[#values + 1] = decodeBase64(encoded)
+    end
+    assert(values[1] == "C:\\MSI files & %TEMP% !\\python.exe", "the interpreter path must reach PowerShell unchanged")
+    assert(table.concat(values, " ", 2) == "-m ensurepip", "the interpreter arguments must reach PowerShell unchanged")
+    assert(logged:find("; exit $exitCode", 1, true), "the interpreter exit code must propagate")
 end
 for _, case in ipairs({
     {
