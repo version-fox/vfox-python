@@ -114,7 +114,9 @@ graalpy3.13-community-25.5.5
 system
 ```
 
-- `3.12` selects the newest installed 3.12.x.
+- `3.12` selects the newest installed 3.12.x, and like `vfox use` it never
+  selects a free-threaded (`t`) or pre-release install. `3.13t` selects a
+  free-threaded one; a pre-release needs its full name, such as `3.14.0a4`.
 - `cpython-3.12.8` selects `3.12.8`, or its linked `3.12.8-system` when only
   that is installed.
 - The `+freethreaded` form selects the `t` version.
@@ -141,10 +143,10 @@ for 3.12.10, and only an MSI for 2.7.18. See [platforms.md](platforms.md#windows
 for the order of the checks.
 
 - `.exe` installers are extracted with the bundled WiX `dark.exe`. The MSIs
-  inside are installed into the version directory with `msiexec /quiet /a`; the
+  inside are installed into the `python-<version>` directory with `msiexec /quiet /a`; the
   launcher, PATH and pip MSIs are skipped, and pip is bootstrapped with
   `ensurepip`.
-- `.msi` installers (older releases) are installed into the version directory
+- `.msi` installers (older releases) are installed into the `python-<version>` directory
   with `msiexec /quiet /a`, and pip is bootstrapped with `ensurepip`.
 - Alias executables such as `python3.exe` and `python3.12.exe` are created next
   to `python.exe`, because the python.org installer normally creates them in a

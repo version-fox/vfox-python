@@ -21,6 +21,7 @@ lib/python_version.lua          版本解析和已安装名字匹配
 lib/detect_python.lua           Detect 钩子的来源和过滤
 tests/*_test.lua                离线的钩子测试，由 vfox plugin test 运行
 tests/windows_install_layouts.lua  Windows 命令路径，进程调用用 stub 代替
+tests/e2e/                      Go 端到端套件，覆盖 Linux 和 Windows，见 e2e.md
 tests/fixtures/                 .python-version 测试用的文件
 bin/WiX/                        解 Windows EXE 安装包用的 WiX 工具
 .github/workflows/              test、lint、license、e2e 和 publish
@@ -58,8 +59,9 @@ vfox 加载 `metadata.lua`，命令需要时调用相应的钩子，并向钩子
 
 - `version = "latest"` 会解析成 `Available({})[1].version`。CPython 在列表最
   前面、从新到旧排列，所以可能是预发布版；GraalPy 要用完整版本名。
-- Windows 上，CPython 没有当前架构的精确 EXE 或 MSI 时，在下载前就拒绝；
-  `Available` 应该已经过滤掉。
+- Windows 上，`Available` 只列出下载页里当前架构的精确安装包文件名。PreInstall 仍会先对 EXE、
+  再对 MSI 发 HEAD 请求；两者都没有返回 200 时，在任何下载开始前停止，并提示
+  `Python <版本> has no Windows installer on python.org`。
 - GraalPy 会到 Oracle 的发布资源里找当前平台的对应版本，返回官方压缩包地址和
   SHA-256；Linux 和 macOS 用 `linux-*`/`macos-*` 的 tar.gz，Windows 用
   `windows-amd64.zip`。GitHub API 被限流时，钩子会根据版本构造资源地址，并在
@@ -96,10 +98,10 @@ vfox 加载 `metadata.lua`，命令需要时调用相应的钩子，并向钩子
 `ctx.main` 里有版本目录（`path`）和名字（`version`）。Windows 上，钩子只在
 `VfoxManaged` 为 `1` 且注册的 `InstallPath` 仍指向该版本目录时，删除
 `HKCU\Software\Python\VersionFox\<tag>`；如果 `VersionFox` company key 已经
-没有子项，也一并删除。即使 `VFOX_PYTHON_REGISTER_PY_LAUNCHER` 已取消，钩子
-仍会运行，所以即使 `VFOX_PYTHON_REGISTER_PY_LAUNCHER=0` 关闭了注册，卸载也不会留下旧项。
+没有子项，也一并删除。即使 `VFOX_PYTHON_REGISTER_PY_LAUNCHER=0` 关闭了注册，钩子
+仍会运行，所以卸载时不会留下旧的注册项。
 
-`lib/pep514.lua` 在读写信之前会识别 MSI 布局（`path/python.exe`）、uv-build
+`lib/pep514.lua` 在读写注册项之前会识别 MSI 布局（`path/python.exe`）、uv-build
 布局（`path/python-<版本>/python.exe`）和 GraalPy 布局
 （`path/graalpy*-windows-amd64/bin/python.exe`）。
 
@@ -110,6 +112,9 @@ vfox 加载 `metadata.lua`，命令需要时调用相应的钩子，并向钩子
 `.version-fox/temp/...` 的 shebang。用 `vfox link` 链接进来的版本会跳过：安装
 归它的主人所有，系统 Python 没有打包工具是正常的。`isLinkedPythonInstall` 用
 `test -L` 检查版本目录里的 `python-<版本>` 链接。
+
+Windows 上钩子直接返回，上面的检查都不运行。Unix 上，安装目录没有 `bin` 时，`vfox use`
+会报错，并给出先 `vfox uninstall` 再 `vfox install` 的命令，不再对损坏的安装显示 “Now using”。
 
 ### EnvKeys
 
@@ -134,7 +139,7 @@ vfox 加载 `metadata.lua`，命令需要时调用相应的钩子，并向钩子
   Homebrew、`/usr`、`/usr/local`、`/opt`、`~/graalpy*`、Windows 的
   `Programs\Python`、`C:\Python*`、`C:\graalpy*`、py 启动器和 Store），
 - 用 `-E -s -c` 和一段单行程序询问每个解释器一次，
-- 取 `sys.version`、`sys.prefix`、`sys.base_prefix`、真实可执行文件和
+- 取 Python 版本和实现（`platform` 模块）、`sys.prefix`、`sys.base_prefix`、真实可执行文件和
   `sys.abiflags`，GraalPy 还取 `__graalpython__.get_graalvm_version()` 和
   Oracle/Community 发行版，
 - 跳过 PyPy 等其他实现、虚拟环境、vfox 自己的目录和根目录，
@@ -156,6 +161,10 @@ vfox 加载 `metadata.lua`，命令需要时调用相应的钩子，并向钩子
 
 钩子返回 `{ version = name }` 或 `{}`。没安装的版本不选任何东西。
 `strategy = "latest_installed"` 时，条目缺失或读不懂就退回到已安装的最新名字。
+
+部分版本号（如 `3.13`）在 `.python-version` 里用 `find_release` 解析，和 PreUse 用的是同一个函数，
+所以不会选中自由线程或预发布版。其他请求（如 `3.12.8`）按前缀匹配，链接进来的 `3.12.8-system`
+仍然算数。
 
 ### windows_command
 
@@ -193,8 +202,9 @@ local versions = plugin:Available({})
 E2E 套件在 `tests/e2e` 里，使用 Go 编写。Linux 包在 runner 上安装 CPython
 源码构建、镜像构建、uv-build 和 GraalPy，还会运行 `vfox link --detect` 和项目
 的 `.python-version`。Windows 包安装 CPython 和 uv-build，安装带 PEP 514 注册的
-GraalPy，并检查 `.python-version`。两个包也通过 testcontainers-go 在 Docker
-容器里跑同样的 GraalPy 检查。目录结构和本地命令见
+GraalPy，并检查 `.python-version`。两个包也在 Docker 容器里跑 GraalPy 检查：Linux 包通过
+testcontainers-go，Windows 包直接调用 `docker` 命令行，因为 testcontainers-go 会为每个容器
+创建 bridge 网络，而 Windows 引擎没有 bridge 驱动。目录结构和本地命令见
 [端到端测试](e2e.md)。
 
 本地命令：
@@ -233,8 +243,8 @@ vfox 的全局变量，只关闭 `duplicate-set-field`（测试会有意替换 `
 ## CI
 
 - `test.yml` 在 `ubuntu-latest` 和 `windows-latest` 上用 vfox 1.1.0（校验和
-  固定）跑离线测试，在 Linux 上跑 GopherLua 布局测试，并用带空格和 Shell
-  字符的路径跑一次真实的 Windows MSI 安装。
+  固定）跑离线测试，在 Linux 上跑 GopherLua 布局测试，并用带空格和 Shell 字符的路径，
+  由发布版 vfox 1.0.12 在 Windows 上通过 EXE 安装包真实安装一次 CPython 3.14.5。
 - `lint.yml` 跑 StyLua、LuaLS 和 actionlint。
 - `license.yml` 跑许可证头检查。
 - `e2e.yml` 在 Linux 和 Windows 上真实构建、安装 Python，包括镜像、uv-build
@@ -246,7 +256,9 @@ vfox 的全局变量，只关闭 `duplicate-set-field`（测试会有意替换 `
 维护者在默认分支的 **Actions → Plugin → Run workflow** 里发布。输入不带 `v`
 的稳定插件版本号；共享工作流会更新 `metadata.lua`，创建版本提交和 tag，并在
 本仓库发布 ZIP 和 manifest。Pull request 只跑检查。发布失败时重跑原来失败的
-任务即可继续。
+任务即可继续。不需要本地打 tag，也不需要额外的发布 token。推送 `v*` tag 同样会运行发布任务；只要
+`metadata.lua` 里的 `PLUGIN.version` 已与 tag 一致，就会正常发布。工作流调用的是共享的
+`version-fox/plugin-manifest-action`，固定在 `@v1`；升级该工具本身不会发布本插件。
 
 ## 增加一个检测来源
 

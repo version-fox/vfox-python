@@ -4,6 +4,17 @@
 
 ## Unreleased
 
+- A partial version such as `python@3.12` now selects a linked install named
+  with `-opt`, such as `3.12.8-opt`, and `python@3.13t` selects a linked
+  free-threaded install, such as `3.13.1t-uv`. The source suffix is no longer
+  read as part of the release.
+- A `.python-version` file that names a partial version such as `3.13` follows
+  the rule `vfox use` follows: it no longer selects a free-threaded (`t`) or
+  pre-release install. `3.13t` still selects a free-threaded install; a
+  pre-release needs its full name, such as `3.14.0a4`.
+
+## 0.6.3
+
 - When a source build fails, the error names the usual cause, a missing build
   dependency such as `zlib1g-dev`, and links to the platform notes. Without the zlib
   headers, `make install` fails in ensurepip.

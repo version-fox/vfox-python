@@ -104,7 +104,8 @@ graalpy3.13-community-25.5.5
 system
 ```
 
-- `3.12` 选已安装的 3.12.x 里最新的。
+- `3.12` 选已安装的 3.12.x 里最新的，和 `vfox use` 一样不会选中自由线程（`t`）或预发布版。
+  `3.13t` 选中自由线程版本；预发布版要写完整名字，如 `3.14.0a4`。
 - `cpython-3.12.8` 选 `3.12.8`；只装了链接版本时，选 `3.12.8-system`。
 - `+freethreaded` 形式选带 `t` 的版本。
 - `system` 选最新的 `-system` 链接版本。
@@ -126,9 +127,9 @@ EXE；没有 EXE 时才用 MSI（`python-<版本>.amd64.msi`、`.arm64.msi`，38
 检查顺序见 [平台](platforms.md#windows)。
 
 - `.exe` 安装包用插件自带的 WiX `dark.exe` 解开。里面的 MSI 用
-  `msiexec /quiet /a` 安装进版本目录；启动器、PATH 和 pip 的 MSI 会被跳过，pip
+  `msiexec /quiet /a` 安装进 `python-<版本>` 目录；启动器、PATH 和 pip 的 MSI 会被跳过，pip
   用 `ensurepip` 装好。
-- 老版本的 `.msi` 安装包用 `msiexec /quiet /a` 安装进版本目录，pip 用
+- 老版本的 `.msi` 安装包用 `msiexec /quiet /a` 安装进 `python-<版本>` 目录，pip 用
   `ensurepip` 装好。
 - python.org 安装包通常把 `python3.exe`、`python3.12.exe` 之类的别名放在目标
   目录外面，插件会在 `python.exe` 旁边补上这些别名。
