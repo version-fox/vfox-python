@@ -195,7 +195,11 @@ reset()
 state.failOn = 3
 local msiOk, msiErr = pcall(windowsInstallMsi, path, "https://example.invalid/python.msi", "3.4.4", "python.msi")
 assert(not msiOk and tostring(msiErr):find("Failed to create Python executable alias", 1, true), tostring(msiErr))
-for _, failure in ipairs({ { 1, "Extract failed" }, { 3, "Install msi failed" }, { 6, "executable alias" } }) do
+for _, failure in ipairs({
+    { 1, "Extract failed: dark.exe exited with code 1" },
+    { 3, "Install msi failed" },
+    { 6, "executable alias" },
+}) do
     reset()
     state.failOn = failure[1]
     local ok, err = pcall(function()
@@ -203,6 +207,21 @@ for _, failure in ipairs({ { 1, "Extract failed" }, { 3, "Install msi failed" },
     end)
     assert(not ok and tostring(err):find(failure[2], 1, true), tostring(err))
 end
+-- A missing dark.exe (antivirus quarantine) must fail before any command runs.
+reset()
+local stubOpen = io.open
+io.open = function(name, mode)
+    if name:find("dark.exe", 1, true) then
+        return nil
+    end
+    return stubOpen(name, mode)
+end
+local darkOk, darkErr = pcall(function()
+    windowsInstallExe(path, "https://example.invalid/python.exe", "3.14.5", "python.exe")
+end)
+io.open = stubOpen
+assert(not darkOk and tostring(darkErr):find("WiX dark.exe is missing", 1, true), tostring(darkErr))
+assert(#state.commands == 0, "no installer command may run without dark.exe")
 for _, failure in ipairs({
     {
         name = "partial listing exits nonzero",

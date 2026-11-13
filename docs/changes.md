@@ -4,6 +4,16 @@
 
 ## Unreleased
 
+- When a source build fails, the error names the usual cause, a missing build
+  dependency such as `zlib1g-dev`, and links to the platform notes. Without the zlib
+  headers, `make install` fails in ensurepip.
+- On Windows, `vfox install` stops before the download when python.org publishes no
+  installer for the version, such as 3.12.12, instead of failing after the download.
+- `vfox use` stops with a reinstall hint when a Python version has no `bin` directory,
+  instead of reporting "Now using" for a broken installation.
+- When a Windows EXE install fails to extract, the error names a missing WiX
+  `dark.exe`, which antivirus software can quarantine, and reports the exit code of
+  `dark.exe`.
 - Partial versions such as `python@3.12` resolve in `vfox install` and `vfox use` for every
   mode. Install picks the newest stable release that the mode lists (pyenv, python.org or the
   uv-build index); use picks the newest installed match. uv-build installs are recorded under

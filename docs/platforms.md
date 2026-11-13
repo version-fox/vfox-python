@@ -78,6 +78,11 @@ sudo apt install --assume-yes make build-essential libssl-dev zlib1g-dev \
   libffi-dev liblzma-dev
 ```
 
+`zlib1g-dev` is the package most often missing. Without the zlib headers CPython
+builds no `zlib` module, and `make install` then fails in ensurepip: pip is
+installed from a wheel, which is a zip archive and needs zlib to be read
+(`No module named 'zlib'`).
+
 To avoid that step on Ubuntu, use uv-build. It needs no `sudo` and no `apt`:
 
 ```bash
@@ -125,6 +130,12 @@ export CPPFLAGS="$(brew --prefix openssl@3)/include"
 export LDFLAGS="$(brew --prefix openssl@3)/lib"
 export PKG_CONFIG_PATH="$(brew --prefix openssl@3)/lib/pkgconfig"
 ```
+
+On Apple silicon, CPython 3.8.7 stops in `configure` with `Unexpected output of
+'arch' on OSX`: that release's configure script accepts only `i386` and `ppc` from
+`arch`. CPython 3.8.20 adds `arm64` to that check, so use 3.8.20 or a later 3.8
+patch release. CPython 3.9.0's configure has the same check without `arm64`; later
+3.9 patch releases were not checked.
 
 Apple silicon builds are native arm64; an x86_64 shell under Rosetta builds an
 x86_64 Python and installs it under the same vfox home.

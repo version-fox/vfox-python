@@ -70,6 +70,10 @@ sudo apt install --assume-yes make build-essential libssl-dev zlib1g-dev \
   libffi-dev liblzma-dev
 ```
 
+最容易漏掉的是 `zlib1g-dev`。没有 zlib 头文件，CPython 就不会编译 `zlib` 模块，`make install`
+随后会在 ensurepip 步骤失败：pip 是从 wheel 安装的，而 wheel 是 zip 压缩包，读取它需要 zlib
+（报错为 `No module named 'zlib'`）。
+
 想在 Ubuntu 上省掉这一步，就用 uv-build。它不需要 `sudo`，也不需要 `apt`：
 
 ```bash
@@ -114,6 +118,11 @@ export CPPFLAGS="$(brew --prefix openssl@3)/include"
 export LDFLAGS="$(brew --prefix openssl@3)/lib"
 export PKG_CONFIG_PATH="$(brew --prefix openssl@3)/lib/pkgconfig"
 ```
+
+Apple silicon 上，CPython 3.8.7 会在 `configure` 阶段报 `Unexpected output of 'arch' on OSX`
+而失败：这个版本的 configure 脚本只接受 `arch` 输出 `i386` 和 `ppc`。3.8.20 已在该检查里加入
+`arm64`，请改用 3.8.20 或之后的 3.8 补丁版本。3.9.0 的 configure 同样没有 `arm64` 分支；之后的
+3.9 补丁版本没有核对。
 
 Apple silicon 上构建的是原生 arm64；在 Rosetta 的 x86_64 Shell 里构建的是
 x86_64 Python，装进同一个 vfox 目录。

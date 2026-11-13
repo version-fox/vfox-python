@@ -65,6 +65,16 @@ function PLUGIN:PreInstall(ctx)
         return
     end
 
+    -- A release can have a source tarball and still have no Windows installer:
+    -- 3.12.12 does. Stop here instead of after the download in PostInstall (issue #630).
+    if OS_TYPE == "windows" and findWindowsInstaller(version) == nil then
+        error(
+            "Python "
+                .. version
+                .. " has no Windows installer on python.org. Install a version that `vfox search python` lists."
+        )
+    end
+
     return {
         version = version,
     }

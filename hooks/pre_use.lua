@@ -75,6 +75,22 @@ function PLUGIN:PreUse(ctx)
     -- Perform health check
     local healthReport = checkPythonHealth(installPath, version)
 
+    -- Without a bin directory there is nothing to run. Switching anyway printed
+    -- "Now using" for a broken install (issue #642), so stop and say how to fix it.
+    if not healthReport.binDirExists then
+        error(
+            "Python "
+                .. version
+                .. " is not installed correctly: "
+                .. healthReport.problemsFound[1]
+                .. ". Run `vfox uninstall python@"
+                .. version
+                .. "` and then `vfox install python@"
+                .. version
+                .. "` again."
+        )
+    end
+
     -- Report health status and fix if needed
     local needsRecheck = false
 
