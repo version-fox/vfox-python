@@ -160,7 +160,7 @@ Windows 上钩子直接返回，上面的检查都不运行。Unix 上，安装�
 `func() []string`；`ctx:getInstalledVersions()` 会多传一个参数并静默失败。
 
 钩子返回 `{ version = name }` 或 `{}`。没安装的版本不选任何东西。
-`strategy = "latest_installed"` 时，条目缺失或读不懂就退回到已安装的最新名字。
+`strategy = "latest_installed"` 时，条目缺失或读不懂就退回到最新的常规 CPython；没有 CPython 时，退回到已安装的最新名字。
 
 部分版本号（如 `3.13`）在 `.python-version` 里用 `find_release` 解析，和 PreUse 用的是同一个函数，
 所以不会选中自由线程或预发布版。其他请求（如 `3.12.8`）按前缀匹配，链接进来的 `3.12.8-system`

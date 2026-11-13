@@ -122,7 +122,9 @@ system
   wins, then the name that sorts first, so `3.12.8-local` is chosen over
   `3.12.8-system`; write the full name to choose another.
 - The `+freethreaded` form selects the `t` version.
-- `system` selects the newest linked `-system` version.
+- `system` selects the newest linked `-system` CPython install that is a
+  regular build. A free-threaded or pre-release install needs its full name,
+  such as `3.13.1t-system`; GraalPy is selected by its full name too.
 - GraalPy names such as `graalpy-24.2.0` and
   `graalpy3.13-community-25.5.5` select the matching installed GraalPy.
 - PyPy and other implementations are not handled; neither is a path or a
@@ -132,7 +134,8 @@ system
 
 The file is read for the `specified` strategy. With
 `legacyVersionFile.strategy: latest_installed` in vfox's configuration, a
-missing or unreadable entry falls back to the newest installed Python.
+missing or unreadable entry falls back to the newest regular CPython install, or
+to the newest installed name when there is none.
 
 ## Windows installers
 

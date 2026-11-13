@@ -123,8 +123,8 @@ end
 --- line such as "3.13" is resolved as find_release resolves it for vfox use, so
 --- it never selects a free-threaded or pre-release name. Any other request is
 --- matched as a prefix, so an exact version such as "3.12.8" still selects a
---- linked "3.12.8-system". A request of "system" takes the newest linked system
---- Python. When two names share a version, a bare install comes before a
+--- linked "3.12.8-system". A request of "system" takes the newest regular
+--- CPython install with a -system suffix. When two names share a version, a bare install comes before a
 --- source-suffixed one. Otherwise the name that sorts first wins, so the result
 --- does not depend on the order the names are listed.
 function python_version.find_installed(installed, request)
@@ -135,7 +135,7 @@ function python_version.find_installed(installed, request)
     if request == "system" then
         local systems = {}
         for name in pairs(installed) do
-            if name:sub(-7) == "-system" then
+            if name:sub(-7) == "-system" and python_version.is_plain(name) then
                 systems[#systems + 1] = name
             end
         end
@@ -210,6 +210,30 @@ local function releaseOf(name)
     local free = base:sub(-1) == "t"
     local release = free and base:sub(1, -2) or base
     return release, free, release:find("%d%a") ~= nil
+end
+
+--- Whether a name is a regular CPython install: it starts with its release
+--- number, and it is neither free-threaded nor a pre-release. GraalPy has its
+--- own release numbers, which cannot be compared with CPython's.
+function python_version.is_plain(name)
+    if type(name) ~= "string" or not name:match("^%d") then
+        return false
+    end
+    local _, free, pre = releaseOf(name)
+    return not free and not pre
+end
+
+--- Picks the install the latest_installed strategy falls back to: the newest
+--- regular CPython install, or else the newest installed name of any kind, so a
+--- machine that has only GraalPy still gets one.
+function python_version.newest_installed(names)
+    local plain = {}
+    for _, name in ipairs(names) do
+        if python_version.is_plain(name) then
+            plain[#plain + 1] = name
+        end
+    end
+    return python_version.newest(plain) or python_version.newest(names)
 end
 
 --- Whether a name is a bare version rather than one with a source suffix.

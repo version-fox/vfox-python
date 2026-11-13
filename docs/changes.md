@@ -16,6 +16,12 @@
   `3.12.8-system`, `.python-version`, the `latest_installed` fallback and
   `system` pick the bare name first, then the name that sorts first. Before,
   the choice depended on the order in which the names were listed.
+- `system` and the `latest_installed` fallback now choose a regular CPython
+  install. Before, they compared release numbers across every installed name,
+  so `system` picked `graalpy-24.2.0-system` over `3.12.3-system`, and a
+  free-threaded or pre-release install could win on its number alone. Both
+  still fall back to any installed name when no CPython install exists. Name a
+  free-threaded, pre-release or GraalPy install in full to select it.
 
 ## 0.6.3
 

@@ -108,7 +108,8 @@ system
   `3.13t` 选中自由线程版本；预发布版要写完整名字，如 `3.14.0a4`。
 - `cpython-3.12.8` 选 `3.12.8`；只装了链接版本时，选 `3.12.8-system`。几个安装的版本号相同时，先选裸版本，其余按名字排序取第一个，所以 `3.12.8-local` 排在 `3.12.8-system` 前面；要选哪一个，就写完整名字。
 - `+freethreaded` 形式选带 `t` 的版本。
-- `system` 选最新的 `-system` 链接版本。
+- `system` 选最新的 `-system` 链接版本，但只限常规的 CPython 版本。自由线程和预发布版要写完整名字，
+  如 `3.13.1t-system`；GraalPy 也要写完整名字。
 - `graalpy-24.2.0`、`graalpy3.13-community-25.5.5` 这样的 GraalPy 版本名会选中
   对应的已安装 GraalPy。
 - 不处理 PyPy 等其他实现，也不处理路径或 `3.12.3/envs/...` 这样的条目。
@@ -116,7 +117,7 @@ system
 
 文件按 `specified` 策略读取。如果 vfox 配置里的
 `legacyVersionFile.strategy` 是 `latest_installed`，条目缺失或读不懂时就退回到
-已安装的最新 Python。
+最新的常规 CPython；没有 CPython 时，退回到已安装的最新名字。
 
 ## Windows 安装包
 

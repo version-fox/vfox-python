@@ -118,6 +118,23 @@ assert(python_version.newest({ "3.12.8-local", "3.12.8" }) == "3.12.8")
 assert(python_version.newest({ "3.12.8", "3.12.8-local" }) == "3.12.8")
 assert(python_version.find_release(set({ "3.12.8-system", "3.12.8-local" }), "3.12") == "3.12.8-local")
 
+-- "system" is a plain request too: it selects the newest regular CPython install
+-- named -system. A free-threaded or pre-release install needs its full name, and
+-- GraalPy's release numbers cannot be compared with CPython's.
+assert(python_version.find_installed(set({ "3.13.2t-system", "3.13.1-system" }), "system") == "3.13.1-system")
+assert(python_version.find_installed(set({ "3.14.0a4-system", "3.13.1-system" }), "system") == "3.13.1-system")
+assert(python_version.find_installed(set({ "3.13.2t-system" }), "system") == nil)
+assert(python_version.find_installed(set({ "3.13.2t-system" }), "3.13.2t-system") == "3.13.2t-system")
+assert(python_version.find_installed(set({ "graalpy-24.2.0-system", "3.12.3-system" }), "system") == "3.12.3-system")
+assert(python_version.find_installed(set({ "graalpy-24.2.0-system" }), "system") == nil)
+
+-- The latest_installed fallback: the newest regular CPython install, or else the
+-- newest installed name of any kind.
+assert(python_version.newest_installed({ "graalpy-24.2.0", "3.12.3" }) == "3.12.3")
+assert(python_version.newest_installed({ "3.13.2t", "3.13.1" }) == "3.13.1")
+assert(python_version.newest_installed({ "3.14.0a4", "3.13.1-system" }) == "3.13.1-system")
+assert(python_version.newest_installed({ "graalpy-24.2.0" }) == "graalpy-24.2.0")
+
 -- PreInstall: a partial request reads the version list, an exact one does not.
 local before = reads
 local package = plugin:PreInstall({ version = "3.12" })

@@ -189,7 +189,8 @@ fails silently.
 
 The hook returns `{ version = name }` or `{}`. A version that is not installed
 selects nothing. With `strategy = "latest_installed"`, an unreadable or missing
-entry falls back to the newest installed name.
+entry falls back to the newest regular CPython install, or else to the newest
+installed name.
 
 A partial version such as `3.13` in a `.python-version` file is resolved with
 `find_release`, the function PreUse uses, so it never selects a free-threaded

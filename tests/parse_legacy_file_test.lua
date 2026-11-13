@@ -65,4 +65,9 @@ assert(result.version == nil or result.version == "", tostring(result.version))
 result = parse("python-version-pypy", { "3.10.14" }, "latest_installed")
 assert(result.version == "3.10.14", tostring(result.version))
 
+-- latest_installed prefers the newest regular CPython install: GraalPy's release
+-- number is not comparable with CPython's, so 24.2.0 must not win over 3.12.3.
+result = parse("python-version-pypy", { "graalpy-24.2.0", "3.12.3" }, "latest_installed")
+assert(result.version == "3.12.3", tostring(result.version))
+
 print("PASS: .python-version requests and installed-name matching")
