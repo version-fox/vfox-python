@@ -245,83 +245,15 @@ function command.removeTree(path)
     )
 end
 
--- Reads the MSI packages out of the installer. Burn keeps them in a cabinet appended to the
--- EXE, and its manifest, stored in the UX cabinet, names each package. expand.exe, which ships
--- with Windows, unpacks both cabinets, so no extraction tool is bundled. The script copies each
--- MSI to <scratch>\msi under its own name, or throws with a message.
-function command.bundlePackages(installerPath, scratchPath)
-    return powershell(
-        "$installer = "
-            .. literal(installerPath)
-            .. "; $scratch = "
-            .. literal(scratchPath)
-            .. ";\n"
-            .. [[
-$bytes = [IO.File]::ReadAllBytes($installer);
-New-Item -ItemType Directory -Force -Path $scratch | Out-Null;
-function ReadUInt32([int64]$offset) {
-    return [int64][BitConverter]::ToUInt32($bytes, [int]$offset);
-}
-$peOffset = ReadUInt32 0x3C;
-$sectionCount = [BitConverter]::ToUInt16($bytes, [int]($peOffset + 6));
-$optionalHeaderSize = [BitConverter]::ToUInt16($bytes, [int]($peOffset + 20));
-$sectionTable = $peOffset + 24 + $optionalHeaderSize;
-$burn = -1;
-for ($i = 0; $i -lt $sectionCount; $i++) {
-    $entry = $sectionTable + 40 * $i;
-    $sectionName = [Text.Encoding]::ASCII.GetString($bytes, [int]$entry, 8).TrimEnd([char]0);
-    if ($sectionName -eq '.wixburn') { $burn = (ReadUInt32 ($entry + 20)) };
-};
-if ($burn -lt 0) { throw 'The installer has no .wixburn section.' };
-if ((ReadUInt32 $burn) -ne 0x00F14300 -or (ReadUInt32 ($burn + 4)) -ne 2) { throw 'The installer has an unsupported Burn section.' };
-$stubSize = ReadUInt32 ($burn + 24);
-$signatureOffset = ReadUInt32 ($burn + 32);
-$signatureSize = ReadUInt32 ($burn + 36);
-$containerCount = ReadUInt32 ($burn + 44);
-$sizes = @();
-for ($i = 0; $i -lt $containerCount; $i++) { $sizes += (ReadUInt32 ($burn + 48 + 4 * $i)) };
-if ($signatureOffset -ne 0) { $engineSize = $signatureOffset + $signatureSize } else { $engineSize = $stubSize + $sizes[0] };
-function ContainerOffset([int]$index) {
-    if ($index -eq 0) { return $stubSize };
-    $offset = $engineSize;
-    for ($j = 1; $j -lt $index; $j++) { $offset += $sizes[$j] };
-    return $offset;
-}
-function ExpandContainer([int]$index, [string]$name) {
-    $offset = ContainerOffset $index;
-    $length = $sizes[$index];
-    if ($offset + $length -gt $bytes.Length) { throw "Container $index lies outside the installer." };
-    $cabPath = Join-Path $scratch "$name.cab";
-    $cabBytes = New-Object byte[] ([int]$length);
-    [Array]::Copy($bytes, [int]$offset, $cabBytes, 0, [int]$length);
-    [IO.File]::WriteAllBytes($cabPath, $cabBytes);
-    $folder = Join-Path $scratch $name;
-    New-Item -ItemType Directory -Path $folder | Out-Null;
-    & expand.exe '-F:*' $cabPath $folder | Out-Null;
-    if ($LASTEXITCODE -ne 0) { throw "expand.exe could not unpack container $index of the installer." };
-    return $folder;
-}
-$uxFolder = ExpandContainer 0 'ux';
-$manifestPath = Join-Path $uxFolder '0';
-if (-not (Test-Path -LiteralPath $manifestPath)) { throw 'The installer has no bundle manifest.' };
-[xml]$manifest = [IO.File]::ReadAllText($manifestPath, [Text.Encoding]::UTF8);
-$namespaces = [Xml.XmlNamespaceManager]::new($manifest.NameTable);
-$namespaces.AddNamespace('b', $manifest.DocumentElement.NamespaceURI);
-$primary = $manifest.SelectSingleNode("//b:Container[@Attached='yes' and @Primary='yes']", $namespaces);
-if ($primary -eq $null) { throw 'The bundle manifest has no primary attached container.' };
-$packages = ExpandContainer ([int]$primary.AttachedIndex) 'packages';
-$msiFolder = Join-Path $scratch 'msi';
-New-Item -ItemType Directory -Path $msiFolder | Out-Null;
-$copied = @{};
-foreach ($payload in $manifest.SelectNodes("//b:Payload[@Container='$($primary.Id)' and @Packaging='embedded']", $namespaces)) {
-    $name = $payload.FilePath;
-    if (-not $name.EndsWith('.msi', [StringComparison]::OrdinalIgnoreCase) -or $copied.ContainsKey($name)) { continue };
-    Copy-Item -LiteralPath (Join-Path $packages $payload.SourcePath) -Destination (Join-Path $msiFolder $name);
-    $copied[$name] = $true;
-};
-if ($copied.Count -eq 0) { throw 'The bundle manifest lists no MSI packages in its attached container.' };
-]]
-    )
+-- Unpacks a cabinet into a folder with expand.exe, which ships with Windows. The argument is
+-- passed as a value, so PowerShell does not expand the wildcard in -F:*.
+function command.expand(cabinetPath, folderPath)
+    return command.native("expand.exe", { "-F:*", cabinetPath, folderPath })
+end
+
+-- Creates a folder and any missing parents.
+function command.makeDirectory(path)
+    return powershell("New-Item -ItemType Directory -Force -Path " .. literal(path) .. " | Out-Null")
 end
 
 return command

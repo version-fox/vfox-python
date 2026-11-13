@@ -16,6 +16,7 @@ hooks/parse_legacy_file.lua     .python-version
 hooks/detect.lua                vfox link --detect: find Pythons on the machine
 lib/util.lua                    versions, downloads, Windows install, uv-build, shebangs
 lib/windows_command.lua         base64 PowerShell commands and the MSI junction
+lib/bundle.lua                  reads the attached cabinets and the manifest of a python.org EXE
 lib/pep514.lua                  Windows Python launcher registration
 lib/python_version.lua          version parsing and installed-name matching
 lib/detect_python.lua           the Detect hook's sources and filtering

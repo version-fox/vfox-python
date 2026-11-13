@@ -16,6 +16,7 @@ hooks/parse_legacy_file.lua     .python-version
 hooks/detect.lua                vfox link --detect：找出本机已有的 Python
 lib/util.lua                    版本、下载、Windows 安装、uv-build、shebang
 lib/windows_command.lua         base64 PowerShell 命令和 MSI junction
+lib/bundle.lua                  读取 python.org EXE 的附加 CAB 和 manifest
 lib/pep514.lua                  Windows Python 启动器注册
 lib/python_version.lua          版本解析和已安装名字匹配
 lib/detect_python.lua           Detect 钩子的来源和过滤
