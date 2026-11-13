@@ -1,3 +1,17 @@
+-- Copyright 2026 Han Li and contributors
+--
+-- Licensed under the Apache License, Version 2.0 (the "License");
+-- you may not use this file except in compliance with the License.
+-- You may obtain a copy of the License at
+--
+--   http://www.apache.org/licenses/LICENSE-2.0
+--
+-- Unless required by applicable law or agreed to in writing, software
+-- distributed under the License is distributed on an "AS IS" BASIS,
+-- WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-- See the License for the specific language governing permissions and
+-- limitations under the License.
+
 local http = require("http")
 local html = require("html")
 local json = require("json")
@@ -6,9 +20,14 @@ local windowsCommand = require("windows_command")
 -- get mirror
 local PYTHON_URL = "https://www.python.org/ftp/python/"
 local VFOX_PYTHON_MIRROR = os.getenv("VFOX_PYTHON_MIRROR")
-if VFOX_PYTHON_MIRROR then
+if VFOX_PYTHON_MIRROR and VFOX_PYTHON_MIRROR ~= "" then
+    if not VFOX_PYTHON_MIRROR:match("/$") then
+        VFOX_PYTHON_MIRROR = VFOX_PYTHON_MIRROR .. "/"
+    end
     PYTHON_URL = VFOX_PYTHON_MIRROR
+    ---@diagnostic disable-next-line: undefined-field
     os.setenv("PYTHON_BUILD_MIRROR_URL_SKIP_CHECKSUM", 1)
+    ---@diagnostic disable-next-line: undefined-field
     os.setenv("PYTHON_BUILD_MIRROR_URL", PYTHON_URL)
 end
 
@@ -19,15 +38,14 @@ local URL_ENCODED_DOT = "%%2[eE]"
 
 -- request headers
 local REQUEST_HEADERS = {
-    ["User-Agent"] = "vfox"
+    ["User-Agent"] = "vfox",
 }
-
--- pip.cmd lives under Scripts, so %~dp0..\python.exe resolves to the install root's python.exe.
--- Windows command scripts conventionally use CRLF line endings.
-local WINDOWS_PIP_SHIM_CONTENT = "@echo off\r\n\"%~dp0..\\python.exe\" -m pip %*\r\n"
 
 local UV_BUILD_ENV = "VFOX_PYTHON_USE_UV_BUILD"
 local UV_BUILD_MIRROR_ENV = "VFOX_PYTHON_UV_BUILD_MIRROR"
+
+local GRAALPY_RELEASES_URL = "https://api.github.com/repos/oracle/graalpython/releases?per_page=100"
+local GRAALPY_WINDOWS_SUFFIX = "-windows-amd64.zip"
 
 -- download source
 local DOWNLOAD_SOURCE = {
@@ -36,18 +54,107 @@ local DOWNLOAD_SOURCE = {
     SOURCE = PYTHON_URL .. "%s/Python-%s.tar",
 }
 
+--- Splits a GraalPy version name into the release and the distribution:
+---
+---   graalpy-24.2.0                    -> release 24.2.0, Oracle GraalVM
+---   graalpy-community-24.2.0          -> release 24.2.0, Community
+---   graalpy3.13-25.5.5                -> release 25.5.5, Oracle GraalVM
+---   graalpy3.13-community-25.5.5      -> release 25.5.5, Community
+---
+--- GraalPy 25.1 and later put the Python language version in the distribution
+--- name (graalpy3.13-25.5.5); earlier releases omit it.
+function parseGraalPyVersion(version)
+    if type(version) ~= "string" then
+        return nil
+    end
+
+    local pythonMinor, release = version:match("^graalpy(%d+%.%d+)%-community%-(.+)$")
+    local community = pythonMinor ~= nil
+    if not release then
+        pythonMinor, release = version:match("^graalpy(%d+%.%d+)%-(.+)$")
+    end
+    if not release then
+        release = version:match("^graalpy%-community%-(.+)$")
+        community = release ~= nil
+    end
+    if not release then
+        release = version:match("^graalpy%-(.+)$")
+    end
+    if not release then
+        return nil
+    end
+
+    return {
+        release = release,
+        community = community,
+        pythonMinor = pythonMinor,
+    }
+end
+
+function isGraalPyVersion(version)
+    return parseGraalPyVersion(version) ~= nil or (type(version) == "string" and version:match("^graalpython%-") ~= nil)
+end
+
+local function graalPyNote(version)
+    local parsed = parseGraalPyVersion(version)
+    if parsed and parsed.community then
+        return "GraalPy Community"
+    end
+    return "GraalPy"
+end
+
+local function graalPyAssetPrefix(version, parsed)
+    return version:sub(1, #version - #parsed.release - 1)
+end
+
+--- The official GraalPy archive for the running platform, or nil when Oracle
+--- does not publish one. Each entry has the release-asset suffix and the
+--- directory name inside the archive.
+local function graalPyPlatform()
+    local osType = string.lower((RUNTIME and RUNTIME.osType) or OS_TYPE or "")
+    if osType == "macos" then
+        osType = "darwin"
+    end
+
+    local arch = string.lower((RUNTIME and RUNTIME.archType) or "")
+    if arch == "amd64" or arch == "x64" or arch == "x86_64" then
+        arch = "x86_64"
+    elseif arch == "arm64" or arch == "aarch64" then
+        arch = "aarch64"
+    elseif arch == "386" or arch == "i386" or arch == "x86" then
+        arch = "x86"
+    end
+
+    if osType == "windows" and arch == "x86_64" then
+        return { suffix = "-windows-amd64.zip", archiveSuffix = "-windows-amd64" }
+    elseif osType == "linux" and arch == "x86_64" then
+        return { suffix = "-linux-amd64.tar.gz", archiveSuffix = "-linux-amd64" }
+    elseif osType == "linux" and arch == "aarch64" then
+        return { suffix = "-linux-aarch64.tar.gz", archiveSuffix = "-linux-aarch64" }
+    elseif osType == "darwin" and arch == "x86_64" then
+        return { suffix = "-macos-amd64.tar.gz", archiveSuffix = "-macos-amd64" }
+    elseif osType == "darwin" and arch == "aarch64" then
+        return { suffix = "-macos-aarch64.tar.gz", archiveSuffix = "-macos-aarch64" }
+    end
+    return nil
+end
+
+local function graalPyArchiveName(version, parsed, platform)
+    return graalPyAssetPrefix(version, parsed) .. "-" .. parsed.release .. platform.archiveSuffix
+end
+
 function checkIsReleaseVersion(version)
     local resp, err = http.head({
-        url = DOWNLOAD_SOURCE.SOURCE:format(version, version) .. '.xz',
-        headers = REQUEST_HEADERS
+        url = DOWNLOAD_SOURCE.SOURCE:format(version, version) .. ".xz",
+        headers = REQUEST_HEADERS,
     })
     if err == nil and resp.status_code == 200 then
         return true
     end
 
     local resp, err = http.head({
-        url = DOWNLOAD_SOURCE.SOURCE:format(version, version) .. '.bz2',
-        headers = REQUEST_HEADERS
+        url = DOWNLOAD_SOURCE.SOURCE:format(version, version) .. ".bz2",
+        headers = REQUEST_HEADERS,
     })
     if err == nil and resp.status_code == 200 then
         return true
@@ -57,7 +164,7 @@ function checkIsReleaseVersion(version)
 end
 
 function windowsInstall(ctx)
-    local sdkInfo = ctx.sdkInfo['python']
+    local sdkInfo = ctx.sdkInfo["python"]
     local path = sdkInfo.path
     local version = sdkInfo.version
     local url = getReleaseForWindows(version)
@@ -67,11 +174,74 @@ function windowsInstall(ctx)
     elseif string.sub(filename, -3) == "exe" then
         windowsInstallExe(path, url, version, filename)
     end
+end
 
+--- Creates python3.exe, python3.12.exe and their pythonw counterparts next to
+--- python.exe, plus the venv launcher aliases when the install has them. The
+--- python.org installers keep these aliases in a shared directory, so every
+--- vfox install makes its own copies for `python3` to resolve after `vfox use`.
+local function createPythonAliases(qInstallPath, version)
+    -- Define paths for executables based on installation path
+    local pythonExePath = qInstallPath .. "\\python.exe"
+    local pythonwExePath = qInstallPath .. "\\pythonw.exe"
+    local venvlauncherExePath = qInstallPath .. "\\Lib\\venv\\scripts\\nt\\python.exe"
+
+    local pattern = "(%d+)%.(%d+)"
+    local major, minor = string.match(version, pattern)
+    local majorMinor = major .. minor
+    local majorDotMinor = major .. "." .. minor
+
+    -- Copy Python executables with versioned names
+    -- python.exe
+    local files = {
+        qInstallPath .. "\\python" .. major .. ".exe",
+        qInstallPath .. "\\python" .. majorMinor .. ".exe",
+        qInstallPath .. "\\python" .. majorDotMinor .. ".exe",
+    }
+    for _, file in ipairs(files) do
+        local command = windowsCommand.copy(pythonExePath, file)
+        if os.execute(command) ~= 0 then
+            error("Failed to create Python executable alias: " .. file)
+        end
+    end
+
+    -- pythonw.exe
+    local files = {
+        qInstallPath .. "\\pythonw" .. major .. ".exe",
+        qInstallPath .. "\\pythonw" .. majorMinor .. ".exe",
+        qInstallPath .. "\\pythonw" .. majorDotMinor .. ".exe",
+    }
+    for _, file in ipairs(files) do
+        local command = windowsCommand.copy(pythonwExePath, file)
+        if os.execute(command) ~= 0 then
+            error("Failed to create Python executable alias: " .. file)
+        end
+    end
+
+    -- Check if venvlauncher exists
+    local file = io.open(venvlauncherExePath, "r")
+    if file then
+        io.close(file)
+        -- python.exe
+        local files = {
+            qInstallPath .. "\\Lib\\venv\\scripts\\nt\\python" .. major .. ".exe",
+            qInstallPath .. "\\Lib\\venv\\scripts\\nt\\python" .. majorMinor .. ".exe",
+            qInstallPath .. "\\Lib\\venv\\scripts\\nt\\python" .. majorDotMinor .. ".exe",
+            qInstallPath .. "\\Lib\\venv\\scripts\\nt\\pythonw" .. major .. ".exe",
+            qInstallPath .. "\\Lib\\venv\\scripts\\nt\\pythonw" .. majorMinor .. ".exe",
+            qInstallPath .. "\\Lib\\venv\\scripts\\nt\\pythonw" .. majorDotMinor .. ".exe",
+        }
+        for _, file in ipairs(files) do
+            local command = windowsCommand.copy(venvlauncherExePath, file)
+            if os.execute(command) ~= 0 then
+                error("Failed to create Python venv executable alias: " .. file)
+            end
+        end
+    end
 end
 
 function windowsInstallMsi(path, url, version, filename)
-    -- WARNNING: 
+    -- WARNNING:
     -- The msi installer for python 2.x must be downloaded to another directory
     -- it cannot be installed in the current directory.
     local qInstallFile = RUNTIME.pluginDirPath .. "\\" .. filename
@@ -83,7 +253,7 @@ function windowsInstallMsi(path, url, version, filename)
     print("to:\t" .. qInstallFile)
     local err = http.download_file({
         url = url,
-        headers = REQUEST_HEADERS
+        headers = REQUEST_HEADERS,
     }, qInstallFile)
 
     if err ~= nil then
@@ -106,12 +276,18 @@ function windowsInstallMsi(path, url, version, filename)
     if file then
         io.close(file)
         print("Installing pip...")
-        local command = windowsCommand.native(qInstallPath .. '\\python.exe', {'-E', '-s', '-m', 'ensurepip', '-U', '--default-pip'})
+        -- The output goes to files, so a failure prints pip's own error text.
+        local command = windowsCommand.pythonLogged(
+            qInstallPath .. "\\python.exe",
+            { "-E", "-s", "-m", "ensurepip", "-U", "--default-pip" }
+        )
         local exitCode = os.execute(command)
         if exitCode ~= 0 then
             error("Install pip failed. exit " .. exitCode)
         end
     end
+
+    createPythonAliases(qInstallPath, version)
 end
 
 function windowsInstallExe(path, url, version, filename)
@@ -119,7 +295,7 @@ function windowsInstallExe(path, url, version, filename)
     local qInstallFile = path .. "\\" .. filename
     local qInstallPath = path
     -- The bundle writes its packages here; they are installed, then removed.
-    local layoutPath = path .. '\\InstallerLayout'
+    local layoutPath = path .. "\\InstallerLayout"
 
     -- download
     print("Downloading installer...")
@@ -127,39 +303,53 @@ function windowsInstallExe(path, url, version, filename)
     print("to:\t" .. qInstallFile)
     local err = http.download_file({
         url = url,
-        headers = REQUEST_HEADERS
+        headers = REQUEST_HEADERS,
     }, qInstallFile)
 
     if err ~= nil then
         error("Downloading installer failed")
     end
 
-    -- Layout
+    -- Layout: the bundle writes its own packages, so no extraction tool is needed.
     print("Creating installer layout...")
-    -- The bundle writes its own packages, so no extraction tool is needed.
-    local command = windowsCommand.native(qInstallFile, {'/quiet', '/layout', layoutPath})
+    local command = windowsCommand.native(qInstallFile, { "/quiet", "/layout", layoutPath })
     local exitCode = os.execute(command)
     if exitCode ~= 0 then
-        error("Creating installer layout failed")
+        error(
+            "Creating installer layout failed: the installer exited with code "
+                .. tostring(exitCode)
+                .. " for "
+                .. qInstallFile
+                .. ". If it printed nothing, antivirus software may have blocked it."
+        )
     end
 
     -- Cleaning up ...
     print("Cleaning installer...")
     os.remove(qInstallFile)
-    local files = {'appendpath.msi', 'launcher.msi', 'path.msi', 'pip.msi'}
+    local files = { "appendpath.msi", "launcher.msi", "path.msi", "pip.msi" }
     for _, file in ipairs(files) do
-        os.remove(layoutPath .. '\\' .. file)
+        os.remove(layoutPath .. "\\" .. file)
     end
 
     -- Install msi
     print("Installing python...")
     local listing, listErr = io.popen(windowsCommand.files(layoutPath))
     if not listing then
-        error('Failed to list installer packages: ' .. tostring(listErr))
+        error("Failed to list installer packages: " .. tostring(listErr))
     end
     local files = {}
     local readOk, readErr = pcall(function()
-        for file in listing:lines() do
+        -- vfox 1.1.0's Windows io.popen handle has read/close but no lines
+        -- method; read("*l") is the portable way to consume it.
+        while true do
+            local file, readLineErr = listing:read("*l")
+            if file == nil then
+                if readLineErr ~= nil then
+                    error(readLineErr)
+                end
+                break
+            end
             if file:match("%.msi$") then
                 files[#files + 1] = file
             end
@@ -167,24 +357,26 @@ function windowsInstallExe(path, url, version, filename)
     end)
     -- GopherLua returns the process's numeric exit status from pipe close.
     -- Close even after a read error, and reject partial results before installing.
-    local closeOk, listExitCode = pcall(function() return listing:close() end)
+    local closeOk, listExitCode = pcall(function()
+        return listing:close()
+    end)
     if not readOk then
-        error('Failed to list installer packages: ' .. tostring(readErr))
+        error("Failed to list installer packages: " .. tostring(readErr))
     end
     if not closeOk or listExitCode ~= 0 then
-        error('Failed to list installer packages: ' .. tostring(listExitCode))
+        error("Failed to list installer packages: " .. tostring(listExitCode))
     end
     if #files == 0 then
-        error('No installer MSI packages found in: ' .. layoutPath)
+        error("No installer MSI packages found in: " .. layoutPath)
     end
     for _, file in ipairs(files) do
         print("Installing MSI package: " .. file)
-        local command = windowsCommand.msi(layoutPath .. '\\' .. file, qInstallPath)
+        local command = windowsCommand.msi(layoutPath .. "\\" .. file, qInstallPath)
         local exitCode = os.execute(command)
         if exitCode ~= 0 then
             error("Install msi failed: " .. file)
         end
-        os.remove(qInstallPath .. '\\' .. file)
+        os.remove(qInstallPath .. "\\" .. file)
     end
 
     -- The MSI packages are installed, so the layout is no longer needed.
@@ -199,63 +391,17 @@ function windowsInstallExe(path, url, version, filename)
     local file = io.open(ensurepipPath, "r")
     if file then
         io.close(file)
-        local command = windowsCommand.native(qInstallPath .. '\\python.exe', {'-E', '-s', '-m', 'ensurepip', '-U', '--default-pip'})
+        local command = windowsCommand.native(
+            qInstallPath .. "\\python.exe",
+            { "-E", "-s", "-m", "ensurepip", "-U", "--default-pip" }
+        )
         local exitCode = os.execute(command)
         if exitCode ~= 0 then
             error("Install pip failed. exit " .. exitCode)
         end
     end
 
-    -- Define paths for executables based on installation path
-    local pythonExePath = qInstallPath .. "\\python.exe"
-    local pythonwExePath = qInstallPath .. "\\pythonw.exe"
-    local venvlauncherExePath = qInstallPath .. "\\Lib\\venv\\scripts\\nt\\python.exe"
-
-    local pattern = "(%d+)%.(%d+)"
-    local major, minor = string.match(version, pattern)
-    local majorMinor = major .. minor
-    local majorDotMinor = major .. "." .. minor
-
-    -- Copy Python executables with versioned names
-    -- python.exe
-    local files = {qInstallPath .. "\\python" .. major .. ".exe", qInstallPath .. "\\python" .. majorMinor .. ".exe",
-                   qInstallPath .. "\\python" .. majorDotMinor .. ".exe"}
-    for _, file in ipairs(files) do
-        local command = windowsCommand.copy(pythonExePath, file)
-        if os.execute(command) ~= 0 then
-            error('Failed to create Python executable alias: ' .. file)
-        end
-    end
-
-    -- pythonw.exe
-    local files = {qInstallPath .. "\\pythonw" .. major .. ".exe", qInstallPath .. "\\pythonw" .. majorMinor .. ".exe",
-                   qInstallPath .. "\\pythonw" .. majorDotMinor .. ".exe"}
-    for _, file in ipairs(files) do
-        local command = windowsCommand.copy(pythonwExePath, file)
-        if os.execute(command) ~= 0 then
-            error('Failed to create Python executable alias: ' .. file)
-        end
-    end
-
-    -- Check if venvlauncher exists
-    local file = io.open(venvlauncherExePath, "r")
-    if file then
-        io.close(file)
-        -- python.exe
-        local files = {qInstallPath .. "\\Lib\\venv\\scripts\\nt\\python" .. major .. ".exe",
-                       qInstallPath .. "\\Lib\\venv\\scripts\\nt\\python" .. majorMinor .. ".exe",
-                       qInstallPath .. "\\Lib\\venv\\scripts\\nt\\python" .. majorDotMinor .. ".exe",
-                       qInstallPath .. "\\Lib\\venv\\scripts\\nt\\pythonw" .. major .. ".exe",
-                       qInstallPath .. "\\Lib\\venv\\scripts\\nt\\pythonw" .. majorMinor .. ".exe",
-                       qInstallPath .. "\\Lib\\venv\\scripts\\nt\\pythonw" .. majorDotMinor .. ".exe"}
-        for _, file in ipairs(files) do
-            local command = windowsCommand.copy(venvlauncherExePath, file)
-            if os.execute(command) ~= 0 then
-                error('Failed to create Python venv executable alias: ' .. file)
-            end
-        end
-    end
-
+    createPythonAliases(qInstallPath, version)
 end
 
 local pyenvBranch = ""
@@ -423,7 +569,7 @@ local function runtimeLibc(osType)
         "/lib/ld-musl-armhf.so.1",
         "/usr/lib/libc.musl-x86_64.so.1",
         "/usr/lib/libc.musl-aarch64.so.1",
-        "/usr/lib/libc.musl-armhf.so.1"
+        "/usr/lib/libc.musl-armhf.so.1",
     }
     for _, muslLib in ipairs(muslLibs) do
         local file = io.open(muslLib, "r")
@@ -519,12 +665,12 @@ local function uvBuildAssetName(build)
 end
 
 local function isSupportedArchiveName(name)
-    return string.sub(name, -7) == ".tar.gz" or
-        string.sub(name, -4) == ".tgz" or
-        string.sub(name, -7) == ".tar.xz" or
-        string.sub(name, -8) == ".tar.bz2" or
-        string.sub(name, -4) == ".zip" or
-        string.sub(name, -3) == ".7z"
+    return string.sub(name, -7) == ".tar.gz"
+        or string.sub(name, -4) == ".tgz"
+        or string.sub(name, -7) == ".tar.xz"
+        or string.sub(name, -8) == ".tar.bz2"
+        or string.sub(name, -4) == ".zip"
+        or string.sub(name, -3) == ".7z"
 end
 
 local function uvBuildAssetPriority(build)
@@ -562,7 +708,9 @@ local function uvBuildDownloadUrl(build)
 
     local release, filename = string.match(build.url, UV_BUILD_GITHUB_RELEASE_PATTERN)
     if release == nil or filename == nil then
-        error("Unable to rewrite uv-build download URL for mirror; expected a GitHub release download URL: " .. build.url)
+        error(
+            "Unable to rewrite uv-build download URL for mirror; expected a GitHub release download URL: " .. build.url
+        )
     end
 
     return trimTrailingSlash(mirror) .. "/" .. release .. "/" .. filename
@@ -572,7 +720,7 @@ local function getUvBuilds(osType, archType, libc)
     fixHeaders()
     local resp, err = http.get({
         url = buildUvBuildUrl(osType, archType, libc),
-        headers = REQUEST_HEADERS
+        headers = REQUEST_HEADERS,
     })
     if err ~= nil or resp.status_code ~= 200 then
         local statusCode = resp and resp.status_code or "none"
@@ -599,7 +747,16 @@ local function findUvBuild(version)
     if selectedBuild ~= nil then
         return selectedBuild
     end
-    error("No uv-build prebuilt Python found for version " .. version .. " on " .. osType .. "/" .. archType .. "/" .. libc)
+    error(
+        "No uv-build prebuilt Python found for version "
+            .. version
+            .. " on "
+            .. osType
+            .. "/"
+            .. archType
+            .. "/"
+            .. libc
+    )
 end
 
 local function pathExists(path)
@@ -612,7 +769,8 @@ local function pathExists(path)
 end
 
 local function ensureWindowsDirectory(path)
-    local command = powerShellCommand("New-Item -ItemType Directory -Force -Path " .. powerShellQuote(path) .. " | Out-Null")
+    local command =
+        powerShellCommand("New-Item -ItemType Directory -Force -Path " .. powerShellQuote(path) .. " | Out-Null")
     local exitCode = os.execute(command)
     if not commandSucceeded(exitCode) then
         error("Failed to create directory: " .. path .. ". Exit code: " .. tostring(exitCode))
@@ -633,13 +791,14 @@ local function writeWindowsFile(path, content)
     end
 end
 
-local function createWindowsPipShim(scriptsPath)
+local function createWindowsPipShim(scriptsPath, pythonRelativePath)
     ensureWindowsDirectory(scriptsPath)
 
     -- pip and pip3 cover the command names exposed by vfox CI and common Windows usage.
+    local content = '@echo off\r\n"%~dp0' .. pythonRelativePath .. '" -m pip %*\r\n'
     local shims = { "pip.cmd", "pip3.cmd" }
     for _, shim in ipairs(shims) do
-        writeWindowsFile(scriptsPath .. "\\" .. shim, WINDOWS_PIP_SHIM_CONTENT)
+        writeWindowsFile(scriptsPath .. "\\" .. shim, content)
     end
 end
 
@@ -647,13 +806,16 @@ local function isPipCommandAvailable(scriptsPath)
     return pathExists(scriptsPath .. "\\pip.exe") or pathExists(scriptsPath .. "\\pip.cmd")
 end
 
-local function ensureWindowsUvBuildPip(path)
+--- Installs pip for a Windows Python whose prefix is `root` and whose
+--- interpreter is `pythonExe`. `pythonRelativePath` is the interpreter path
+--- relative to the Scripts directory, used only when ensurepip does not create
+--- the pip launchers itself.
+local function ensureWindowsPip(root, pythonExe, pythonRelativePath)
     if runtimeOs() ~= "windows" then
         return
     end
 
-    local pythonExe = path .. "\\python.exe"
-    local scriptsPath = path .. "\\Scripts"
+    local scriptsPath = root .. "\\Scripts"
     if not pathExists(pythonExe) then
         error("Cannot install pip: python.exe was not found at " .. pythonExe)
     end
@@ -662,15 +824,26 @@ local function ensureWindowsUvBuildPip(path)
         return
     end
 
-    if not pathExists(path .. "\\Lib\\ensurepip\\__init__.py") then
-        print("Warning: uv-build Python does not include ensurepip; pip will not be available.")
+    if not pathExists(root .. "\\Lib\\ensurepip\\__init__.py") then
+        print("Warning: Python does not include ensurepip; pip will not be available.")
         return
     end
 
-    print("Installing pip for uv-build Python on Windows...")
+    print("Installing pip on Windows...")
     local command = powerShellPythonCommand(pythonExe, { "-E", "-s", "-m", "ensurepip", "-U", "--default-pip" })
     local exitCode = os.execute(command)
     if not commandSucceeded(exitCode) then
+        -- Server Core can be picky about the PowerShell wrapper; retry the
+        -- same interpreter through cmd before reporting the failure.
+        print("ensurepip via PowerShell failed; retrying directly...")
+        exitCode = os.execute(shellQuote(pythonExe) .. " -E -s -m ensurepip -U --default-pip")
+    end
+    if not commandSucceeded(exitCode) then
+        print("ensurepip failed; interpreter check follows...")
+        os.execute(
+            shellQuote(pythonExe)
+                .. " -E -s -c \"import os, sys; print(sys.version); print('TEMP=' + str(os.environ.get('TEMP')))\""
+        )
         error("ensurepip failed while installing pip. Exit code: " .. tostring(exitCode))
     end
 
@@ -678,10 +851,18 @@ local function ensureWindowsUvBuildPip(path)
         return
     end
 
-    local windowsBundledPath = path .. "\\Lib\\ensurepip\\_bundled"
+    local windowsBundledPath = root .. "\\Lib\\ensurepip\\_bundled"
     local reinstallCommand = powerShellPythonCommand(pythonExe, {
-        "-E", "-s", "-m", "pip", "install", "--force-reinstall", "--no-index",
-        "--find-links", windowsBundledPath, "pip"
+        "-E",
+        "-s",
+        "-m",
+        "pip",
+        "install",
+        "--force-reinstall",
+        "--no-index",
+        "--find-links",
+        windowsBundledPath,
+        "pip",
     })
     local reinstallExitCode = os.execute(reinstallCommand)
     if not commandSucceeded(reinstallExitCode) then
@@ -695,8 +876,12 @@ local function ensureWindowsUvBuildPip(path)
     end
 
     if not isPipCommandAvailable(scriptsPath) then
-        createWindowsPipShim(scriptsPath)
+        createWindowsPipShim(scriptsPath, pythonRelativePath)
     end
+end
+
+local function ensureWindowsUvBuildPip(path)
+    ensureWindowsPip(path, path .. "\\python.exe", "..\\python.exe")
 end
 
 function resolvePythonInstallPath(installPath, version)
@@ -710,7 +895,84 @@ function resolvePythonInstallPath(installPath, version)
         return uvBuildPath
     end
 
+    -- Oracle publishes GraalPy as an archive with a top-level
+    -- graalpy[-community]-<release>-<platform> directory.
+    local parsed = parseGraalPyVersion(version)
+    local platform = parsed and graalPyPlatform() or nil
+    if platform then
+        if platform.suffix:sub(-4) == ".zip" then
+            if pathExists(installPath .. "\\bin\\python.exe") then
+                return installPath
+            end
+            local graalPyPath = installPath .. "\\" .. graalPyArchiveName(version, parsed, platform)
+            if pathExists(graalPyPath .. "\\bin\\python.exe") then
+                return graalPyPath
+            end
+        else
+            local graalPyPath = installPath .. "/" .. graalPyArchiveName(version, parsed, platform)
+            if pathExists(graalPyPath .. "/bin") then
+                return graalPyPath
+            end
+        end
+    end
+
     return installPath
+end
+
+function graalPyInstall(ctx)
+    local sdkInfo = ctx.sdkInfo["python"]
+    local path = sdkInfo.path
+    local version = sdkInfo.version
+
+    local installPath = resolvePythonInstallPath(path, version)
+    if OS_TYPE == "windows" then
+        local pythonExe = installPath .. "\\bin\\python.exe"
+        if not pathExists(pythonExe) then
+            error("Extracted GraalPy archive does not contain bin\\python.exe at expected location: " .. installPath)
+        end
+        ensureWindowsPip(installPath, pythonExe, "..\\bin\\python.exe")
+    else
+        local pythonExe = installPath .. "/bin/python3"
+        if not pathExists(pythonExe) then
+            pythonExe = installPath .. "/bin/python"
+        end
+        if not pathExists(pythonExe) then
+            error("Extracted GraalPy archive does not contain bin/python at expected location: " .. installPath)
+        end
+        local status = os.execute(shellQuote(pythonExe) .. " -I -m ensurepip")
+        if not commandSucceeded(status) then
+            error("ensurepip failed while installing pip for GraalPy. Exit code: " .. tostring(status))
+        end
+        -- ensurepip on GraalPy creates pip3 but not the pip launcher.
+        local pip3 = installPath .. "/bin/pip3"
+        local pip = installPath .. "/bin/pip"
+        if pathExists(pip3) and not pathExists(pip) then
+            local copyStatus = os.execute("cp " .. shellQuote(pip3) .. " " .. shellQuote(pip))
+            if not commandSucceeded(copyStatus) then
+                error("Failed to create the pip launcher for GraalPy. Exit code: " .. tostring(copyStatus))
+            end
+        end
+        fixShebangLines(installPath)
+    end
+
+    print("Install GraalPy success!")
+end
+
+--- Whether a vfox version directory holds a link to a Python that lives
+--- elsewhere (`vfox link`). Such an installation belongs to its owner; the
+--- plugin must not rewrite shebangs or report its missing packaging tools.
+function isLinkedPythonInstall(versionPath, version)
+    if OS_TYPE == "windows" then
+        return false
+    end
+    local linkPath = versionPath .. "/python-" .. version
+    local handle = io.popen("test -L " .. shellQuote(linkPath) .. " 2>/dev/null && echo yes")
+    if not handle then
+        return false
+    end
+    local output = handle:read("*a") or ""
+    handle:close()
+    return string.find(output, "yes", 1, true) ~= nil
 end
 
 function uvBuildPreInstall(version)
@@ -742,8 +1004,191 @@ function uvBuildPreInstall(version)
     return uvBuildPackage
 end
 
+local graalPyReleaseCaches = {}
+
+local function graalPyGitHubHeaders()
+    fixHeaders()
+    local headers = {
+        ["User-Agent"] = REQUEST_HEADERS["User-Agent"],
+        ["Accept"] = "application/vnd.github+json",
+    }
+    local token = os.getenv("GITHUB_TOKEN") or os.getenv("GH_TOKEN")
+    if token ~= nil and token ~= "" then
+        headers["Authorization"] = "Bearer " .. token
+    end
+    return headers
+end
+
+--- Lists the GraalPy releases that publish an asset for `suffix`. The GitHub
+--- API is the source of truth for both the asset name and the release tag,
+--- because 25.3.4.1 is published under the tag graal-25.3.4.
+local function getGraalPyReleases(suffix)
+    if graalPyReleaseCaches[suffix] ~= nil then
+        return graalPyReleaseCaches[suffix]
+    end
+
+    local resp, err = http.get({
+        url = GRAALPY_RELEASES_URL,
+        headers = graalPyGitHubHeaders(),
+    })
+    if err ~= nil or resp == nil then
+        error("Failed to list GraalPy releases: " .. tostring(err or "empty response"))
+    end
+    if resp.status_code ~= 200 then
+        error("Failed to list GraalPy releases: HTTP " .. tostring(resp.status_code))
+    end
+
+    local releases = json.decode(resp.body)
+    local result, seen = {}, {}
+    for _, release in ipairs(releases) do
+        if type(release) == "table" and type(release.assets) == "table" then
+            for _, asset in ipairs(release.assets) do
+                local name = asset.name
+                local url = asset.browser_download_url
+                if
+                    type(name) == "string"
+                    and type(url) == "string"
+                    and name:match("^graalpy")
+                    and name:sub(-#suffix) == suffix
+                    and not name:find("-jvm-", 1, true)
+                    and isHttpsUrl(url)
+                then
+                    local version = name:sub(1, #name - #suffix)
+                    if parseGraalPyVersion(version) and not seen[version] then
+                        seen[version] = true
+                        result[#result + 1] = {
+                            version = version,
+                            note = graalPyNote(version),
+                            url = url,
+                            sha256Url = url .. ".sha256",
+                        }
+                    end
+                end
+            end
+        end
+    end
+
+    graalPyReleaseCaches[suffix] = result
+    return result
+end
+
+local function findGraalPyRelease(version, suffix)
+    for _, release in ipairs(getGraalPyReleases(suffix)) do
+        if release.version == version then
+            return release
+        end
+    end
+    return nil
+end
+
+local function graalPySha256(release)
+    local resp, err = http.get({
+        url = release.sha256Url,
+        headers = REQUEST_HEADERS,
+    })
+    if err ~= nil or resp == nil or resp.status_code ~= 200 then
+        local detail = err or (resp and resp.status_code) or "empty response"
+        error("Failed to download the GraalPy checksum for " .. release.version .. ": " .. tostring(detail))
+    end
+
+    local sha256 = string.lower((resp.body or ""):match("%x+") or "")
+    if #sha256 ~= 64 or sha256:match("[^0-9a-f]") then
+        error("Invalid GraalPy checksum for " .. release.version)
+    end
+    return sha256
+end
+
+local function graalPyConstructedRelease(version, parsed, platform)
+    local asset = graalPyAssetPrefix(version, parsed) .. "-" .. parsed.release .. platform.suffix
+    local major = tonumber(parsed.release:match("^(%d+)"))
+    local tagPrefix = (major ~= nil and major <= 22) and "vm-" or "graal-"
+    local tags = { parsed.release }
+    -- 25.3.4.1 is published under the tag graal-25.3.4.
+    local short = parsed.release:match("^(%d+%.%d+%.%d+)%.%d+$")
+    if short ~= nil and short ~= parsed.release then
+        tags[#tags + 1] = short
+    end
+    return { tags = tags, asset = asset, tagPrefix = tagPrefix }
+end
+
+--- The package is the official GraalPy archive for the running platform. The
+--- caller has already resolved `latest`; a version without a matching asset is
+--- an error. The GitHub API supplies the exact tag, but a rate limit must not
+--- prevent an install: the URL is also constructed from the version and its
+--- checksum is verified before it is used.
+function graalPyPreInstall(version)
+    local parsed = parseGraalPyVersion(version)
+    if parsed == nil then
+        error("Unsupported GraalPy version: " .. version)
+    end
+
+    local platform = graalPyPlatform()
+    if platform == nil then
+        error("GraalPy is not available for " .. tostring(RUNTIME.osType) .. "/" .. tostring(RUNTIME.archType))
+    end
+
+    local release
+    local apiError
+    local ok, found = pcall(findGraalPyRelease, version, platform.suffix)
+    if ok then
+        release = found
+    else
+        apiError = found
+    end
+
+    if release ~= nil then
+        return {
+            version = version,
+            url = release.url,
+            headers = REQUEST_HEADERS,
+            sha256 = graalPySha256(release),
+            note = release.note,
+        }
+    end
+
+    local constructed = graalPyConstructedRelease(version, parsed, platform)
+    for _, tag in ipairs(constructed.tags) do
+        local url = "https://github.com/oracle/graalpython/releases/download/"
+            .. constructed.tagPrefix
+            .. tag
+            .. "/"
+            .. constructed.asset
+        local checksumOk, checksum = pcall(graalPySha256, {
+            version = version,
+            sha256Url = url .. ".sha256",
+        })
+        if checksumOk then
+            return {
+                version = version,
+                url = url,
+                headers = REQUEST_HEADERS,
+                sha256 = checksum,
+                note = graalPyNote(version),
+            }
+        end
+    end
+
+    local detail = apiError and (": " .. tostring(apiError)) or ""
+    error("No GraalPy " .. platform.archiveSuffix:sub(2) .. " build found for " .. version .. detail)
+end
+
+function parseGraalPyWindowsVersions()
+    if RUNTIME.archType ~= "amd64" then
+        return {}
+    end
+
+    local result = {}
+    for _, release in ipairs(getGraalPyReleases(GRAALPY_WINDOWS_SUFFIX)) do
+        result[#result + 1] = {
+            version = release.version,
+            note = release.note,
+        }
+    end
+    return result
+end
+
 function linuxCompile(ctx)
-    local sdkInfo = ctx.sdkInfo['python']
+    local sdkInfo = ctx.sdkInfo["python"]
     local path = sdkInfo.path
     local version = sdkInfo.version
     local pyenv_url = "https://github.com/pyenv/pyenv.git"
@@ -752,7 +1197,9 @@ function linuxCompile(ctx)
     if pyenvBranch ~= "" then
         branch = "--branch " .. pyenvBranch
     end
-    local status = os.execute("git -c advice.detachedHead=false clone --depth 1 " .. branch .. " "  .. pyenv_url .. " " .. dest_pyenv_path)
+    local status = os.execute(
+        "git -c advice.detachedHead=false clone --depth 1 " .. branch .. " " .. pyenv_url .. " " .. dest_pyenv_path
+    )
     if status ~= 0 then
         error("git clone failed")
     end
@@ -760,7 +1207,15 @@ function linuxCompile(ctx)
     print("Building python ...")
     status = os.execute(pyenv_build_path .. " " .. version .. " " .. path)
     if status ~= 0 then
-        error("python build failed")
+        -- python-build only shows the tail of its log, which is ensurepip's
+        -- traceback. The usual cause is a build dependency that is not installed:
+        -- without the zlib headers the build has no zlib module, so ensurepip
+        -- cannot read pip's wheel (issue #550).
+        error(
+            "python build failed. A missing build dependency is the usual cause, for example "
+                .. "zlib1g-dev or libssl-dev on Debian and Ubuntu. The packages for your system are in "
+                .. "https://github.com/version-fox/vfox-python/blob/main/docs/platforms.md"
+        )
     end
     print("Build python success!")
 
@@ -775,7 +1230,7 @@ function linuxCompile(ctx)
 end
 
 function uvBuildInstall(ctx)
-    local sdkInfo = ctx.sdkInfo['python']
+    local sdkInfo = ctx.sdkInfo["python"]
     local path = sdkInfo.path
     local version = sdkInfo.version
 
@@ -800,7 +1255,10 @@ function uvBuildInstall(ctx)
     print("Install Python uv-build success!")
 end
 
-function getReleaseForWindows(version)
+--- The python.org installer for the running Windows architecture: the EXE when
+--- python.org publishes one, otherwise the MSI. Returns nil when it publishes
+--- neither, so PreInstall can stop before any download starts.
+function findWindowsInstaller(version)
     local archType = RUNTIME.archType
     local exeArchSuffix = ""
     local msiArchSuffix = ""
@@ -813,7 +1271,7 @@ function getReleaseForWindows(version)
     local url = DOWNLOAD_SOURCE.EXE:format(version, version, exeArchSuffix)
     local resp, err = http.head({
         url = url,
-        headers = REQUEST_HEADERS
+        headers = REQUEST_HEADERS,
     })
     if err == nil and resp.status_code == 200 then
         return url
@@ -823,17 +1281,25 @@ function getReleaseForWindows(version)
     local url = DOWNLOAD_SOURCE.MSI:format(version, version, msiArchSuffix)
     local resp, err = http.head({
         url = url,
-        headers = REQUEST_HEADERS
+        headers = REQUEST_HEADERS,
     })
     if err == nil and resp.status_code == 200 then
         return url
     end
     print("url:\t" .. url)
-    error("No available installer found for current version")
+    return nil
 end
 
-function fixHeaders() 
-    REQUEST_HEADERS["User-Agent"] = "vfox v" .. RUNTIME.version;
+function getReleaseForWindows(version)
+    local url = findWindowsInstaller(version)
+    if url == nil then
+        error("No available installer found for current version")
+    end
+    return url
+end
+
+function fixHeaders()
+    REQUEST_HEADERS["User-Agent"] = "vfox v" .. RUNTIME.version
 end
 
 -- The FTP index includes source-only security releases. The Windows download
@@ -857,11 +1323,15 @@ function parseWindowsVersions()
         local href = selection:attr("href") or ""
         local filename = href:match("([^/]+)$") or ""
         local version = filename:match("^python%-(%d+%.%d+%.%d+)") or filename:match("^python%-(%d+%.%d+)")
-        if not version then return end
+        if not version then
+            return
+        end
         local exeSuffix = arch == "386" and "" or "-" .. arch
         local msiSuffix = arch == "386" and "" or "." .. arch
-        if filename ~= "python-" .. version .. exeSuffix .. ".exe"
-            and filename ~= "python-" .. version .. msiSuffix .. ".msi" then
+        if
+            filename ~= "python-" .. version .. exeSuffix .. ".exe"
+            and filename ~= "python-" .. version .. msiSuffix .. ".msi"
+        then
             return
         end
         if compare_versions(version, "2.5.0") >= 0 and not seen[version] then
@@ -869,7 +1339,9 @@ function parseWindowsVersions()
             table.insert(result, { version = version, note = "" })
         end
     end)
-    table.sort(result, function(a, b) return compare_versions(a.version, b.version) > 0 end)
+    table.sort(result, function(a, b)
+        return compare_versions(a.version, b.version) > 0
+    end)
     if #result == 0 then
         error("No Windows Python installers found for " .. arch .. " at " .. url)
     end
@@ -881,7 +1353,7 @@ function parseVersion()
 
     local resp, err = http.get({
         url = PYTHON_URL,
-        headers = REQUEST_HEADERS
+        headers = REQUEST_HEADERS,
     })
     if err ~= nil or resp.status_code ~= 200 then
         error("paring release info failed." .. err)
@@ -897,13 +1369,13 @@ function parseVersion()
                 if compare_versions(vn, "2.5.0") >= 0 then
                     table.insert(result, {
                         version = string.sub(href, 1, -2),
-                        note = ""
+                        note = "",
                     })
                 end
             else
                 table.insert(result, {
                     version = vn,
-                    note = ""
+                    note = "",
                 })
             end
         end
@@ -938,11 +1410,18 @@ function compare_versions(v1, v2)
     return 0
 end
 
+local function pyenvVersionNote(version)
+    if version:match("^graalpy") or version:match("^graalpython") then
+        return graalPyNote(version)
+    end
+    return ""
+end
+
 function parseVersionFromPyenv()
     fixHeaders()
     local resp, err = http.get({
         url = version_vault_url,
-        headers = REQUEST_HEADERS
+        headers = REQUEST_HEADERS,
     })
     if err ~= nil or resp.status_code ~= 200 then
         error("paring release info failed." .. err)
@@ -950,12 +1429,12 @@ function parseVersionFromPyenv()
     local result = {}
     local jsonObj = json.decode(resp.body)
 
-    local tagName = jsonObj.tagName;
+    local tagName = jsonObj.tagName
     if tagName then
-        pyenvBranch = tagName;
+        pyenvBranch = tagName
     end
 
-    local versions = jsonObj.versions;
+    local versions = jsonObj.versions
 
     local numericVersions = {}
     local namedVersions = {}
@@ -979,14 +1458,14 @@ function parseVersionFromPyenv()
     for _, version in ipairs(numericVersions) do
         table.insert(result, {
             version = version,
-            note = ""
+            note = "",
         })
     end
 
     for _, version in ipairs(namedVersions) do
         table.insert(result, {
             version = version,
-            note = ""
+            note = pyenvVersionNote(version),
         })
     end
 
@@ -999,10 +1478,10 @@ function parseVersionFromUvBuild()
     for _, build in ipairs(getUvBuilds()) do
         if isSupportedUvBuild(build) then
             local version = uvBuildVersion(build)
-            if not seen[version] then
+            if version and not seen[version] then
                 table.insert(result, {
                     version = version,
-                    note = ""
+                    note = "",
                 })
                 seen[version] = true
             end
@@ -1066,7 +1545,15 @@ function fixShebangForVersion(installPath, version)
     end
 
     findResult:close()
-    print("Shebang fix completed" .. versionInfo .. ". Checked " .. checkedCount .. " files, fixed " .. fixedCount .. " files.")
+    print(
+        "Shebang fix completed"
+            .. versionInfo
+            .. ". Checked "
+            .. checkedCount
+            .. " files, fixed "
+            .. fixedCount
+            .. " files."
+    )
     return true, fixedCount
 end
 
@@ -1142,7 +1629,7 @@ function checkPythonHealth(installPath, version)
         pythonExists = false,
         scriptsChecked = {},
         problemsFound = {},
-        overallHealth = "unknown"
+        overallHealth = "unknown",
     }
 
     -- Check if bin directory exists
@@ -1166,7 +1653,7 @@ function checkPythonHealth(installPath, version)
     healthReport.pythonExists = true
 
     -- Check critical Python scripts
-    local criticalScripts = {"pip", "pip3", "easy_install"}
+    local criticalScripts = { "pip", "pip3", "easy_install" }
     local problemCount = 0
 
     for _, scriptName in ipairs(criticalScripts) do
@@ -1177,7 +1664,7 @@ function checkPythonHealth(installPath, version)
             exists = false,
             executable = false,
             shebangOk = false,
-            shebangLine = ""
+            shebangLine = "",
         }
 
         -- Check if script exists

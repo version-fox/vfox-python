@@ -1,16 +1,45 @@
+-- Copyright 2026 Han Li and contributors
+--
+-- Licensed under the Apache License, Version 2.0 (the "License");
+-- you may not use this file except in compliance with the License.
+-- You may obtain a copy of the License at
+--
+--   http://www.apache.org/licenses/LICENSE-2.0
+--
+-- Unless required by applicable law or agreed to in writing, software
+-- distributed under the License is distributed on an "AS IS" BASIS,
+-- WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-- See the License for the specific language governing permissions and
+-- limitations under the License.
+
 require("util")
+local python_version = require("python_version")
+
+--- A partial request such as "3.12" names the newest installed 3.12.x. vfox
+--- passes the request through, so the hook has to return the installed name.
+local function resolveInstalledVersion(requested, installedSdks)
+    if not python_version.is_partial(requested) then
+        return requested
+    end
+    local names = {}
+    for name in pairs(installedSdks or {}) do
+        names[name] = true
+    end
+    return python_version.find_release(names, requested) or requested
+end
 
 -- PreUse hook: Called before switching to a Python version
 -- This ensures the target version is healthy and has correct shebang lines
 function PLUGIN:PreUse(ctx)
+    local version = resolveInstalledVersion(ctx.version, ctx.installedSdks)
+
     -- Only process on Unix systems (Windows doesn't have shebang issues)
     if OS_TYPE == "windows" then
         return {
-            version = ctx.version
+            version = version,
         }
     end
 
-    local version = ctx.version
     local previousVersion = ctx.previousVersion
     local scope = ctx.scope
     local cwd = ctx.cwd
@@ -30,16 +59,38 @@ function PLUGIN:PreUse(ctx)
     if not targetVersion then
         print("Warning: Target version " .. version .. " not found in installed versions")
         return {
-            version = version
+            version = version,
         }
     end
 
     local installPath = resolvePythonInstallPath(targetVersion.path, version)
+    if isLinkedPythonInstall(targetVersion.path, version) then
+        print("Python " .. version .. " is linked to an installation outside vfox; skipping the health check.")
+        return {
+            version = version,
+        }
+    end
     print("Checking Python installation at: " .. installPath)
 
     -- Perform health check
     local healthReport = checkPythonHealth(installPath, version)
-    
+
+    -- Without a bin directory there is nothing to run. Switching anyway printed
+    -- "Now using" for a broken install (issue #642), so stop and say how to fix it.
+    if not healthReport.binDirExists then
+        error(
+            "Python "
+                .. version
+                .. " is not installed correctly: "
+                .. healthReport.problemsFound[1]
+                .. ". Run `vfox uninstall python@"
+                .. version
+                .. "` and then `vfox install python@"
+                .. version
+                .. "` again."
+        )
+    end
+
     -- Report health status and fix if needed
     local needsRecheck = false
 
@@ -95,6 +146,6 @@ function PLUGIN:PreUse(ctx)
 
     -- Return the version in the correct format
     return {
-        version = version
+        version = version,
     }
 end

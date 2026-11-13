@@ -1,4 +1,18 @@
-name: Test Plugin
+# Copyright 2026 Han Li and contributors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: Test
 
 on:
   workflow_dispatch:
@@ -9,21 +23,73 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: test-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
-  test:
-    runs-on: ubuntu-latest
+  plugin:
+    name: Plugin tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@v6
         with:
           persist-credentials: false
-      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+      - name: Install vfox
+        if: runner.os == 'Linux'
+        env:
+          VFOX_VERSION: 1.1.0
+          VFOX_SHA256: 3b33c3c468b27bc17aecf0d6d3af24fe49fe204972984904a136a47b402a0ee4
+        run: |
+          archive="$RUNNER_TEMP/vfox.tar.gz"
+          curl --fail --silent --show-error --location --output "$archive" \
+            "https://github.com/version-fox/vfox/releases/download/v${VFOX_VERSION}/vfox_${VFOX_VERSION}_linux_x86_64.tar.gz"
+          echo "$VFOX_SHA256  $archive" | sha256sum --check
+          mkdir "$RUNNER_TEMP/vfox"
+          tar --extract --gzip --file "$archive" --directory "$RUNNER_TEMP/vfox" --strip-components=1 \
+            "vfox_${VFOX_VERSION}_linux_x86_64/vfox"
+          echo "$RUNNER_TEMP/vfox" >> "$GITHUB_PATH"
+      - name: Install vfox
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          VFOX_VERSION: 1.1.0
+          VFOX_SHA256: 1bbec8fffddbb62de0d93030c3f6203c69680662bc65257ca4a5e611cb607d0a
+        run: |
+          $archive = Join-Path $env:RUNNER_TEMP 'vfox.zip'
+          Invoke-WebRequest -Uri "https://github.com/version-fox/vfox/releases/download/v$($env:VFOX_VERSION)/vfox_$($env:VFOX_VERSION)_windows_x86_64.zip" -OutFile $archive
+          if ((Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLower() -ne $env:VFOX_SHA256) {
+            throw 'vfox archive checksum mismatch'
+          }
+          $directory = Join-Path $env:RUNNER_TEMP 'vfox'
+          Expand-Archive -LiteralPath $archive -DestinationPath $directory
+          $vfox = Get-ChildItem -LiteralPath $directory -Recurse -Filter vfox.exe | Select-Object -First 1
+          if (-not $vfox) { throw 'vfox.exe was not found in the release archive' }
+          $vfox.DirectoryName >> $env:GITHUB_PATH
+      - name: Show vfox version
+        run: vfox --version
+      # vfox plugin test discovers tests/**/*_test.lua, gives each file a VM of
+      # its own and disables os.execute and io.popen until a test stubs them.
+      - name: Run the offline hook tests
+        run: vfox plugin test .
+
+  layouts:
+    name: Windows installer command layouts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v6
         with:
           go-version: '1.24.0'
           cache: false
-      - name: Test plugin hooks with vfox's Lua interpreter
-        run: go run github.com/yuin/gopher-lua/cmd/glua@v1.1.1 tests/hooks_test.lua
       - name: Test Windows installer command generation
-        run: go run github.com/yuin/gopher-lua/cmd/glua@v1.1.1 tests/windows_install_test.lua
+        run: go run github.com/yuin/gopher-lua/cmd/glua@v1.1.1 tests/windows_install_layouts.lua
 
   windows-install:
     name: Windows installer paths
@@ -33,7 +99,7 @@ jobs:
       run:
         shell: pwsh
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@v6
         with:
           persist-credentials: false
       - name: Install released vfox
