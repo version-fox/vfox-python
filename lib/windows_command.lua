@@ -62,8 +62,8 @@ end
 
 --- Runs a Python interpreter with its output written to files, prints that
 --- output, and exits with the interpreter's exit code. A failing ensurepip on
---- an old CPython release printed nothing through the PowerShell host, so the
---- output goes to files and a failure prints the interpreter's own text.
+--- an old CPython release printed nothing through the PowerShell host, so a
+--- failure also prints what the start and the install root looked like.
 function command.pythonLogged(program, args)
     local arguments = {}
     for _, arg in ipairs(args) do
@@ -73,13 +73,28 @@ function command.pythonLogged(program, args)
         .. literal(program)
         .. "; $arguments = @("
         .. table.concat(arguments, ", ")
-        .. "); $out = [IO.Path]::GetTempFileName(); $err = [IO.Path]::GetTempFileName(); $exitCode = 1; try { "
-        .. "$process = Start-Process -FilePath $program -ArgumentList $arguments -NoNewWindow -Wait -PassThru "
-        .. "-RedirectStandardOutput $out -RedirectStandardError $err; "
-        .. "Get-Content -LiteralPath $out | ForEach-Object { Write-Output $_ }; "
-        .. "Get-Content -LiteralPath $err | ForEach-Object { Write-Output $_ }; "
-        .. "$exitCode = $process.ExitCode } finally { "
-        .. "Remove-Item -LiteralPath $out, $err -Force -ErrorAction SilentlyContinue }; exit $exitCode"
+        .. [[);
+$root = Split-Path -Parent $program;
+$out = [IO.Path]::GetTempFileName();
+$err = [IO.Path]::GetTempFileName();
+$exitCode = 1;
+try {
+    $process = Start-Process -FilePath $program -ArgumentList $arguments -NoNewWindow -Wait -PassThru -RedirectStandardOutput $out -RedirectStandardError $err;
+    $exitCode = $process.ExitCode;
+} catch {
+    Write-Output ('Could not start the interpreter: ' + $_.Exception.Message);
+} finally {
+    Get-Content -LiteralPath $out | ForEach-Object { Write-Output $_ };
+    Get-Content -LiteralPath $err | ForEach-Object { Write-Output $_ };
+    Remove-Item -LiteralPath $out, $err -Force -ErrorAction SilentlyContinue;
+    if ($exitCode -ne 0) {
+        Write-Output ('Interpreter exit code: ' + $exitCode);
+        Write-Output ('Interpreter present: ' + (Test-Path -LiteralPath $program));
+        if (Test-Path -LiteralPath $root) {
+            Get-ChildItem -LiteralPath $root -File | Where-Object { $_.Extension -in '.exe', '.dll' } | ForEach-Object { Write-Output ('  ' + $_.Name) };
+        }
+    }
+}; exit $exitCode]]
     return powershell(script)
 end
 

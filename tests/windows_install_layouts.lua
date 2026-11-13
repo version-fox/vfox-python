@@ -47,7 +47,7 @@ local oldExecute, oldPopen, oldOpen, oldClose, oldRemove = os.execute, io.popen,
 -- execute, rather than only checking a command string prefix.
 local alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
 local function decodeBase64(value)
-    local result, accumulator, bits = {}, 0, 0
+    local chunks, result, accumulator, bits = {}, {}, 0, 0
     for char in value:gmatch(".") do
         if char == "=" then
             break
@@ -60,9 +60,16 @@ local function decodeBase64(value)
             local scale = 2 ^ bits
             result[#result + 1] = string.char(math.floor(accumulator / scale))
             accumulator = accumulator % scale
+            -- Flush in chunks: one table slot per byte overflows GopherLua's registry
+            -- on the longer PowerShell scripts.
+            if #result >= 256 then
+                chunks[#chunks + 1] = table.concat(result)
+                result = {}
+            end
         end
     end
-    return table.concat(result)
+    chunks[#chunks + 1] = table.concat(result)
+    return table.concat(chunks)
 end
 local function decodeCommand(value)
     local payload = assert(
@@ -71,12 +78,17 @@ local function decodeCommand(value)
     )
     local utf16 = decodeBase64(payload)
     assert(#utf16 % 2 == 0, "incomplete UTF-16LE code unit")
-    local bytes = {}
+    local chunks, bytes = {}, {}
     for i = 1, #utf16, 2 do
         assert(utf16:byte(i) < 128 and utf16:byte(i + 1) == 0, "script must use ASCII UTF-16LE")
         bytes[#bytes + 1] = utf16:sub(i, i)
+        if #bytes >= 256 then
+            chunks[#chunks + 1] = table.concat(bytes)
+            bytes = {}
+        end
     end
-    local script = table.concat(bytes)
+    chunks[#chunks + 1] = table.concat(bytes)
+    local script = table.concat(chunks)
     assert(script:find("$ErrorActionPreference = 'Stop'; ", 1, true) == 1, "error preference must execute")
     assert(
         script:find("$ProgressPreference = 'SilentlyContinue'; ", 1, true),

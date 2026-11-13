@@ -20,6 +20,8 @@ import (
 	"context"
 	"io"
 	"os"
+	"os/exec"
+	"strings"
 	"testing"
 
 	"github.com/containerd/platforms"
@@ -45,10 +47,10 @@ func TestContainerE2E(t *testing.T) {
 		t.Skip("container E2E disabled by VFOX_SKIP_CONTAINER_E2E")
 	}
 	// testcontainers reports every Windows host as rootless and gives up on host
-	// discovery unless DOCKER_HOST names the engine. The runner's daemon listens
-	// on the default Docker named pipe.
+	// discovery unless DOCKER_HOST names the engine. Use the engine the docker CLI
+	// resolves, which is the one the workflow's docker commands reach.
 	if os.Getenv("DOCKER_HOST") == "" {
-		t.Setenv("DOCKER_HOST", "npipe:////./pipe/docker_engine")
+		t.Setenv("DOCKER_HOST", dockerEndpoint(t))
 	}
 	// Ryuk has no Windows image; every container is terminated explicitly.
 	t.Setenv("TESTCONTAINERS_RYUK_DISABLED", "true")
@@ -106,6 +108,20 @@ python -V
 	common.RequireContains(t, output, "GraalPy", "GraalPy container interpreter")
 	common.RequireContains(t, output, "graalpy", "GraalPy container implementation")
 	common.RequireContains(t, output, "pip", "GraalPy container pip")
+}
+
+// dockerEndpoint returns the engine endpoint of the current docker CLI context.
+func dockerEndpoint(t testing.TB) string {
+	t.Helper()
+	out, err := exec.Command("docker", "context", "inspect", "--format", "{{.Endpoints.docker.Host}}").Output()
+	if err != nil {
+		t.Fatalf("ask the docker CLI for its engine endpoint: %v", err)
+	}
+	endpoint := strings.TrimSpace(string(out))
+	if endpoint == "" {
+		t.Fatal("the docker CLI reported no engine endpoint")
+	}
+	return endpoint
 }
 
 func buildImage(t testing.TB, ctx context.Context, repoRoot string) string {
