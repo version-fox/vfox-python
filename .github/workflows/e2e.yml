@@ -324,12 +324,14 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Invoke-Expression "$(vfox env -s pwsh)"
           vfox current
-          $implementation = python -c 'import sys; print(sys.implementation.name, sys.version)'
+          $implementation = (python -c 'import sys; print(sys.implementation.name)').Trim()
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Write-Output $implementation
-          if ($implementation -notlike 'graalpy *') {
+          if ($implementation -ne 'graalpy') {
               throw "expected GraalPy, got $implementation"
           }
+          python -c 'import sys; print(sys.version)'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python -m pip --version
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           pip --version

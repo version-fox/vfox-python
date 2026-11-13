@@ -18,6 +18,12 @@ FROM ${BASE_IMAGE}
 
 SHELL ["powershell", "-NoProfile", "-Command"]
 
+# Server Core does not always set TEMP/TMP, and GraalPy's ensurepip needs a
+# writable temporary directory.
+ENV TEMP=C:\Temp
+ENV TMP=C:\Temp
+RUN powershell -NoProfile -Command "New-Item -ItemType Directory -Force -Path C:\Temp | Out-Null"
+
 COPY tests/e2e/windows/bootstrap-tools.ps1 C:\bootstrap-tools.ps1
 RUN powershell -NoProfile -ExecutionPolicy Bypass -File C:\bootstrap-tools.ps1
 

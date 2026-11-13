@@ -810,6 +810,17 @@ local function ensureWindowsPip(root, pythonExe, pythonRelativePath)
     local command = powerShellPythonCommand(pythonExe, { "-E", "-s", "-m", "ensurepip", "-U", "--default-pip" })
     local exitCode = os.execute(command)
     if not commandSucceeded(exitCode) then
+        -- Server Core can be picky about the PowerShell wrapper; retry the
+        -- same interpreter through cmd before reporting the failure.
+        print("ensurepip via PowerShell failed; retrying directly...")
+        exitCode = os.execute(shellQuote(pythonExe) .. " -E -s -m ensurepip -U --default-pip")
+    end
+    if not commandSucceeded(exitCode) then
+        print("ensurepip failed; interpreter check follows...")
+        os.execute(
+            shellQuote(pythonExe)
+                .. " -E -s -c \"import os, sys; print(sys.version); print('TEMP=' + str(os.environ.get('TEMP')))\""
+        )
         error("ensurepip failed while installing pip. Exit code: " .. tostring(exitCode))
     end
 
