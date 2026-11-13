@@ -58,6 +58,11 @@ builds are left out because python.org's stable installer names do not cover
 them. `VFOX_PYTHON_USE_UV_BUILD=1` switches to prebuilt uv-build archives on
 Linux, macOS and Windows; see [docs/uv.md](docs/uv.md).
 
+`py.exe` does not read `PATH`. Set
+`VFOX_PYTHON_REGISTER_PY_LAUNCHER=1` before installing to register the version
+under vfox's own PEP 514 key; see [Windows Python
+launcher](docs/windows-launcher.md).
+
 ## Already installed Python
 
 If a Python is already on the machine — from the system package manager, uv,
@@ -122,6 +127,8 @@ uv-build downloads can go through `VFOX_PYTHON_UV_BUILD_MIRROR`. See
   system and uv installations it adopts, and how to use them safely
 - [Platforms](docs/platforms.md): what is built from source, what is downloaded,
   and the build dependencies Linux needs
+- [Windows Python launcher](docs/windows-launcher.md): opt-in PEP 514
+  registration for `py.exe`
 - [Mirror](docs/mirror.md): python.org and uv-build mirrors
 - [Changes](docs/changes.md): what each release changed
 

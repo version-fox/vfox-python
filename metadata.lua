@@ -51,5 +51,6 @@ PLUGIN.notes = {
     "Set VFOX_PYTHON_UV_LIBC=gnu|musl to override Linux libc detection.",
     "Set VFOX_PYTHON_UV_BUILD_MIRROR to mirror uv-build archive downloads.",
     "Already installed Python: `vfox link --detect python` (vfox 1.1.0 or later).",
+    "Windows launcher: set VFOX_PYTHON_REGISTER_PY_LAUNCHER=1 to register installs with PEP 514.",
     " ",
 }

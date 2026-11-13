@@ -23,6 +23,12 @@
   `.python-version` on Linux and Windows.
 - `VFOX_PYTHON_MIRROR` accepts a URL without a trailing slash and ignores an
   empty value, which is what CI passes for an unset matrix entry.
+- Windows installs can be registered with `py.exe` through PEP 514 under
+  vfox's own `VersionFox` company key with
+  `VFOX_PYTHON_REGISTER_PY_LAUNCHER=1`. The plugin never writes `PythonCore`;
+  `py -3.x` remains PythonCore-only and vfox versions use
+  `py -V:VersionFox/<version>`. `PreUninstall` removes the entry when it still
+  points at the version.
 
 ## 0.6.2
 

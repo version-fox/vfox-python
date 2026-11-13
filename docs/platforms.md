@@ -106,6 +106,9 @@ x86_64 Python and installs it under the same vfox home.
   through base64-encoded PowerShell arguments; `%` also makes the MSI path use
   a temporary junction, because Windows Installer expands `%` during file copy.
   See [development.md](development.md) and the Windows CI job.
+- Set `VFOX_PYTHON_REGISTER_PY_LAUNCHER=1` to register the installation under
+  `HKCU\Software\Python\VersionFox` for `py.exe`. The plugin does not write
+  `PythonCore`; see [windows-launcher.md](windows-launcher.md).
 
 ## uv-build
 

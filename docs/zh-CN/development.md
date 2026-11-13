@@ -9,12 +9,14 @@ metadata.lua                    插件名、版本、提示，以及 .python-ver
 hooks/available.lua             vfox search
 hooks/pre_install.lua           vfox install：选择版本并命名
 hooks/post_install.lua          vfox install：编译、运行安装包或解压 uv-build
+hooks/pre_uninstall.lua         vfox uninstall：删除 PEP 514 注册
 hooks/env_keys.lua              选中版本的 PATH
 hooks/pre_use.lua               vfox use：修 shebang，跳过链接版本
 hooks/parse_legacy_file.lua     .python-version
 hooks/detect.lua                vfox link --detect：找出本机已有的 Python
 lib/util.lua                    版本、下载、Windows 安装、uv-build、shebang
 lib/windows_command.lua         base64 PowerShell 命令和 MSI junction
+lib/pep514.lua                  Windows Python 启动器注册
 lib/python_version.lua          版本解析和已安装名字匹配
 lib/detect_python.lua           Detect 钩子的来源和过滤
 tests/*_test.lua                离线的钩子测试，由 vfox plugin test 运行
@@ -33,7 +35,7 @@ opencode.jsonc                  让本仓库里的 OpenCode 智能体会话不�
 vfox 加载 `metadata.lua`，命令需要时调用相应的钩子，并向钩子提供 `PLUGIN`、
 `RUNTIME`（`osType`、`archType`、`version`、`pluginDirPath`）以及
 `OS_TYPE`/`ARCH_TYPE`。`lib/util.lua` 是一个脚本，为老钩子定义全局函数；较新的
-模块（`python_version`、`detect_python`、`windows_command`）返回表。
+模块（`python_version`、`detect_python`、`windows_command`、`pep514`）返回表。
 
 ## 一条命令会执行什么
 
@@ -44,7 +46,7 @@ vfox 加载 `metadata.lua`，命令需要时调用相应的钩子，并向钩子
 | `vfox use python@3.12.2` | `PreUse` 返回要选中的已安装版本名，`EnvKeys` 提供 `PATH` |
 | 进入有 `.python-version` 的目录 | `ParseLegacyFile` |
 | `vfox link --detect python` | `Detect` 返回本机已有的 Python |
-| `vfox uninstall python@3.12.2` | 没有插件钩子；vfox 删除版本目录 |
+| `vfox uninstall python@3.12.2` | `PreUninstall` 删除 PEP 514 注册；vfox 删除版本目录 |
 
 ## 几条容易踩坑的约定
 
@@ -75,6 +77,20 @@ vfox 加载 `metadata.lua`，命令需要时调用相应的钩子，并向钩子
   payload，Unix 上修 shebang，Windows 上确保 pip 可用。
   `resolvePythonInstallPath` 两种布局都处理。
 - uv-build 会拒绝 `ctx.rootPath` 之外的路径，避免错误的索引让钩子写到别处。
+- 设置 `VFOX_PYTHON_REGISTER_PY_LAUNCHER=1` 时，钩子按 PEP 514 把版本注册到
+  `HKCU\Software\Python\VersionFox\<tag>`。tag 用完整版本号，非默认架构加
+  `-32`/`-arm64`，多个补丁版本可以并存。它不会写 `PythonCore`。
+
+### PreUninstall
+
+`ctx.main` 里有版本目录（`path`）和名字（`version`）。Windows 上，钩子只在
+`VfoxManaged` 为 `1` 且注册的 `InstallPath` 仍指向该版本目录时，删除
+`HKCU\Software\Python\VersionFox\<tag>`；如果 `VersionFox` company key 已经
+没有子项，也一并删除。即使 `VFOX_PYTHON_REGISTER_PY_LAUNCHER` 已取消，钩子
+仍会运行，所以关闭注册不会在卸载时留下旧项。
+
+`lib/pep514.lua` 在读写信之前会识别 MSI 布局（`path/python.exe`）和 uv-build
+布局（`path/python-<版本>/python.exe`）。
 
 ### PreUse
 
@@ -149,6 +165,8 @@ local versions = plugin:Available({})
   不提供时，请求默认被拒绝，除非加 `--online`。
 - `os.execute` 和 `io.popen` 默认禁用，测试自己替换。Detect 测试用
   `io.open`/`io.popen` 的 stub 模拟文件和命令；PreUse 测试替换 `io.popen`。
+- PEP 514 测试替换 `os.execute` 和 `io.open`，在 Linux 和 Windows 上检查注册
+  与清理命令的生成，不会真的写注册表。
 - 文件没有调用 `test.load()` 会失败；一个测试文件都没找到也会失败。
 
 `tests/windows_install_layouts.lua` 由 GopherLua 运行，因为它在 stub 的进程调用
@@ -227,6 +245,7 @@ vfox 的全局变量，只关闭 `duplicate-set-field`（测试会有意替换 `
 | `VFOX_PYTHON_USE_UV_BUILD` | Available、PreInstall、PostInstall | 使用 uv-build 预编译包 |
 | `VFOX_PYTHON_UV_LIBC` | Available、PreInstall | 覆盖 `gnu` / `musl` 识别 |
 | `VFOX_PYTHON_UV_BUILD_MIRROR` | PreInstall | uv-build 包的 HTTPS 镜像 |
+| `VFOX_PYTHON_REGISTER_PY_LAUNCHER` | PostInstall、PreUninstall | 把 Windows 安装注册到 `HKCU\Software\Python\VersionFox`；默认关闭 |
 | `UV_PYTHON_INSTALL_DIR` | Detect | uv 的 Python 目录 |
 | `PYENV_ROOT` | Detect | pyenv 根目录 |
 | `ASDF_DATA_DIR` | Detect | asdf 数据目录 |
