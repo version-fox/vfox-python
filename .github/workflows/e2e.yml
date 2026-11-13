@@ -336,7 +336,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           pip --version
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          $registered = py -0p
+          $registered = (py -0p) -join "`n"
           Write-Output $registered
           if ($registered -notmatch 'graalpy3\.13-community-25\.5\.5') {
               throw 'GraalPy was not registered with the Python launcher'
