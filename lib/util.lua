@@ -118,7 +118,8 @@ function windowsInstallExe(path, url, version, filename)
     --- Attention system difference
     local qInstallFile = path .. "\\" .. filename
     local qInstallPath = path
-    local msiPath = path .. '\\AttachedContainer'
+    -- The bundle writes its packages here; they are installed, then removed.
+    local layoutPath = path .. '\\InstallerLayout'
 
     -- download
     print("Downloading installer...")
@@ -133,13 +134,13 @@ function windowsInstallExe(path, url, version, filename)
         error("Downloading installer failed")
     end
 
-    -- Extract
-    print("Extracting installer...")
-    local wixBin = RUNTIME.pluginDirPath .. '\\bin\\WiX\\dark.exe'
-    local command = windowsCommand.native(wixBin, {'-x', qInstallPath, qInstallFile})
+    -- Layout
+    print("Creating installer layout...")
+    -- The bundle writes its own packages, so no extraction tool is needed.
+    local command = windowsCommand.native(qInstallFile, {'/quiet', '/layout', layoutPath})
     local exitCode = os.execute(command)
     if exitCode ~= 0 then
-        error("Extract failed")
+        error("Creating installer layout failed")
     end
 
     -- Cleaning up ...
@@ -147,12 +148,12 @@ function windowsInstallExe(path, url, version, filename)
     os.remove(qInstallFile)
     local files = {'appendpath.msi', 'launcher.msi', 'path.msi', 'pip.msi'}
     for _, file in ipairs(files) do
-        os.remove(msiPath .. '\\' .. file)
+        os.remove(layoutPath .. '\\' .. file)
     end
 
     -- Install msi
     print("Installing python...")
-    local listing, listErr = io.popen(windowsCommand.files(msiPath))
+    local listing, listErr = io.popen(windowsCommand.files(layoutPath))
     if not listing then
         error('Failed to list installer packages: ' .. tostring(listErr))
     end
@@ -174,16 +175,22 @@ function windowsInstallExe(path, url, version, filename)
         error('Failed to list installer packages: ' .. tostring(listExitCode))
     end
     if #files == 0 then
-        error('No installer MSI packages found in: ' .. msiPath)
+        error('No installer MSI packages found in: ' .. layoutPath)
     end
     for _, file in ipairs(files) do
         print("Installing MSI package: " .. file)
-        local command = windowsCommand.msi(msiPath .. '\\' .. file, qInstallPath)
+        local command = windowsCommand.msi(layoutPath .. '\\' .. file, qInstallPath)
         local exitCode = os.execute(command)
         if exitCode ~= 0 then
             error("Install msi failed: " .. file)
         end
         os.remove(qInstallPath .. '\\' .. file)
+    end
+
+    -- The MSI packages are installed, so the layout is no longer needed.
+    print("Removing installer layout...")
+    if os.execute(windowsCommand.removeTree(layoutPath)) ~= 0 then
+        print("Warning: could not remove installer layout: " .. layoutPath)
     end
 
     -- Install pip

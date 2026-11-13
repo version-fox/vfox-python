@@ -83,10 +83,28 @@ require('util')
 local path = "C:\\Users\\Mechael Jackson's & %USERNAME% !\\python-3.14.5"
 windowsInstallExe(path, 'https://example.invalid/python.exe', '3.14.5', 'python.exe')
 assert(#state.commands >= 7, 'installer, enumeration, MSI, pip and aliases must be exercised')
+local function literalArguments(command)
+    local values = {}
+    for encoded in decodeCommand(command):gmatch("FromBase64String%('([A-Za-z0-9+/=]*)'%)") do
+        values[#values + 1] = decodeBase64(encoded)
+    end
+    return values
+end
+local layoutArguments = literalArguments(state.commands[1])
+assert(#layoutArguments == 4 and layoutArguments[1] == path .. '\\python.exe' and layoutArguments[2] == '/quiet'
+    and layoutArguments[3] == '/layout' and layoutArguments[4] == path .. '\\InstallerLayout',
+    'the bundle must create its own layout as the first command')
+local layoutRemoved = false
+for _, command in ipairs(state.commands) do
+    if decodeCommand(command):find('Remove-Item', 1, true) then
+        layoutRemoved = literalArguments(command)[1] == path .. '\\InstallerLayout'
+    end
+end
+assert(layoutRemoved, 'the installer layout must be removed after installation')
 reset()
 windowsInstallMsi(path, 'https://example.invalid/python.msi', '3.4.4', 'python.msi')
 assert(#state.commands == 2, 'MSI and ensurepip must both run')
-for _, failure in ipairs({{1, 'Extract failed'}, {3, 'Install msi failed'}, {6, 'executable alias'}}) do
+for _, failure in ipairs({{1, 'Creating installer layout failed'}, {3, 'Install msi failed'}, {7, 'executable alias'}}) do
     reset()
     state.failOn = failure[1]
     local ok, err = pcall(function()

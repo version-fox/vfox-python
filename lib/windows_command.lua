@@ -96,4 +96,9 @@ function command.copy(source, target)
         ' -Destination ' .. literal(target) .. ' -Force')
 end
 
+function command.removeTree(path)
+    return powershell('if (Test-Path -LiteralPath ' .. literal(path) ..
+        ') { Remove-Item -LiteralPath ' .. literal(path) .. ' -Recurse -Force }')
+end
+
 return command
