@@ -27,6 +27,20 @@ RUN powershell -NoProfile -Command "New-Item -ItemType Directory -Force -Path C:
 COPY tests/e2e/windows/bootstrap-tools.ps1 C:\bootstrap-tools.ps1
 RUN powershell -NoProfile -ExecutionPolicy Bypass -File C:\bootstrap-tools.ps1
 
+# Oracle's native GraalPy launcher loads pythonvm.dll, which needs the Visual
+# C++ runtime. Server Core does not ship it.
+RUN $ErrorActionPreference = 'Stop'; `
+    curl.exe -fsSL --retry 3 --retry-delay 5 --retry-all-errors `
+        -o C:\vc_redist.x64.exe `
+        https://aka.ms/vs/17/release/vc_redist.x64.exe; `
+    if ($LASTEXITCODE -ne 0) { throw "VC++ runtime download failed: $LASTEXITCODE" }; `
+    $process = Start-Process -FilePath C:\vc_redist.x64.exe `
+        -ArgumentList '/install', '/quiet', '/norestart' -PassThru -Wait; `
+    if ($process.ExitCode -ne 0 -and $process.ExitCode -ne 3010) { `
+        throw "VC++ runtime installation failed: $($process.ExitCode)" `
+    }; `
+    Remove-Item C:\vc_redist.x64.exe -Force
+
 ARG VFOX_VERSION=1.1.0
 ARG VFOX_SHA256=1bbec8fffddbb62de0d93030c3f6203c69680662bc65257ca4a5e611cb607d0a
 ENV VFOX_VERSION=${VFOX_VERSION}
