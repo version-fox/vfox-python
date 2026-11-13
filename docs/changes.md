@@ -4,6 +4,15 @@
 
 ## Unreleased
 
+- GraalPy is supported: Oracle GraalVM and Community distributions install from
+  Oracle's official archives on Linux, macOS and Windows amd64. The Linux and
+  macOS version list still comes from pyenv. Version notes mark the
+  distribution. Windows arm64 and 386, and uv-build, remain CPython-only.
+- `vfox link --detect python` adopts GraalPy installations and names them
+  `graalpy[-community][<python>]-<release>-<source>`.
+- Windows GraalPy installs can be registered with `py.exe` through PEP 514;
+  `SysVersion` is the Python language version and `WindowedExecutablePath` is
+  omitted.
 - `vfox link --detect python` adopts system, uv, pyenv, asdf, mise, Conda,
   Homebrew, Nix, Snap, python.org, Store and py-launcher Pythons (vfox 1.1.0
   or later). Linked versions are named `<version>-<source>`.

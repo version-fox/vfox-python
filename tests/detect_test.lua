@@ -23,7 +23,7 @@ local plugin = test.load({
     arch = "amd64",
     env = {
         HOME = "/home/test",
-        PATH = "/usr/local/bin:/usr/bin:/home/test/.vfox/sdks/python/v-3.12.9/bin:/home/test/project/.venv/bin",
+        PATH = "/usr/local/bin:/usr/bin:/opt/graalpy-24.2.0/bin:/opt/graalpy-community-24.2.0/bin:/home/test/.vfox/sdks/python/v-3.12.9/bin:/home/test/project/.venv/bin",
         VFOX_HOME = "/home/test/.vfox",
         XDG_DATA_HOME = false,
         -- GitHub Actions passes empty strings for unset values; the default
@@ -90,6 +90,26 @@ local outputs = {
         "/home/test/.pyenv/versions/3.11.9"
     ),
     ["/opt/conda/bin/python3"] = install("/opt/conda/bin/python3", "3.10.14", "/opt/conda"),
+    ["/opt/graalpy-24.2.0/bin/python3"] = {
+        "VERSION=3.11.7",
+        "IMPLEMENTATION=GraalVM",
+        "GRAALPY_VERSION=24.2.0",
+        "GRAALPY_EDITION=oracle",
+        "ABIFLAGS=",
+        "PREFIX_HEX=" .. hex("/opt/graalpy-24.2.0"),
+        "BASE_PREFIX_HEX=" .. hex("/opt/graalpy-24.2.0"),
+        "EXECUTABLE_HEX=" .. hex("/opt/graalpy-24.2.0/bin/python3"),
+    },
+    ["/opt/graalpy-community-24.2.0/bin/python3"] = {
+        "VERSION=3.11.7",
+        "IMPLEMENTATION=GraalVM",
+        "GRAALPY_VERSION=24.2.0",
+        "GRAALPY_EDITION=community",
+        "ABIFLAGS=",
+        "PREFIX_HEX=" .. hex("/opt/graalpy-community-24.2.0"),
+        "BASE_PREFIX_HEX=" .. hex("/opt/graalpy-community-24.2.0"),
+        "EXECUTABLE_HEX=" .. hex("/opt/graalpy-community-24.2.0/bin/python3"),
+    },
     ["/home/test/.vfox/sdks/python/v-3.12.9/bin/python3"] = install(
         "/home/test/.vfox/sdks/python/v-3.12.9/bin/python3",
         "3.12.9",
@@ -103,6 +123,9 @@ local outputs = {
         "/usr/bin/python3.12"
     ),
 }
+
+files["/opt/graalpy-24.2.0/bin/python3"] = true
+files["/opt/graalpy-community-24.2.0/bin/python3"] = true
 
 listings[uv] = {
     "cpython-3.13.1-linux-x86_64-gnu",
@@ -156,7 +179,7 @@ io.popen = function(command, mode)
 end
 
 local found = plugin:Detect({})
-assert(#found == 6, tostring(#found))
+assert(#found == 8, tostring(#found))
 local by_version = {}
 for _, item in ipairs(found) do
     by_version[item.version] = item
@@ -169,6 +192,8 @@ assert(by_version["3.13.1-uv"].path == uv .. "/cpython-3.13.1-linux-x86_64-gnu")
 assert(by_version["3.14.0a4t-uv"].path == uv .. "/cpython-3.14.0a4-linux-x86_64-gnu")
 assert(by_version["3.11.9-pyenv"].path == "/home/test/.pyenv/versions/3.11.9")
 assert(by_version["3.10.14-conda"].path == "/opt/conda")
+assert(by_version["graalpy-24.2.0-opt"].path == "/opt/graalpy-24.2.0")
+assert(by_version["graalpy-community-24.2.0-opt"].path == "/opt/graalpy-community-24.2.0")
 
 -- The vfox-managed interpreter on PATH and the project virtual environment
 -- must not be adopted. The vfox path would have been named 3.12.9-system and

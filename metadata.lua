@@ -25,7 +25,7 @@ PLUGIN.homepage = "https://github.com/version-fox/vfox-python"
 --- Plugin license, please choose a correct license according to your needs.
 PLUGIN.license = "Apache 2.0"
 --- Plugin description
-PLUGIN.description = "Python language support, https://www.python.org"
+PLUGIN.description = "Python language support for CPython and GraalPy, https://www.python.org"
 
 --- !!! OPTIONAL !!!
 --[[
@@ -50,6 +50,8 @@ PLUGIN.notes = {
     "uv-build: set VFOX_PYTHON_USE_UV_BUILD=1 to use prebuilt Python archives.",
     "Set VFOX_PYTHON_UV_LIBC=gnu|musl to override Linux libc detection.",
     "Set VFOX_PYTHON_UV_BUILD_MIRROR to mirror uv-build archive downloads.",
+    "GraalPy: install python@graalpy-24.2.0 or python@graalpy-community-24.2.0.",
+    "GraalPy on Windows is amd64 only; uv-build provides CPython only.",
     "Already installed Python: `vfox link --detect python` (vfox 1.1.0 or later).",
     "Windows launcher: set VFOX_PYTHON_REGISTER_PY_LAUNCHER=1 to register installs with PEP 514.",
     " ",

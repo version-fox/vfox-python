@@ -26,7 +26,10 @@ vfox install python@3.12.2
 - Windows 上，如果包里带了 `ensurepip` 却没有 pip 命令，会安装 pip，并生成
   `pip.cmd`、`pip3.cmd` 两个 shim。
 
-列表里只有 CPython 的包。插件按这个顺序优先：
+列表里只有 CPython 的包。GraalPy 和其他实现不在 uv-build 里；在这个模式下
+执行 `vfox install python@graalpy-24.2.0` 会失败，并提示取消
+`VFOX_PYTHON_USE_UV_BUILD`。GraalPy 的安装路径见 [GraalPy](graalpy.md)。插件按
+这个顺序优先：
 
 1. `install_only_stripped`
 2. `install_only`

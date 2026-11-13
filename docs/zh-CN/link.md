@@ -2,9 +2,9 @@
 
 [中文](link.md) | [English](../link.md)
 
-如果本机已经有 Python，`vfox link --detect python` 会直接采用它，而不用再下载
-一份。需要 vfox 1.1.0 或更高版本（`vfox --version` 查看）。插件只找 CPython，
-逐个询问解释器的版本和 prefix，然后列出可以链接的安装：
+如果本机已经有 Python 或 GraalPy，`vfox link --detect python` 会直接采用它，而
+不用再下载一份。需要 vfox 1.1.0 或更高版本（`vfox --version` 查看）。插件找
+CPython 和 GraalPy，逐个询问解释器的版本和 prefix，然后列出可以链接的安装：
 
 ```bash
 vfox link --detect python
@@ -26,6 +26,7 @@ python` 会标出链接进来的版本，`vfox info --json python@<版本>` 会�
 | 来源 | 插件查找的位置 | 名字后缀 |
 | --- | --- | --- |
 | `PATH` | `python3` 和 `python`，或 `python.exe` 和 `python3.exe` | 按位置判断 |
+| Oracle GraalPy | `~/graalpy*`、`/opt/graalpy*`、`C:\graalpy*`，或 `PATH` | `-system` 或 `-opt` |
 | uv | `UV_PYTHON_INSTALL_DIR`、`uv python dir`，或 uv 的默认目录 | `-uv` |
 | pyenv | `$PYENV_ROOT/versions`，默认 `~/.pyenv/versions` | `-pyenv` |
 | asdf | `$ASDF_DATA_DIR/installs/python`，默认 `~/.asdf/installs/python` | `-asdf` |
@@ -43,14 +44,20 @@ python` 会标出链接进来的版本，`vfox info --json python@<版本>` 会�
 uv 目录在 Windows 上是 `%APPDATA%\uv\python`，其他系统上是
 `$XDG_DATA_HOME/uv/python` 或 `~/.local/share/uv/python`。
 
-只会报告 CPython。PyPy、GraalPy、Jython 等其他实现不会出现：这个插件安装的是
-CPython，把别的实现叫作 CPython 的版本号会误导人。
+会报告 CPython 和 GraalPy。PyPy、Jython 等其他实现不会出现。GraalPy 保留自己的
+名字：GraalPy 24.2.0 会变成 `graalpy-24.2.0-<来源>`，Community 版是
+`graalpy-community-24.2.0-<来源>`；从 GraalPy 25.1 开始名字里还会带上 Python
+语言版本，比如 `graalpy3.13-25.5.5-<来源>`。把非 CPython 实现叫作 CPython 的
+版本号会误导人。
 
 ## 名字
 
-名字是 `<版本>-<来源>`，比如 `3.12.8-system`、`3.13.1-uv` 或
-`3.12.10-pythonorg`。自由线程构建保留 `t`：`3.14.0a4t-uv`。版本号来自解释器
-本身，不是目录名，所以 uv 目录改了名也能报对版本。
+名字是 `<版本>-<来源>`，比如 `3.12.8-system`、`3.13.1-uv`、
+`3.12.10-pythonorg` 或 `graalpy-24.2.0-pyenv`。自由线程的 CPython 构建保留
+`t`：`3.14.0a4t-uv`。GraalPy 的名字还会记录 Community 版：
+`graalpy-community-24.2.0-system`；从 GraalPy 25.1 开始带上 Python 语言版本：
+`graalpy3.13-25.5.5-uv`。版本号来自解释器本身，不是目录名，所以 uv 目录改了名
+也能报对版本。
 
 `vfox link` 会拒绝已经被占用的名字，以及已经被某个版本链接到的目录。插件还会
 跳过：
@@ -68,10 +75,12 @@ CPython，把别的实现叫作 CPython 的版本号会误导人。
 
 `--detect` 没找到的安装可以手工链接。路径是 Python 的 prefix：Unix 上是包含
 `bin` 的那一级目录，Windows 上是包含 `python.exe` 的那一级，不是 `bin` 本身。
+GraalPy 的 Windows 路径是包含 `bin\python.exe` 的那一级。
 
 ```bash
 vfox link python@3.12.8-system /usr
 vfox link python@3.13.1-uv /home/me/.local/share/uv/python/cpython-3.13.1-linux-x86_64-gnu
+vfox link python@graalpy-24.2.0-system /opt/graalpy-24.2.0
 vfox use python@3.12.8-system
 ```
 

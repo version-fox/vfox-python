@@ -4,6 +4,14 @@
 
 ## 未发布
 
+- 支持 GraalPy：Linux、macOS 和 Windows amd64 都从 Oracle 官方的发布压缩包安装
+  Oracle GraalVM 和 Community 两种发行版；Linux 和 macOS 的版本列表仍然来自
+  pyenv。版本备注会标出发行版。Windows arm64/386 和 uv-build 仍然只支持
+  CPython。
+- `vfox link --detect python` 会纳入 GraalPy，命名为
+  `graalpy[-community][<python>]-<release>-<来源>`。
+- Windows 上的 GraalPy 安装可以按 PEP 514 注册给 `py.exe` 使用；`SysVersion`
+  是 Python 语言版本，不写 `WindowedExecutablePath`。
 - `vfox link --detect python` 纳入系统、uv、pyenv、asdf、mise、Conda、
   Homebrew、Nix、Snap、python.org、Store 和 py 启动器的 Python（需要 vfox
   1.1.0 或更高版本）。链接进来的版本命名为 `<版本>-<来源>`。

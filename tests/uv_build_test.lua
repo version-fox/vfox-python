@@ -131,6 +131,7 @@ end
 
 fails("3.9.20", "No uv-build prebuilt Python found")
 fails("3.11.11", "Invalid uv-build sha256")
+fails("graalpy-24.2.0", "uv-build provides CPython only")
 
 state.status = 503
 local ok, err = pcall(function()

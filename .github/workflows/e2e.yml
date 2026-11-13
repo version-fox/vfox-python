@@ -34,6 +34,8 @@ jobs:
     name: Install Python ${{ matrix.python-version }} on Linux
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
     strategy:
       fail-fast: false
       matrix:
@@ -154,6 +156,16 @@ jobs:
           python -m pip --version
           pip --version
 
+      - name: Install GraalPy 24.2.0
+        if: matrix.mirror == ''
+        run: |
+          eval "$(vfox activate bash)"
+          vfox install python@graalpy-24.2.0
+          vfox use -g python@graalpy-24.2.0
+          python -c 'import sys; assert sys.implementation.name == "graalpy", sys.implementation.name; print(sys.version)'
+          python -m pip --version
+          pip --version
+
   test-on-windows:
     name: Install Python ${{ matrix.python-version }} on Windows
     defaults:
@@ -161,6 +173,8 @@ jobs:
         shell: pwsh
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
     strategy:
       fail-fast: false
       matrix:
@@ -296,3 +310,30 @@ jobs:
 
           python -m pip --version
           pip --version
+
+      - name: Install GraalPy 25.5.5
+        if: runner.os == 'Windows' && matrix.mirror == ''
+        env:
+          VFOX_PYTHON_REGISTER_PY_LAUNCHER: "1"
+        run: |
+          Invoke-Expression "$(vfox activate pwsh)"
+          vfox install python@graalpy3.13-community-25.5.5
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          vfox use -g python@graalpy3.13-community-25.5.5
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          vfox current
+          $implementation = python -c 'import sys; print(sys.implementation.name, sys.version)'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Write-Output $implementation
+          if ($implementation -notlike 'graalpy *') {
+              throw "expected GraalPy, got $implementation"
+          }
+          python -m pip --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          pip --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $registered = py -0p
+          Write-Output $registered
+          if ($registered -notmatch 'graalpy3\.13-community-25\.5\.5') {
+              throw 'GraalPy was not registered with the Python launcher'
+          }

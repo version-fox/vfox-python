@@ -83,6 +83,12 @@ function python_version.parse_request(text)
         return nil
     end
 
+    -- GraalPy version names already carry their implementation and release,
+    -- such as graalpy-24.2.0 or graalpy3.13-community-25.5.5.
+    if value:match("^graalpy[%w%.]*%-") or value:match("^graalpython%-") then
+        return value
+    end
+
     local implementation = value:match("^([A-Za-z][A-Za-z0-9]*)%-")
     if implementation then
         implementation = implementation:lower()

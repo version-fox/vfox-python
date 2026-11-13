@@ -48,6 +48,20 @@ Tags use the full version, so several patch releases can coexist:
 `py -V:VersionFox/3.12` selects the newest vfox-installed 3.12, or use the exact
 tag from `py --list`.
 
+GraalPy is registered the same way. Its tag is the version name, and
+`SysVersion` is the Python language version:
+
+```text
+HKCU\Software\Python\VersionFox\graalpy-community-24.2.0
+    DisplayName = "GraalPy Community 24.2.0 (vfox)"
+    SysVersion = "3.11"
+    ExecutablePath = "...\graalpy-community-24.2.0-windows-amd64\bin\python.exe"
+```
+
+GraalPy has no `pythonw.exe`, so `WindowedExecutablePath` is omitted. From
+GraalPy 25.1 the tag includes the Python language version, such as
+`graalpy3.13-25.5.5`. See [GraalPy](graalpy.md).
+
 ## Why not `PythonCore`
 
 `PythonCore` is python.org's identity. A per-user `PythonCore\3.12` entry would

@@ -13,6 +13,7 @@
 -- limitations under the License.
 
 local windowsCommand = require("windows_command")
+require("util")
 
 local REGISTRY_ROOT = "Software\\Python\\VersionFox"
 local REGISTER_ENV = "VFOX_PYTHON_REGISTER_PY_LAUNCHER"
@@ -72,7 +73,8 @@ local function fileExists(path)
 end
 
 -- uv-build archives unpack below the SDK directory; the MSI installs directly
--- into it. Both layouts must point the launcher at the directory with python.exe.
+-- into it. GraalPy keeps python.exe under bin in its extracted archive. All
+-- layouts must point the launcher at the directory that contains the interpreter.
 local function installPrefix(path, version)
     if fileExists(path .. "\\python.exe") then
         return path
@@ -81,7 +83,48 @@ local function installPrefix(path, version)
     if fileExists(nestedPath .. "\\python.exe") then
         return nestedPath
     end
+    if isGraalPyVersion(version) then
+        local graalPyPath = resolvePythonInstallPath(path, version)
+        if fileExists(graalPyPath .. "\\bin\\python.exe") then
+            return graalPyPath
+        end
+    end
     return path
+end
+
+local function displayName(version)
+    local parsed = parseGraalPyVersion(version)
+    if parsed then
+        local name = parsed.community and "GraalPy Community" or "GraalPy"
+        return name .. " " .. parsed.release .. " (vfox)"
+    end
+    return "Python " .. version .. " (vfox)"
+end
+
+local function executablePath(path, version)
+    if isGraalPyVersion(version) then
+        return path .. "\\bin\\python.exe"
+    end
+    return path .. "\\python.exe"
+end
+
+-- GraalPy release names track the GraalVM release, not the Python language
+-- version. PEP 514 SysVersion has to be the latter.
+local function graalPySysVersion(version)
+    local parsed = parseGraalPyVersion(version)
+    if parsed == nil then
+        return nil
+    end
+    if parsed.pythonMinor then
+        return parsed.pythonMinor
+    end
+    local major = tonumber(parsed.release:match("^(%d+)"))
+    if major == 25 or major == 24 then
+        return "3.11"
+    elseif major == 23 then
+        return "3.10"
+    end
+    return nil
 end
 
 local function registrySubkey(version, archType)
@@ -89,14 +132,21 @@ local function registrySubkey(version, archType)
 end
 
 local function registryValues(version, path)
-    return {
-        { name = "DisplayName", value = "Python " .. version .. " (vfox)" },
-        { name = "SysVersion", value = sysVersion(version) },
+    local values = {
+        { name = "DisplayName", value = displayName(version) },
+        {
+            name = "SysVersion",
+            value = (isGraalPyVersion(version) and graalPySysVersion(version)) or sysVersion(version),
+        },
         { name = "SysArchitecture", value = sysArchitecture(RUNTIME.archType) },
-        { name = "ExecutablePath", value = path .. "\\python.exe" },
-        { name = "WindowedExecutablePath", value = path .. "\\pythonw.exe" },
-        { name = "VfoxManaged", value = "1" },
+        { name = "ExecutablePath", value = executablePath(path, version) },
     }
+    -- GraalPy has no pythonw.exe; PEP 514 treats the value as optional.
+    if not isGraalPyVersion(version) then
+        values[#values + 1] = { name = "WindowedExecutablePath", value = path .. "\\pythonw.exe" }
+    end
+    values[#values + 1] = { name = "VfoxManaged", value = "1" }
+    return values
 end
 
 local pep514 = {}

@@ -29,7 +29,11 @@ SHA-256. vfox downloads and verifies the archive, unpacks it, and calls
 - On Windows, if the archive has `ensurepip` but no pip command, pip is
   installed and `pip.cmd`/`pip3.cmd` shims are created.
 
-Only CPython archives are listed. The plugin prefers, in order:
+Only CPython archives are listed. GraalPy and other implementations are not
+part of uv-build; `vfox install python@graalpy-24.2.0` with this mode enabled
+fails with a message asking you to unset `VFOX_PYTHON_USE_UV_BUILD`. The
+GraalPy install path is described in [GraalPy](graalpy.md). The plugin prefers,
+in order:
 
 1. `install_only_stripped`
 2. `install_only`

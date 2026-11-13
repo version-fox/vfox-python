@@ -6,26 +6,31 @@
 
 | 平台 | 默认 | `VFOX_PYTHON_USE_UV_BUILD=1` |
 | --- | --- | --- |
-| Linux x86_64 | 用 pyenv 从源码编译 | uv-build 预编译包 |
-| Linux arm64 | 用 pyenv 从源码编译 | uv-build 预编译包 |
-| Linux armv7 | 用 pyenv 从源码编译 | 有包时用 uv-build 预编译包 |
+| Linux x86_64 | CPython 用 pyenv 从源码编译；GraalPy 用 Oracle 压缩包 | uv-build 预编译包 |
+| Linux arm64 | CPython 用 pyenv 从源码编译；GraalPy 用 Oracle 压缩包 | uv-build 预编译包 |
+| Linux armv7 | CPython 用 pyenv 从源码编译；没有 GraalPy 构建 | 有包时用 uv-build 预编译包 |
 | Linux musl / Alpine | 用 pyenv 从源码编译 | uv-build 的 musl 预编译包 |
-| macOS Intel 和 Apple silicon | 用 pyenv 从源码编译 | uv-build 预编译包 |
-| Windows x86_64、arm64、386 | python.org 的 EXE 或 MSI | uv-build 预编译包 |
+| macOS Intel 和 Apple silicon | CPython 用 pyenv 从源码编译；GraalPy 用 Oracle 压缩包 | uv-build 预编译包 |
+| Windows x86_64、arm64、386 | CPython 用 python.org 的 EXE 或 MSI；GraalPy 用 amd64 压缩包 | uv-build 预编译包 |
 
-源码构建取 pyenv 的 tag 和版本列表，把 pyenv 克隆到那个 tag，再运行它的
-`python-build`。它需要 C 工具链和 Python 链接的头文件。Windows 则下载官方
-安装包，用自带的 WiX 工具解开 MSI，再运行 `ensurepip`，不需要编译器。
+CPython 的源码构建取 pyenv 的 tag 和版本列表，把 pyenv 克隆到那个 tag，再运行
+它的 `python-build`。它需要 C 工具链和 Python 链接的头文件。Windows 则下载官方
+安装包，用自带的 WiX 工具解开 MSI，再运行 `ensurepip`，不需要编译器。GraalPy
+在所有支持的平台上都从 Oracle 的发布页下载并解压，不需要编译器；Linux 和
+macOS 有 amd64 和 arm64 资源，Windows 只有 amd64。
 
 ## 版本范围
 
-- **源码构建：** pyenv 列表里的每个 CPython 版本，包括 2.x、预发布版，以及
+- **CPython 源码构建：** pyenv 列表里的每个 CPython 版本，包括 2.x、预发布版和
   名字以 `t` 结尾的自由线程版本。
-- **Windows 安装包：** 当前架构有 EXE 或 MSI 的稳定版本。只有源码的安全版本不在
-  列表里，2.5 以前的版本也不列出；预发布安装包的文件名匹配不上稳定的精确文件名，
-  Windows 上需要预发布版时请用 uv-build。
+- **GraalPy：** 当前平台和架构有资源的版本，从 GraalPy 22.3 开始。Linux 和
+  macOS 使用 pyenv 提供的版本列表；Windows 列出有 `windows-amd64` 资源的版本。
+  Windows arm64 和 386 不支持。
+- **Windows CPython 安装包：** 当前架构有 EXE 或 MSI 的稳定版本。只有源码的
+  安全版本不在列表里，2.5 以前的版本也不列出；预发布安装包的文件名匹配不上稳定
+  的精确文件名，Windows 上需要预发布版时请用 uv-build。
 - **uv-build：** 索引里当前平台、架构和 libc 有的 CPython 包，包括
-  `freethreaded` 构建。
+  `freethreaded` 构建。GraalPy 不在此模式中。
 
 自由线程版本在每种来源上都用同样的 `t` 后缀选中：
 
@@ -100,6 +105,9 @@ x86_64 Python，装进同一个 vfox 目录。
 - 设置 `VFOX_PYTHON_REGISTER_PY_LAUNCHER=1` 后，安装会按 PEP 514 注册到
   `HKCU\Software\Python\VersionFox`，供 `py.exe` 使用。插件不写 `PythonCore`；
   见 [windows-launcher.md](windows-launcher.md)。
+- GraalPy 从 Oracle 发布页下载 `graalpy*-windows-amd64.zip`，校验 SHA-256 后
+  解压。`python.exe` 在 `bin` 下，pip 由 `ensurepip` 安装。PEP 514 的
+  `SysVersion` 是 Python 语言版本。见 [graalpy.md](graalpy.md)。
 
 ## uv-build
 
@@ -116,8 +124,9 @@ Linux 上会自动识别 libc，除非设置了 `VFOX_PYTHON_UV_LIBC`。Windows 
 ## 时间与磁盘
 
 源码构建通常要 5 到 15 分钟，占几百 MB 临时空间。Windows 安装包和 uv-build
-只要几秒到一分钟。CI 的 E2E 任务会在 Linux 装一次源码构建，在 Windows 装一次
-安装包和一次 uv-build，保证两条路径都能用。
+只要几秒到一分钟。GraalPy 安装就是下载加解压：Linux 上约 150 MB，Windows 上
+约 600 MB。CI 的 E2E 任务会在 Linux 装源码构建和 GraalPy，在 Windows 装安装包、
+uv-build 和 GraalPy，保证这些路径都能用。
 
 ## Python 2
 

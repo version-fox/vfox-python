@@ -46,6 +46,19 @@ tag 使用完整版本号，所以多个补丁版本可以并存：
 `py -V:VersionFox/3.12` 会选 vfox 安装的最新 3.12，也可以直接用 `py --list` 里
 的完整 tag。
 
+GraalPy 也按同样方式注册。tag 是版本名，`SysVersion` 是 Python 语言版本：
+
+```text
+HKCU\Software\Python\VersionFox\graalpy-community-24.2.0
+    DisplayName = "GraalPy Community 24.2.0 (vfox)"
+    SysVersion = "3.11"
+    ExecutablePath = "...\graalpy-community-24.2.0-windows-amd64\bin\python.exe"
+```
+
+GraalPy 没有 `pythonw.exe`，所以不写 `WindowedExecutablePath`。从 GraalPy
+25.1 开始，tag 里会带上 Python 语言版本，比如 `graalpy3.13-25.5.5`。见
+[GraalPy](graalpy.md)。
+
 ## 为什么不写 `PythonCore`
 
 `PythonCore` 是 python.org 的身份。用户级的 `PythonCore\3.12` 会优先于机器上

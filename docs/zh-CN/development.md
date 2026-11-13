@@ -55,13 +55,17 @@ vfox 加载 `metadata.lua`，命令需要时调用相应的钩子，并向钩子
 返回 `version`、`url`、`headers`、`sha256` 和 `note`；vfox 下载 URL，有
 `sha256` 时校验，解压后按 `version` 命名。
 
-- `version = "latest"` 会解析成 `Available({})[1].version`。列表从新到旧，
-  所以可能是预发布版。
-- Windows 上，没有当前架构的精确 EXE 或 MSI 时，在下载前就拒绝；
+- `version = "latest"` 会解析成 `Available({})[1].version`。CPython 在列表最
+  前面、从新到旧排列，所以可能是预发布版；GraalPy 要用完整版本名。
+- Windows 上，CPython 没有当前架构的精确 EXE 或 MSI 时，在下载前就拒绝；
   `Available` 应该已经过滤掉。
+- GraalPy 会到 Oracle 的发布资源里找当前平台的对应版本，返回官方压缩包地址和
+  SHA-256；Linux 和 macOS 用 `linux-*`/`macos-*` 的 tar.gz，Windows 用
+  `windows-amd64.zip`。GitHub API 被限流时，钩子会根据版本构造资源地址，并在
+  使用前校验对应的 `.sha256`。
 - uv-build 模式返回索引里的包地址和校验和。地址必须是 HTTPS；校验和不可用时
-  安装失败，而不是跳过校验。
-- `note = "uv-build"` 会显示在 vfox 里。
+  安装失败，而不是跳过校验。GraalPy 会被拒绝，因为索引里只有 CPython。
+- `note = "uv-build"`、`"GraalPy"` 或 `"GraalPy Community"` 会显示在 vfox 里。
 
 ### PostInstall
 
@@ -70,16 +74,20 @@ vfox 加载 `metadata.lua`，命令需要时调用相应的钩子，并向钩子
 
 - Linux 和 macOS 上，把 pyenv 克隆到 `ctx.rootPath .. "/pyenv"`，运行
   `python-build <版本> <path>`，结束后删掉克隆。
-- Windows 上，用 `bin/WiX/dark.exe` 解开 EXE，把里面的 MSI 安装进 `path`，
-  再用 `ensurepip` 装 pip。MSI 直接安装。别名可执行文件复制到 `python.exe`
-  旁边。
+- Windows 上，CPython 的 EXE 用 `bin/WiX/dark.exe` 解开，把里面的 MSI 安装进
+  `path`，再用 `ensurepip` 装 pip。MSI 直接安装。别名可执行文件复制到
+  `python.exe` 旁边。
+- GraalPy 压缩包已经由 vfox 解压；钩子在 `graalpy*-<平台>` 目录下找 payload，
+  运行包里自带的 `ensurepip`。Unix 上修 shebang；Windows 上用
+  `bin/python.exe` 运行，缺少启动器时创建 pip shim。
 - uv-build 模式下，包已经由 vfox 解压；钩子在 `path/python-<版本>` 下找
   payload，Unix 上修 shebang，Windows 上确保 pip 可用。
-  `resolvePythonInstallPath` 两种布局都处理。
+  `resolvePythonInstallPath` 处理 MSI、uv-build 和 GraalPy 三种布局。
 - uv-build 会拒绝 `ctx.rootPath` 之外的路径，避免错误的索引让钩子写到别处。
 - 设置 `VFOX_PYTHON_REGISTER_PY_LAUNCHER=1` 时，钩子按 PEP 514 把版本注册到
   `HKCU\Software\Python\VersionFox\<tag>`。tag 用完整版本号，非默认架构加
-  `-32`/`-arm64`，多个补丁版本可以并存。它不会写 `PythonCore`。
+  `-32`/`-arm64`，多个补丁版本可以并存。它不会写 `PythonCore`。GraalPy 的
+  `SysVersion` 用 Python 语言版本，并省略可选的 `WindowedExecutablePath`。
 
 ### PreUninstall
 
@@ -89,8 +97,9 @@ vfox 加载 `metadata.lua`，命令需要时调用相应的钩子，并向钩子
 没有子项，也一并删除。即使 `VFOX_PYTHON_REGISTER_PY_LAUNCHER` 已取消，钩子
 仍会运行，所以关闭注册不会在卸载时留下旧项。
 
-`lib/pep514.lua` 在读写信之前会识别 MSI 布局（`path/python.exe`）和 uv-build
-布局（`path/python-<版本>/python.exe`）。
+`lib/pep514.lua` 在读写信之前会识别 MSI 布局（`path/python.exe`）、uv-build
+布局（`path/python-<版本>/python.exe`）和 GraalPy 布局
+（`path/graalpy*-windows-amd64/bin/python.exe`）。
 
 ### PreUse
 
@@ -101,8 +110,11 @@ vfox 加载 `metadata.lua`，命令需要时调用相应的钩子，并向钩子
 
 ### EnvKeys
 
-- Unix：`PATH = ctx.path .. "/bin"`。
-- Windows：`PATH = ctx.path` 和 `PATH = ctx.path .. "\\Scripts"`。
+- Unix：`PATH = ctx.path .. "/bin"`；GraalPy 用 `<prefix>/bin`，prefix 从
+  解压目录里解析。
+- Windows CPython：`PATH = ctx.path` 和 `PATH = ctx.path .. "\\Scripts"`。
+- Windows GraalPy：`PATH = <prefix>\\bin` 和 `PATH = <prefix>\\Scripts`，
+  其中 `<prefix>` 是从解压目录里解析出来的。
 
 所以链接到 `/usr` 的系统 Python 会把 `/usr/bin` 放进 `PATH`，那里的命令是
 `python3`，不是 `python`。插件不会往链接进来的安装里创建别名。
@@ -116,13 +128,15 @@ vfox 加载 `metadata.lua`，命令需要时调用相应的钩子，并向钩子
 `lib/detect_python.lua`：
 
 - 从 `PATH` 和已知目录收集候选可执行文件（uv、pyenv、asdf、mise、Conda、
-  Homebrew、`/usr`、`/usr/local`、`/opt`、Windows 的 `Programs\Python`、
-  `C:\Python*`、py 启动器和 Store），
+  Homebrew、`/usr`、`/usr/local`、`/opt`、`~/graalpy*`、Windows 的
+  `Programs\Python`、`C:\Python*`、`C:\graalpy*`、py 启动器和 Store），
 - 用 `-E -s -c` 和一段单行程序询问每个解释器一次，
 - 取 `sys.version`、`sys.prefix`、`sys.base_prefix`、真实可执行文件和
-  `sys.abiflags`，
-- 跳过非 CPython、虚拟环境、vfox 自己的目录和根目录，
-- 按 `<版本>[-t]-<来源>` 命名。
+  `sys.abiflags`，GraalPy 还取 `__graalpython__.get_graalvm_version()` 和
+  Oracle/Community 发行版，
+- 跳过 PyPy 等其他实现、虚拟环境、vfox 自己的目录和根目录，
+- CPython 按 `<版本>[-t]-<来源>` 命名，GraalPy 按
+  `graalpy[-community][<python>]-<release>-<来源>` 命名。
 
 解释器把 UTF-8 路径打印成十六进制（`PREFIX_HEX=...`），这样非 ASCII 用户名
 能穿过 Windows 控制台和管道编码。Python 程序本身是单行、用转义换行写的，因为
@@ -174,9 +188,10 @@ local versions = plugin:Available({})
 `%` junction、退出码传递和每条失败路径。
 
 E2E 任务安装真实的 Python：Linux 上一次源码构建和一次镜像构建，Windows 上一次
-安装包和一次 uv-build，Linux 上还有一次 uv-build。它还会在 Linux 上对 runner
-的系统 Python 运行 `vfox link --detect python`，并在两个平台上检查
-`vfox env` 是否按项目的 `.python-version` 选择版本。
+安装包和一次 uv-build，两个平台上都还有一次 uv-build 和一次 GraalPy。Windows
+的 GraalPy 安装还会检查 PEP 514 注册。它会在 Linux 上对 runner 的系统 Python
+运行 `vfox link --detect python`，并在两个平台上检查 `vfox env` 是否按项目的
+`.python-version` 选择版本。
 
 本地命令：
 
@@ -215,8 +230,8 @@ vfox 的全局变量，只关闭 `duplicate-set-field`（测试会有意替换 `
   字符的路径跑一次真实的 Windows MSI 安装。
 - `lint.yml` 跑 StyLua、LuaLS 和 actionlint。
 - `license.yml` 跑许可证头检查。
-- `e2e.yml` 在 Linux 和 Windows 上真实构建、安装 Python，包括镜像和
-  uv-build 组合。
+- `e2e.yml` 在 Linux 和 Windows 上真实构建、安装 Python，包括镜像、uv-build
+  和 GraalPy，并检查 Windows 上的 PEP 514 注册。
 - `publish.yaml` 调用共享的 plugin-manifest 工作流。
 
 ## 发布
@@ -246,6 +261,7 @@ vfox 的全局变量，只关闭 `duplicate-set-field`（测试会有意替换 `
 | `VFOX_PYTHON_UV_LIBC` | Available、PreInstall | 覆盖 `gnu` / `musl` 识别 |
 | `VFOX_PYTHON_UV_BUILD_MIRROR` | PreInstall | uv-build 包的 HTTPS 镜像 |
 | `VFOX_PYTHON_REGISTER_PY_LAUNCHER` | PostInstall、PreUninstall | 把 Windows 安装注册到 `HKCU\Software\Python\VersionFox`；默认关闭 |
+| `GITHUB_TOKEN`、`GH_TOKEN` | Available | 提高 Windows GraalPy 发布列表的 GitHub API 限额 |
 | `UV_PYTHON_INSTALL_DIR` | Detect | uv 的 Python 目录 |
 | `PYENV_ROOT` | Detect | pyenv 根目录 |
 | `ASDF_DATA_DIR` | Detect | asdf 数据目录 |
@@ -262,7 +278,7 @@ vfox 的全局变量，只关闭 `duplicate-set-field`（测试会有意替换 `
 
 - Detect 会运行本机解释器，不是沙箱。虚拟环境会跳过，但带慢速 sitecustomize
   的 Python 会拖慢检测，因为单条命令没有超时。
-- 只检测 CPython。其他实现不在范围内。
+- 只检测 CPython 和 GraalPy。PyPy、Jython 等其他实现不在范围内。
 - 链接版本跟着目标走；发行版把它移走后，版本名和解释器可能对不上，直到再次运行
   Detect。
 - 插件不管理虚拟环境。用 `venv`、`uv venv` 或 Conda，再用 vfox 选基础解释器。

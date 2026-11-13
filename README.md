@@ -4,11 +4,12 @@
 
 Python plugin for [vfox](https://vfox.dev/).
 
-It installs CPython from python.org, compiles it from source on Linux and macOS,
-or downloads a prebuilt uv-build archive. It also adopts the Pythons already on
-the machine — system packages, uv, pyenv, Conda and others — and reads a
-project's `.python-version`, so pyenv and uv projects open on the version they
-name.
+It installs CPython from python.org, compiles CPython from source on Linux and
+macOS, or downloads a prebuilt uv-build archive. GraalPy comes from Oracle's
+release archives on every supported platform. It also adopts the Pythons
+already on the machine — system packages, uv, pyenv, Conda and others — and
+reads a project's `.python-version`, so pyenv and uv projects open on the
+version they name.
 
 ## Install
 
@@ -35,40 +36,68 @@ vfox has to be hooked into your shell; see its
 
 ## Versions
 
-A version is the CPython release, such as `3.12.2`, `3.13.1` or `3.14.0a4`. A
-free-threaded build ends in `t`, such as `3.14.0a4t`. A bare major version
-selects the newest installed release of that line:
+A version is the CPython release, such as `3.12.2`, `3.13.1` or `3.14.0a4`, or
+a GraalPy release, such as `graalpy-24.2.0` or `graalpy3.13-community-25.5.5`.
+A free-threaded CPython build ends in `t`, such as `3.14.0a4t`. A bare major
+version selects the newest installed release of that line:
 
 ```bash
 vfox install python@3.12       # newest 3.12.x
 vfox install python@3.12.2     # exactly 3.12.2
 vfox install python@3.14.0a4t  # free-threaded 3.14.0a4
+vfox install python@graalpy-24.2.0
 ```
 
 The available versions depend on the platform:
 
 | Platform | Default source | Versions |
 | --- | --- | --- |
-| Linux | source build with pyenv | every release pyenv knows |
-| macOS | source build with pyenv | every release pyenv knows |
-| Windows | python.org installer | stable releases with an EXE or MSI for the architecture |
+| Linux | pyenv source build for CPython; Oracle archive for GraalPy | every release pyenv knows, including GraalPy, PyPy and Conda |
+| macOS | pyenv source build for CPython; Oracle archive for GraalPy | every release pyenv knows, including GraalPy, PyPy and Conda |
+| Windows | python.org installer for CPython; Oracle zip for GraalPy | stable CPython installers for the architecture, plus GraalPy amd64 releases |
 
 On Windows, source-only security releases and pre-release or free-threaded
-builds are left out because python.org's stable installer names do not cover
-them. `VFOX_PYTHON_USE_UV_BUILD=1` switches to prebuilt uv-build archives on
-Linux, macOS and Windows; see [docs/uv.md](docs/uv.md).
+CPython builds are left out because python.org's stable installer names do not
+cover them. `VFOX_PYTHON_USE_UV_BUILD=1` switches to prebuilt uv-build archives
+on Linux, macOS and Windows; uv-build contains CPython only. See
+[docs/uv.md](docs/uv.md).
 
 `py.exe` does not read `PATH`. Set
 `VFOX_PYTHON_REGISTER_PY_LAUNCHER=1` before installing to register the version
 under vfox's own PEP 514 key; see [Windows Python
 launcher](docs/windows-launcher.md).
 
+## GraalPy
+
+[GraalPy](https://www.graalvm.org/python/) is Oracle's Python implementation.
+The plugin installs both distributions:
+
+| Version name | Distribution | License |
+| --- | --- | --- |
+| `graalpy-24.2.0`, `graalpy3.13-25.5.5` | GraalPy built on Oracle GraalVM | GFTC |
+| `graalpy-community-24.2.0`, `graalpy3.13-community-25.5.5` | GraalPy Community (GraalVM CE) | Community |
+
+```bash
+vfox install python@graalpy-24.2.0
+vfox install python@graalpy-community-24.2.0
+vfox use --global python@graalpy-24.2.0
+```
+
+On Linux and macOS the plugin downloads Oracle's official tar.gz and runs the
+bundled `ensurepip`; the version list still comes from pyenv. On Windows it
+downloads the official amd64 zip. Windows arm64 and 386 are not supported
+because Oracle does not publish those builds. `VFOX_PYTHON_MIRROR` does not
+apply to GraalPy downloads. GraalPy is not part of uv-build, so
+`VFOX_PYTHON_USE_UV_BUILD=1` lists CPython only. `vfox link --detect python`
+adopts existing GraalPy installations. See [GraalPy](docs/graalpy.md) for the
+version-name rules, platform limits and PEP 514 registration.
+
 ## Already installed Python
 
-If a Python is already on the machine — from the system package manager, uv,
-pyenv, asdf, mise, Conda, Homebrew or the python.org installer —
-`vfox link --detect python` adopts it instead of downloading another copy
-(needs vfox 1.1.0 or later):
+If a Python or GraalPy is already on the machine — from the system package
+manager, uv, pyenv, asdf, mise, Conda, Homebrew, the python.org installer or
+Oracle's GraalPy archive — `vfox link --detect python` adopts it instead of
+downloading another copy (needs vfox 1.1.0 or later):
 
 ```bash
 vfox link --detect python
@@ -86,6 +115,7 @@ project, so projects written for pyenv or uv work unchanged:
 
 ```bash
 echo 3.12 > .python-version
+echo graalpy-24.2.0 > .python-version
 ```
 
 ## uv
@@ -121,6 +151,8 @@ uv-build downloads can go through `VFOX_PYTHON_UV_BUILD_MIRROR`. See
 
 - [Versions](docs/versions.md): version names, free-threaded builds, `latest`,
   and which versions each platform has
+- [GraalPy](docs/graalpy.md): Oracle and Community distributions, platform
+  support, `vfox link` and PEP 514
 - [uv and uv-build](docs/uv.md): prebuilt archives, uv-managed Pythons, and
   using uv with the interpreter vfox selected
 - [Already installed Python](docs/link.md): `vfox link --detect python`, the
@@ -145,3 +177,5 @@ uv-build downloads can go through `VFOX_PYTHON_UV_BUILD_MIRROR`. See
 - [uv](https://github.com/astral-sh/uv), for the prebuilt Python archives and
   the `.python-version` convention
 - [python.org](https://www.python.org/), for the releases and Windows installers
+- [Oracle GraalPy](https://github.com/oracle/graalpython), for the GraalPy
+  releases

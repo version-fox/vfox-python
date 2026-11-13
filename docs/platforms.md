@@ -6,28 +6,36 @@
 
 | Platform | Default | `VFOX_PYTHON_USE_UV_BUILD=1` |
 | --- | --- | --- |
-| Linux x86_64 | source build with pyenv | prebuilt uv-build archive |
-| Linux arm64 | source build with pyenv | prebuilt uv-build archive |
-| Linux armv7 | source build with pyenv | prebuilt uv-build archive when available |
+| Linux x86_64 | source build with pyenv for CPython; Oracle archive for GraalPy | prebuilt uv-build archive |
+| Linux arm64 | source build with pyenv for CPython; Oracle archive for GraalPy | prebuilt uv-build archive |
+| Linux armv7 | source build with pyenv for CPython; no GraalPy build | prebuilt uv-build archive when available |
 | Linux musl / Alpine | source build with pyenv | prebuilt musl archive |
-| macOS Intel and Apple silicon | source build with pyenv | prebuilt uv-build archive |
-| Windows x86_64, arm64, 386 | python.org EXE or MSI | prebuilt uv-build archive |
+| macOS Intel and Apple silicon | source build with pyenv for CPython; Oracle archive for GraalPy | prebuilt uv-build archive |
+| Windows x86_64, arm64, 386 | python.org EXE or MSI for CPython; GraalPy amd64 zip | prebuilt uv-build archive |
 
-The source build takes the pyenv tag and version list, clones pyenv at that tag,
-and runs its `python-build`. It needs a C toolchain and the headers Python
-links against. The Windows path downloads the official installer, extracts the
-MSIs with the bundled WiX tools and runs `ensurepip`; it needs no compiler.
+The CPython source build takes the pyenv tag and version list, clones pyenv at
+that tag, and runs its `python-build`. It needs a C toolchain and the headers
+Python links against. The Windows path downloads the official installer,
+extracts the MSIs with the bundled WiX tools and runs `ensurepip`; it needs no
+compiler. GraalPy is downloaded from Oracle's releases on every supported
+platform and unpacked; it needs no compiler. Linux and macOS have amd64 and
+arm64 assets; Windows only amd64.
 
 ## Version coverage
 
-- **Source builds:** every CPython release in the pyenv list, including 2.x,
-  pre-releases and free-threaded versions whose name ends in `t`.
-- **Windows installers:** stable releases with an EXE or MSI for the
+- **CPython source builds:** every CPython release in the pyenv list, including
+  2.x, pre-releases and free-threaded versions whose name ends in `t`.
+- **GraalPy:** releases with an asset for the platform and architecture, from
+  GraalPy 22.3 onward. Linux and macOS use the version list pyenv provides;
+  Windows lists the releases that have a `windows-amd64` asset. Windows arm64
+  and 386 are not supported.
+- **Windows CPython installers:** stable releases with an EXE or MSI for the
   architecture. Source-only security releases are omitted, releases before 2.5
   are not listed, and pre-release installer names do not match the exact stable
   filename; use uv-build for a pre-release on Windows.
 - **uv-build:** CPython archives that the index has for the platform,
-  architecture and libc, including `freethreaded` builds.
+  architecture and libc, including `freethreaded` builds. GraalPy is not
+  available in this mode.
 
 A free-threaded release is selected with the same `t` suffix on every source:
 
@@ -109,6 +117,10 @@ x86_64 Python and installs it under the same vfox home.
 - Set `VFOX_PYTHON_REGISTER_PY_LAUNCHER=1` to register the installation under
   `HKCU\Software\Python\VersionFox` for `py.exe`. The plugin does not write
   `PythonCore`; see [windows-launcher.md](windows-launcher.md).
+- GraalPy downloads `graalpy*-windows-amd64.zip` from Oracle's releases, checks
+  its SHA-256 and unpacks it. `python.exe` is under `bin`; pip is bootstrapped
+  with `ensurepip`. The PEP 514 `SysVersion` is the Python language version.
+  See [graalpy.md](graalpy.md).
 
 ## uv-build
 
@@ -126,8 +138,9 @@ downloads anything. See [uv.md](uv.md) for archive selection and checksums.
 
 A source build typically takes 5 to 15 minutes and a few hundred MB of
 temporary space. The Windows installer and uv-build take seconds to a minute.
-The CI E2E job installs a source build on Linux and an installer and uv-build on
-Windows to keep both paths working.
+A GraalPy install is a download and unpack: about 150 MB on Linux and 600 MB on
+Windows. The CI E2E job installs a source build and GraalPy on Linux, and an
+installer, uv-build and GraalPy on Windows to keep those paths working.
 
 ## Python 2
 

@@ -12,9 +12,10 @@
 -- See the License for the specific language governing permissions and
 -- limitations under the License.
 
---- Finds CPython installations that are already on the machine, for
---- `vfox link --detect python`. Each result is named the way `vfox install`
---- names a Python, with the source appended: 3.12.8-system, 3.13.1-uv.
+--- Finds CPython and GraalPy installations that are already on the machine,
+--- for `vfox link --detect python`. Each result is named the way `vfox install`
+--- names a Python, with the source appended: 3.12.8-system, 3.13.1-uv,
+--- graalpy-24.2.0-system.
 ---
 --- The interpreter itself is asked for its version and prefix. Everything the
 --- hook reports can be linked without copying: a linked version is a symlink
@@ -272,6 +273,13 @@ local QUERY = 'exec("'
         "    print(name + '_HEX=' + binascii.hexlify(value).decode('ascii'))",
         "print('VERSION=' + platform.python_version())",
         "print('IMPLEMENTATION=' + platform.python_implementation())",
+        "if platform.python_implementation() == 'GraalVM':",
+        "    try:",
+        "        import __graalpython__",
+        "        print('GRAALPY_VERSION=' + str(__graalpython__.get_graalvm_version()))",
+        "        print('GRAALPY_EDITION=' + ('community' if 'GraalVM CE' in sys.version else 'oracle'))",
+        "    except Exception:",
+        "        pass",
         "print('ABIFLAGS=' + getattr(sys, 'abiflags', ''))",
         "emit('PREFIX', sys.prefix)",
         "emit('BASE_PREFIX', getattr(sys, 'base_prefix', sys.prefix))",
@@ -279,6 +287,24 @@ local QUERY = 'exec("'
         "emit('EXECUTABLE', os.path.realpath(executable) if executable else '')",
     }, "\\n")
     .. '")'
+
+--- Names a GraalPy installation the way the plugin installs it. 24.x keeps the
+--- short graalpy-<release> form; 25.1 and later add the Python language
+--- version, as in graalpy3.13-25.5.5. The community edition keeps its marker.
+local function graalpy_version_name(release, pythonVersion, edition)
+    local pythonMinor = pythonVersion and pythonVersion:match("^(%d+%.%d+)")
+    local major, minor = release:match("^(%d+)%.(%d+)")
+    major, minor = tonumber(major), tonumber(minor)
+
+    local prefix = "graalpy"
+    if pythonMinor and major and (major > 25 or (major == 25 and minor >= 1)) then
+        prefix = prefix .. pythonMinor
+    end
+    if edition == "community" then
+        prefix = prefix .. "-community"
+    end
+    return prefix .. "-" .. release
+end
 
 --- Asks one interpreter what it is. Returns nil for anything the plugin cannot
 --- link: a broken Windows Store alias, a virtual environment, a PyPy build, or
@@ -299,16 +325,24 @@ local function query(executable)
         end
     end
 
-    if fields.IMPLEMENTATION ~= "CPython" or fields.VERSION == nil then
+    if fields.VERSION == nil then
         return nil
     end
-    local version = fields.VERSION:match("^(%d+%.%d+[%w%.]*)")
-    if version == nil then
+
+    local version
+    if fields.IMPLEMENTATION == "CPython" then
+        version = fields.VERSION:match("^(%d+%.%d+[%w%.]*)")
+        if version == nil then
+            return nil
+        end
+        version = version:gsub("%.$", "")
+        if fields.ABIFLAGS and fields.ABIFLAGS:find("t", 1, true) and version:sub(-1) ~= "t" then
+            version = version .. "t"
+        end
+    elseif fields.IMPLEMENTATION == "GraalVM" and fields.GRAALPY_VERSION then
+        version = graalpy_version_name(fields.GRAALPY_VERSION, fields.VERSION, fields.GRAALPY_EDITION)
+    else
         return nil
-    end
-    version = version:gsub("%.$", "")
-    if fields.ABIFLAGS and fields.ABIFLAGS:find("t", 1, true) and version:sub(-1) ~= "t" then
-        version = version .. "t"
     end
 
     local prefix = decode_hex(fields.PREFIX_HEX)
@@ -440,6 +474,9 @@ local function known_roots()
     add_root(roots, uv_python_dir(), "uv", "children")
     add_root(roots, join(env_or("PYENV_ROOT", join(home, ".pyenv")), "versions"), "pyenv", "children")
     add_root(roots, join(env_or("ASDF_DATA_DIR", join(home, ".asdf")), "installs/python"), "asdf", "children")
+    -- Oracle's standalone GraalPy zips are commonly unpacked directly under
+    -- the user's home directory.
+    add_root(roots, home, "system", "children", "^graalpy[%w%.%-]*$")
     add_root(
         roots,
         join(env("MISE_DATA_DIR") or join(home, ".local/share/mise"), "installs/python"),
@@ -471,6 +508,7 @@ local function known_roots()
         add_root(roots, programFiles, "pythonorg", "children", "^Python%d")
         add_root(roots, programFilesX86, "pythonorg", "children", "^Python%d")
         add_root(roots, "C:/", "pythonorg", "children", "^Python%d")
+        add_root(roots, "C:/", "system", "children", "^graalpy")
         add_root(
             roots,
             join(localAppData, "Microsoft/WindowsApps"),
@@ -483,6 +521,7 @@ local function known_roots()
         add_root(roots, "/usr", "system", "prefix")
         add_root(roots, "/usr/local", "local", "prefix")
         add_root(roots, "/opt/python", "opt", "prefix")
+        add_root(roots, "/opt", "opt", "children", "^graalpy")
         add_root(roots, "/opt/homebrew", "brew", "prefix")
         add_root(roots, "/home/linuxbrew/.linuxbrew", "brew", "prefix")
         if is_darwin() then
@@ -564,6 +603,11 @@ function detect.find_all()
         end
     end
     table.sort(results, function(left, right)
+        local leftGraalPy = left.version:match("^graalpy") ~= nil
+        local rightGraalPy = right.version:match("^graalpy") ~= nil
+        if leftGraalPy ~= rightGraalPy then
+            return not leftGraalPy
+        end
         local order = python_version.compare(left.version, right.version)
         if order ~= 0 then
             return order > 0

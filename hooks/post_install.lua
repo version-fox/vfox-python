@@ -16,7 +16,10 @@ require("util")
 local pep514 = require("pep514")
 function PLUGIN:PostInstall(ctx)
     local result
-    if useUvBuild() then
+    local version = ctx.sdkInfo["python"].version
+    if isGraalPyVersion(version) and parseGraalPyVersion(version) then
+        result = graalPyInstall(ctx)
+    elseif useUvBuild() then
         result = uvBuildInstall(ctx)
     elseif OS_TYPE == "windows" then
         result = windowsInstall(ctx)

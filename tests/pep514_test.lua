@@ -184,6 +184,20 @@ values = literals(state.commands[1])
 assert(values[2] == nestedPath, "uv-build archives must use the nested Python prefix")
 nestedExecutable = nil
 
+local graalpyRoot = "C:\\vfox\\v-graalpy-community-24.2.0"
+local graalpyPrefix = graalpyRoot .. "\\graalpy-community-24.2.0-windows-amd64"
+nestedExecutable = graalpyPrefix .. "\\bin\\python.exe"
+reset()
+setRegisterEnv("1")
+pep514.register({ sdkInfo = { python = { path = graalpyRoot, version = "graalpy-community-24.2.0" } } })
+values = literals(state.commands[1])
+assert(values[2] == graalpyPrefix, values[2])
+assert(valueOf(values, "DisplayName") == "GraalPy Community 24.2.0 (vfox)")
+assert(valueOf(values, "SysVersion") == "3.11")
+assert(valueOf(values, "ExecutablePath") == graalpyPrefix .. "\\bin\\python.exe")
+assert(valueOf(values, "WindowedExecutablePath") == nil, "GraalPy has no pythonw.exe")
+nestedExecutable = nil
+
 reset()
 setRegisterEnv(nil)
 pep514.register(ctx)

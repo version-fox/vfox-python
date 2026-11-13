@@ -14,13 +14,19 @@
 
 -- The Windows download page lists installers for every architecture at once.
 -- Available must leave only the ones the running vfox can install, in newest
--- first order, and must not probe each installer with a HEAD request.
+-- first order, and must not probe each installer with a HEAD request. GraalPy
+-- is a second upstream: only its Windows amd64 assets are listed, and a GitHub
+-- failure must not hide the python.org installers.
 local test = require("vfox.test")
 
+local GRAALPY_URL = "https://api.github.com/repos/oracle/graalpython/releases?per_page=100"
+
 local state = {
-    requests = 0,
+    requests = {},
     response = nil,
     error = nil,
+    graalpy = {},
+    graalpyError = nil,
 }
 
 local plugin = test.load({
@@ -30,12 +36,20 @@ local plugin = test.load({
     -- value; it must mean "no mirror", not an empty base URL.
     env = { VFOX_PYTHON_MIRROR = "" },
     http = function(request)
-        state.requests = state.requests + 1
-        assert(request.url == "https://www.python.org/downloads/windows/", request.url)
-        if state.error then
-            return nil, state.error
+        state.requests[request.url] = (state.requests[request.url] or 0) + 1
+        if request.url == "https://www.python.org/downloads/windows/" then
+            if state.error then
+                return nil, state.error
+            end
+            return state.response
         end
-        return state.response
+        if request.url == GRAALPY_URL then
+            if state.graalpyError then
+                return nil, state.graalpyError
+            end
+            return { status_code = 200, body = require("json").encode(state.graalpy) }
+        end
+        error("unexpected request: " .. request.url)
     end,
 })
 
@@ -62,18 +76,64 @@ local function page()
     return "<html><body>" .. table.concat(anchors, "\n") .. "</body></html>"
 end
 
+local function asset(name)
+    return {
+        name = name,
+        browser_download_url = "https://github.com/oracle/graalpython/releases/download/graal-24.2.0/" .. name,
+    }
+end
+
+state.graalpy = {
+    {
+        tag_name = "graal-24.2.0",
+        assets = {
+            asset("graalpy-24.2.0-windows-amd64.zip"),
+            asset("graalpy-community-24.2.0-windows-amd64.zip"),
+            asset("graalpy3.13-25.5.5-windows-amd64.zip"),
+            asset("graalpy3.13-community-25.5.5-windows-amd64.zip"),
+            asset("graalpy-24.2.0-jvm-windows-amd64.zip"),
+            asset("graalpy-24.2.0-linux-amd64.tar.gz"),
+            asset("graalpy-24.2.0-windows-arm64.zip"),
+        },
+    },
+}
+
+-- A GitHub failure must leave the python.org list usable.
+RUNTIME.archType = "amd64"
+state.response, state.error, state.graalpyError, state.requests =
+    { status_code = 200, body = page() }, nil, "rate limited", {}
+local fallback = plugin:Available({})
+assert(#fallback == 3, "the CPython listing must survive a GraalPy failure: " .. #fallback)
+state.graalpyError = nil
+
+local function requests(url)
+    return state.requests[url] or 0
+end
+
 local function listing(arch, expected)
     RUNTIME.archType = arch
-    state.response, state.error, state.requests = { status_code = 200, body = page() }, nil, 0
+    state.response, state.error, state.requests = { status_code = 200, body = page() }, nil, {}
     local result = plugin:Available({})
     assert(#result == #expected, #result)
     for i, version in ipairs(expected) do
         assert(result[i].version == version, result[i].version)
     end
-    assert(state.requests == 1, "the listing must take one request, got " .. state.requests)
+    assert(requests("https://www.python.org/downloads/windows/") == 1, "one python.org request")
+    assert(
+        requests(GRAALPY_URL) == (arch == "amd64" and 1 or 0),
+        "GraalPy requests: " .. tostring(requests(GRAALPY_URL))
+    )
 end
 
-listing("amd64", { "3.12.8", "3.11.9", "3.4.4" })
+listing("amd64", {
+    "3.12.8",
+    "3.11.9",
+    "3.4.4",
+    "graalpy-24.2.0",
+    "graalpy-community-24.2.0",
+    "graalpy3.13-25.5.5",
+    "graalpy3.13-community-25.5.5",
+})
 listing("386", { "3.12.8", "3.4.4" })
 listing("arm64", { "3.11.9" })
 
@@ -97,4 +157,4 @@ links = { "https://www.python.org/ftp/python/3.12.8/python-3.12.8-amd64.exe" }
 state.response = { status_code = 200, body = page() }
 fails("Unsupported Windows Python architecture")
 
-print("PASS: Windows installer listing, architecture filtering and failures")
+print("PASS: Windows installer listing, GraalPy assets, architecture filtering and failures")

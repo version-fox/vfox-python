@@ -41,12 +41,11 @@ local REQUEST_HEADERS = {
     ["User-Agent"] = "vfox",
 }
 
--- pip.cmd lives under Scripts, so %~dp0..\python.exe resolves to the install root's python.exe.
--- Windows command scripts conventionally use CRLF line endings.
-local WINDOWS_PIP_SHIM_CONTENT = '@echo off\r\n"%~dp0..\\python.exe" -m pip %*\r\n'
-
 local UV_BUILD_ENV = "VFOX_PYTHON_USE_UV_BUILD"
 local UV_BUILD_MIRROR_ENV = "VFOX_PYTHON_UV_BUILD_MIRROR"
+
+local GRAALPY_RELEASES_URL = "https://api.github.com/repos/oracle/graalpython/releases?per_page=100"
+local GRAALPY_WINDOWS_SUFFIX = "-windows-amd64.zip"
 
 -- download source
 local DOWNLOAD_SOURCE = {
@@ -54,6 +53,95 @@ local DOWNLOAD_SOURCE = {
     EXE = PYTHON_URL .. "%s/python-%s%s.exe",
     SOURCE = PYTHON_URL .. "%s/Python-%s.tar",
 }
+
+--- Splits a GraalPy version name into the release and the distribution:
+---
+---   graalpy-24.2.0                    -> release 24.2.0, Oracle GraalVM
+---   graalpy-community-24.2.0          -> release 24.2.0, Community
+---   graalpy3.13-25.5.5                -> release 25.5.5, Oracle GraalVM
+---   graalpy3.13-community-25.5.5      -> release 25.5.5, Community
+---
+--- GraalPy 25.1 and later put the Python language version in the distribution
+--- name (graalpy3.13-25.5.5); earlier releases omit it.
+function parseGraalPyVersion(version)
+    if type(version) ~= "string" then
+        return nil
+    end
+
+    local pythonMinor, release = version:match("^graalpy(%d+%.%d+)%-community%-(.+)$")
+    local community = pythonMinor ~= nil
+    if not release then
+        pythonMinor, release = version:match("^graalpy(%d+%.%d+)%-(.+)$")
+    end
+    if not release then
+        release = version:match("^graalpy%-community%-(.+)$")
+        community = release ~= nil
+    end
+    if not release then
+        release = version:match("^graalpy%-(.+)$")
+    end
+    if not release then
+        return nil
+    end
+
+    return {
+        release = release,
+        community = community,
+        pythonMinor = pythonMinor,
+    }
+end
+
+function isGraalPyVersion(version)
+    return parseGraalPyVersion(version) ~= nil or (type(version) == "string" and version:match("^graalpython%-") ~= nil)
+end
+
+local function graalPyNote(version)
+    local parsed = parseGraalPyVersion(version)
+    if parsed and parsed.community then
+        return "GraalPy Community"
+    end
+    return "GraalPy"
+end
+
+local function graalPyAssetPrefix(version, parsed)
+    return version:sub(1, #version - #parsed.release - 1)
+end
+
+--- The official GraalPy archive for the running platform, or nil when Oracle
+--- does not publish one. Each entry has the release-asset suffix and the
+--- directory name inside the archive.
+local function graalPyPlatform()
+    local osType = string.lower((RUNTIME and RUNTIME.osType) or OS_TYPE or "")
+    if osType == "macos" then
+        osType = "darwin"
+    end
+
+    local arch = string.lower((RUNTIME and RUNTIME.archType) or "")
+    if arch == "amd64" or arch == "x64" or arch == "x86_64" then
+        arch = "x86_64"
+    elseif arch == "arm64" or arch == "aarch64" then
+        arch = "aarch64"
+    elseif arch == "386" or arch == "i386" or arch == "x86" then
+        arch = "x86"
+    end
+
+    if osType == "windows" and arch == "x86_64" then
+        return { suffix = "-windows-amd64.zip", archiveSuffix = "-windows-amd64" }
+    elseif osType == "linux" and arch == "x86_64" then
+        return { suffix = "-linux-amd64.tar.gz", archiveSuffix = "-linux-amd64" }
+    elseif osType == "linux" and arch == "aarch64" then
+        return { suffix = "-linux-aarch64.tar.gz", archiveSuffix = "-linux-aarch64" }
+    elseif osType == "darwin" and arch == "x86_64" then
+        return { suffix = "-macos-amd64.tar.gz", archiveSuffix = "-macos-amd64" }
+    elseif osType == "darwin" and arch == "aarch64" then
+        return { suffix = "-macos-aarch64.tar.gz", archiveSuffix = "-macos-aarch64" }
+    end
+    return nil
+end
+
+local function graalPyArchiveName(version, parsed, platform)
+    return graalPyAssetPrefix(version, parsed) .. "-" .. parsed.release .. platform.archiveSuffix
+end
 
 function checkIsReleaseVersion(version)
     local resp, err = http.head({
@@ -680,13 +768,14 @@ local function writeWindowsFile(path, content)
     end
 end
 
-local function createWindowsPipShim(scriptsPath)
+local function createWindowsPipShim(scriptsPath, pythonRelativePath)
     ensureWindowsDirectory(scriptsPath)
 
     -- pip and pip3 cover the command names exposed by vfox CI and common Windows usage.
+    local content = '@echo off\r\n"%~dp0' .. pythonRelativePath .. '" -m pip %*\r\n'
     local shims = { "pip.cmd", "pip3.cmd" }
     for _, shim in ipairs(shims) do
-        writeWindowsFile(scriptsPath .. "\\" .. shim, WINDOWS_PIP_SHIM_CONTENT)
+        writeWindowsFile(scriptsPath .. "\\" .. shim, content)
     end
 end
 
@@ -694,13 +783,16 @@ local function isPipCommandAvailable(scriptsPath)
     return pathExists(scriptsPath .. "\\pip.exe") or pathExists(scriptsPath .. "\\pip.cmd")
 end
 
-local function ensureWindowsUvBuildPip(path)
+--- Installs pip for a Windows Python whose prefix is `root` and whose
+--- interpreter is `pythonExe`. `pythonRelativePath` is the interpreter path
+--- relative to the Scripts directory, used only when ensurepip does not create
+--- the pip launchers itself.
+local function ensureWindowsPip(root, pythonExe, pythonRelativePath)
     if runtimeOs() ~= "windows" then
         return
     end
 
-    local pythonExe = path .. "\\python.exe"
-    local scriptsPath = path .. "\\Scripts"
+    local scriptsPath = root .. "\\Scripts"
     if not pathExists(pythonExe) then
         error("Cannot install pip: python.exe was not found at " .. pythonExe)
     end
@@ -709,12 +801,12 @@ local function ensureWindowsUvBuildPip(path)
         return
     end
 
-    if not pathExists(path .. "\\Lib\\ensurepip\\__init__.py") then
-        print("Warning: uv-build Python does not include ensurepip; pip will not be available.")
+    if not pathExists(root .. "\\Lib\\ensurepip\\__init__.py") then
+        print("Warning: Python does not include ensurepip; pip will not be available.")
         return
     end
 
-    print("Installing pip for uv-build Python on Windows...")
+    print("Installing pip on Windows...")
     local command = powerShellPythonCommand(pythonExe, { "-E", "-s", "-m", "ensurepip", "-U", "--default-pip" })
     local exitCode = os.execute(command)
     if not commandSucceeded(exitCode) then
@@ -725,7 +817,7 @@ local function ensureWindowsUvBuildPip(path)
         return
     end
 
-    local windowsBundledPath = path .. "\\Lib\\ensurepip\\_bundled"
+    local windowsBundledPath = root .. "\\Lib\\ensurepip\\_bundled"
     local reinstallCommand = powerShellPythonCommand(pythonExe, {
         "-E",
         "-s",
@@ -750,8 +842,12 @@ local function ensureWindowsUvBuildPip(path)
     end
 
     if not isPipCommandAvailable(scriptsPath) then
-        createWindowsPipShim(scriptsPath)
+        createWindowsPipShim(scriptsPath, pythonRelativePath)
     end
+end
+
+local function ensureWindowsUvBuildPip(path)
+    ensureWindowsPip(path, path .. "\\python.exe", "..\\python.exe")
 end
 
 function resolvePythonInstallPath(installPath, version)
@@ -765,7 +861,67 @@ function resolvePythonInstallPath(installPath, version)
         return uvBuildPath
     end
 
+    -- Oracle publishes GraalPy as an archive with a top-level
+    -- graalpy[-community]-<release>-<platform> directory.
+    local parsed = parseGraalPyVersion(version)
+    local platform = parsed and graalPyPlatform() or nil
+    if platform then
+        if platform.suffix:sub(-4) == ".zip" then
+            if pathExists(installPath .. "\\bin\\python.exe") then
+                return installPath
+            end
+            local graalPyPath = installPath .. "\\" .. graalPyArchiveName(version, parsed, platform)
+            if pathExists(graalPyPath .. "\\bin\\python.exe") then
+                return graalPyPath
+            end
+        else
+            local graalPyPath = installPath .. "/" .. graalPyArchiveName(version, parsed, platform)
+            if pathExists(graalPyPath .. "/bin") then
+                return graalPyPath
+            end
+        end
+    end
+
     return installPath
+end
+
+function graalPyInstall(ctx)
+    local sdkInfo = ctx.sdkInfo["python"]
+    local path = sdkInfo.path
+    local version = sdkInfo.version
+
+    local installPath = resolvePythonInstallPath(path, version)
+    if OS_TYPE == "windows" then
+        local pythonExe = installPath .. "\\bin\\python.exe"
+        if not pathExists(pythonExe) then
+            error("Extracted GraalPy archive does not contain bin\\python.exe at expected location: " .. installPath)
+        end
+        ensureWindowsPip(installPath, pythonExe, "..\\bin\\python.exe")
+    else
+        local pythonExe = installPath .. "/bin/python3"
+        if not pathExists(pythonExe) then
+            pythonExe = installPath .. "/bin/python"
+        end
+        if not pathExists(pythonExe) then
+            error("Extracted GraalPy archive does not contain bin/python at expected location: " .. installPath)
+        end
+        local status = os.execute(shellQuote(pythonExe) .. " -I -m ensurepip")
+        if not commandSucceeded(status) then
+            error("ensurepip failed while installing pip for GraalPy. Exit code: " .. tostring(status))
+        end
+        -- ensurepip on GraalPy creates pip3 but not the pip launcher.
+        local pip3 = installPath .. "/bin/pip3"
+        local pip = installPath .. "/bin/pip"
+        if pathExists(pip3) and not pathExists(pip) then
+            local copyStatus = os.execute("cp " .. shellQuote(pip3) .. " " .. shellQuote(pip))
+            if not commandSucceeded(copyStatus) then
+                error("Failed to create the pip launcher for GraalPy. Exit code: " .. tostring(copyStatus))
+            end
+        end
+        fixShebangLines(installPath)
+    end
+
+    print("Install GraalPy success!")
 end
 
 --- Whether a vfox version directory holds a link to a Python that lives
@@ -812,6 +968,189 @@ function uvBuildPreInstall(version)
         error("uv-build PreInstall failed: sha256 is required")
     end
     return uvBuildPackage
+end
+
+local graalPyReleaseCaches = {}
+
+local function graalPyGitHubHeaders()
+    fixHeaders()
+    local headers = {
+        ["User-Agent"] = REQUEST_HEADERS["User-Agent"],
+        ["Accept"] = "application/vnd.github+json",
+    }
+    local token = os.getenv("GITHUB_TOKEN") or os.getenv("GH_TOKEN")
+    if token ~= nil and token ~= "" then
+        headers["Authorization"] = "Bearer " .. token
+    end
+    return headers
+end
+
+--- Lists the GraalPy releases that publish an asset for `suffix`. The GitHub
+--- API is the source of truth for both the asset name and the release tag,
+--- because 25.3.4.1 is published under the tag graal-25.3.4.
+local function getGraalPyReleases(suffix)
+    if graalPyReleaseCaches[suffix] ~= nil then
+        return graalPyReleaseCaches[suffix]
+    end
+
+    local resp, err = http.get({
+        url = GRAALPY_RELEASES_URL,
+        headers = graalPyGitHubHeaders(),
+    })
+    if err ~= nil or resp == nil then
+        error("Failed to list GraalPy releases: " .. tostring(err or "empty response"))
+    end
+    if resp.status_code ~= 200 then
+        error("Failed to list GraalPy releases: HTTP " .. tostring(resp.status_code))
+    end
+
+    local releases = json.decode(resp.body)
+    local result, seen = {}, {}
+    for _, release in ipairs(releases) do
+        if type(release) == "table" and type(release.assets) == "table" then
+            for _, asset in ipairs(release.assets) do
+                local name = asset.name
+                local url = asset.browser_download_url
+                if
+                    type(name) == "string"
+                    and type(url) == "string"
+                    and name:match("^graalpy")
+                    and name:sub(-#suffix) == suffix
+                    and not name:find("-jvm-", 1, true)
+                    and isHttpsUrl(url)
+                then
+                    local version = name:sub(1, #name - #suffix)
+                    if parseGraalPyVersion(version) and not seen[version] then
+                        seen[version] = true
+                        result[#result + 1] = {
+                            version = version,
+                            note = graalPyNote(version),
+                            url = url,
+                            sha256Url = url .. ".sha256",
+                        }
+                    end
+                end
+            end
+        end
+    end
+
+    graalPyReleaseCaches[suffix] = result
+    return result
+end
+
+local function findGraalPyRelease(version, suffix)
+    for _, release in ipairs(getGraalPyReleases(suffix)) do
+        if release.version == version then
+            return release
+        end
+    end
+    return nil
+end
+
+local function graalPySha256(release)
+    local resp, err = http.get({
+        url = release.sha256Url,
+        headers = REQUEST_HEADERS,
+    })
+    if err ~= nil or resp == nil or resp.status_code ~= 200 then
+        local detail = err or (resp and resp.status_code) or "empty response"
+        error("Failed to download the GraalPy checksum for " .. release.version .. ": " .. tostring(detail))
+    end
+
+    local sha256 = string.lower((resp.body or ""):match("%x+") or "")
+    if #sha256 ~= 64 or sha256:match("[^0-9a-f]") then
+        error("Invalid GraalPy checksum for " .. release.version)
+    end
+    return sha256
+end
+
+local function graalPyConstructedRelease(version, parsed, platform)
+    local asset = graalPyAssetPrefix(version, parsed) .. "-" .. parsed.release .. platform.suffix
+    local major = tonumber(parsed.release:match("^(%d+)"))
+    local tagPrefix = (major ~= nil and major <= 22) and "vm-" or "graal-"
+    local tags = { parsed.release }
+    -- 25.3.4.1 is published under the tag graal-25.3.4.
+    local short = parsed.release:match("^(%d+%.%d+%.%d+)%.%d+$")
+    if short ~= nil and short ~= parsed.release then
+        tags[#tags + 1] = short
+    end
+    return { tags = tags, asset = asset, tagPrefix = tagPrefix }
+end
+
+--- The package is the official GraalPy archive for the running platform. The
+--- caller has already resolved `latest`; a version without a matching asset is
+--- an error. The GitHub API supplies the exact tag, but a rate limit must not
+--- prevent an install: the URL is also constructed from the version and its
+--- checksum is verified before it is used.
+function graalPyPreInstall(version)
+    local parsed = parseGraalPyVersion(version)
+    if parsed == nil then
+        error("Unsupported GraalPy version: " .. version)
+    end
+
+    local platform = graalPyPlatform()
+    if platform == nil then
+        error("GraalPy is not available for " .. tostring(RUNTIME.osType) .. "/" .. tostring(RUNTIME.archType))
+    end
+
+    local release
+    local apiError
+    local ok, found = pcall(findGraalPyRelease, version, platform.suffix)
+    if ok then
+        release = found
+    else
+        apiError = found
+    end
+
+    if release ~= nil then
+        return {
+            version = version,
+            url = release.url,
+            headers = REQUEST_HEADERS,
+            sha256 = graalPySha256(release),
+            note = release.note,
+        }
+    end
+
+    local constructed = graalPyConstructedRelease(version, parsed, platform)
+    for _, tag in ipairs(constructed.tags) do
+        local url = "https://github.com/oracle/graalpython/releases/download/"
+            .. constructed.tagPrefix
+            .. tag
+            .. "/"
+            .. constructed.asset
+        local checksumOk, checksum = pcall(graalPySha256, {
+            version = version,
+            sha256Url = url .. ".sha256",
+        })
+        if checksumOk then
+            return {
+                version = version,
+                url = url,
+                headers = REQUEST_HEADERS,
+                sha256 = checksum,
+                note = graalPyNote(version),
+            }
+        end
+    end
+
+    local detail = apiError and (": " .. tostring(apiError)) or ""
+    error("No GraalPy " .. platform.archiveSuffix:sub(2) .. " build found for " .. version .. detail)
+end
+
+function parseGraalPyWindowsVersions()
+    if RUNTIME.archType ~= "amd64" then
+        return {}
+    end
+
+    local result = {}
+    for _, release in ipairs(getGraalPyReleases(GRAALPY_WINDOWS_SUFFIX)) do
+        result[#result + 1] = {
+            version = release.version,
+            note = release.note,
+        }
+    end
+    return result
 end
 
 function linuxCompile(ctx)
@@ -1018,6 +1357,13 @@ function compare_versions(v1, v2)
     return 0
 end
 
+local function pyenvVersionNote(version)
+    if version:match("^graalpy") or version:match("^graalpython") then
+        return graalPyNote(version)
+    end
+    return ""
+end
+
 function parseVersionFromPyenv()
     fixHeaders()
     local resp, err = http.get({
@@ -1066,7 +1412,7 @@ function parseVersionFromPyenv()
     for _, version in ipairs(namedVersions) do
         table.insert(result, {
             version = version,
-            note = "",
+            note = pyenvVersionNote(version),
         })
     end
 

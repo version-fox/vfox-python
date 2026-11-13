@@ -21,7 +21,25 @@ function PLUGIN:PreInstall(ctx)
     end
 
     if useUvBuild() then
+        if isGraalPyVersion(version) then
+            error(
+                "uv-build provides CPython only; unset VFOX_PYTHON_USE_UV_BUILD to install "
+                    .. version
+                    .. " from pyenv or Oracle's GraalPy releases."
+            )
+        end
         return uvBuildPreInstall(version)
+    end
+
+    if isGraalPyVersion(version) then
+        if parseGraalPyVersion(version) then
+            return graalPyPreInstall(version)
+        elseif OS_TYPE == "windows" then
+            -- The legacy graalpython-* names have no Windows assets.
+            error("Unsupported GraalPy version on Windows: " .. version)
+        end
+        -- On Linux and macOS the legacy graalpython-* names still go through
+        -- pyenv's python-build definition.
     end
 
     if OS_TYPE == "windows" and not checkIsReleaseVersion(version) then
