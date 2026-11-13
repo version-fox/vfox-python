@@ -144,6 +144,16 @@ CPython 来自 python.org。当 python.org 为该架构提供 **EXE** 安装包�
 - **MSI：** 插件用同样的方式安装 MSI，即 `msiexec /quiet /a <msi> TargetDir=<目录>`，
   然后运行 `ensurepip`，并创建和 EXE 路径相同的 `python3` 别名。python.org 只发布了 3.4.4
   的 MSI，Windows E2E 套件就用这种方式安装它。
+- **老版本 MSI 需要它们的 C 运行库：** `msiexec /a` 安装不会复制 Visual C++ 合并模块原本要放进
+  `System32` 的运行库。CPython 3.4 链接的是 Visual C++ 2010 的 `msvcr100.dll`。机器上没有这个
+  DLL 时，`python.exe` 无法启动：`ensurepip` 步骤以退出码 `-1073741515`（0xC0000135，找不到 DLL）
+  退出，安装失败。其他老版本需要各自 Visual Studio 版本对应的运行库。先在管理员 PowerShell 里
+  安装运行库，再安装该版本：
+
+  ```powershell
+  Invoke-WebRequest -Uri https://download.microsoft.com/download/1/6/5/165255E7-1014-4D0A-B094-B6A430A6BFFC/vcredist_x64.exe -OutFile vcredist_x64.exe
+  .\vcredist_x64.exe /quiet /norestart
+  ```
 
 两种安装路径（以及 uv-build）最终都把 `python.exe` 放在版本目录下的 `python-<版本>` 目录里，
 比如 `%USERPROFILE%\.vfox\cache\python\v-3.12.10\python-3.12.10\python.exe`。

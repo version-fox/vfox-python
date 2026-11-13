@@ -89,6 +89,9 @@ try {
     Remove-Item -LiteralPath $out, $err -Force -ErrorAction SilentlyContinue;
     if ($exitCode -ne 0) {
         Write-Output ('Interpreter exit code: ' + $exitCode);
+        if ($exitCode -eq -1073741515) {
+            Write-Output 'Missing DLL (0xC0000135): old CPython releases need the Visual C++ runtime they were built with, such as VC++ 2010 (msvcr100.dll) for 3.4.';
+        }
         Write-Output ('Interpreter present: ' + (Test-Path -LiteralPath $program));
         if (Test-Path -LiteralPath $root) {
             Get-ChildItem -LiteralPath $root -File | Where-Object { $_.Extension -in '.exe', '.dll' } | ForEach-Object { Write-Output ('  ' + $_.Name) };

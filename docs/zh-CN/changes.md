@@ -38,6 +38,9 @@
   `py.exe` 使用；设置 `VFOX_PYTHON_REGISTER_PY_LAUNCHER=0` 可以关闭。插件不写
   `PythonCore`；`py -3.x` 仍然只选 PythonCore，vfox 的版本用
   `py -V:VersionFox/<版本>` 选中。`PreUninstall` 在注册项仍指向该版本时删除它。
+- Windows 上老版本的 MSI 安装（如 3.4.4）需要该版本构建时对应的 Visual C++ 运行库。
+  `ensurepip` 以退出码 `-1073741515` 退出时，安装失败，输出会指出缺少的运行库；3.4 的 x64
+  运行库和安装步骤见 [平台](platforms.md#windows)。
 
 ## 0.6.2
 

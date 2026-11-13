@@ -159,6 +159,18 @@ current version`. Two examples from python.org:
   `msiexec /quiet /a <msi> TargetDir=<dir>`, then runs `ensurepip` and creates
   the same `python3` aliases as the EXE route. python.org publishes 3.4.4 only as
   an MSI, and the Windows E2E suite installs that release this way.
+- **Old MSI releases need their C runtime:** the `msiexec /a` install does not
+  copy the Visual C++ runtime that the MSI's merge module would put in
+  `System32`. CPython 3.4 links against `msvcr100.dll` from Visual C++ 2010. On a
+  machine without that DLL, `python.exe` cannot start: the `ensurepip` step exits
+  with `-1073741515` (0xC0000135, a DLL could not be found), and the install fails.
+  Other old releases need the runtime of their own Visual Studio version. Install
+  the runtime from an elevated PowerShell before you install the version:
+
+  ```powershell
+  Invoke-WebRequest -Uri https://download.microsoft.com/download/1/6/5/165255E7-1014-4D0A-B094-B6A430A6BFFC/vcredist_x64.exe -OutFile vcredist_x64.exe
+  .\vcredist_x64.exe /quiet /norestart
+  ```
 
 Every route leaves `python.exe` in the `python-<version>` directory under the
 version directory, for example

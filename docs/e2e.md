@@ -16,7 +16,7 @@ in Docker containers. `.github/workflows/e2e.yml` only installs Go and runs
 | `linux/container_test.go` | `TestContainerE2E`: a bare Ubuntu 24.04 container for uv-build, and one for each GraalPy release |
 | `linux/Dockerfile` | Ubuntu 24.04 with `ca-certificates`, `curl`, `tar`, `xz-utils` and `zip`; no compiler and no `-dev` packages |
 | `windows/e2e_test.go` | `TestNativeE2E`: python.org EXE installer, mirror, uv-build, GraalPy with launcher registration, `.python-version` |
-| `windows/container_test.go` | `TestContainerE2E`: a Server Core container with PowerShell 7, the Visual C++ runtime and vfox, GraalPy |
+| `windows/container_test.go` | `TestContainerE2E`: a Server Core container, driven by the docker CLI, with PowerShell 7, the Visual C++ runtime and vfox, GraalPy |
 | `windows/Dockerfile`, `windows/bootstrap-tools.ps1` | provision the Server Core image: PowerShell 7, the Visual C++ runtime and vfox |
 
 The Dockerfiles only provision the environment. The Go tests copy the plugin
@@ -41,7 +41,7 @@ Linux, in containers:
 Windows, on the runner:
 
 - `installer`: CPython 3.12.2, and the download URL is the EXE, `python-3.12.2-amd64.exe`.
-- `MSI installer`: CPython 3.4.4, which python.org publishes only as an MSI. The download URL is `python-3.4.4.amd64.msi`, and `python3` resolves to the alias the plugin creates.
+- `MSI installer`: CPython 3.4.4, which python.org publishes only as an MSI. The download URL is `python-3.4.4.amd64.msi`, and `python3` resolves to the alias the plugin creates. The subtest needs `msvcr100.dll` in `System32`: when `CI=true` (set by GitHub Actions) and the DLL is missing, it installs the Visual C++ 2010 x64 redistributable; anywhere else it skips with that reason.
 - `mirror`, `uv-build`, `graalpy`, `python-version`: as on Linux. The GraalPy subtest finds its entry in `py -0p`, because launcher registration is on by default.
 
 Windows, in a container: GraalPy 25.5.5 (Community, Python 3.13).
@@ -76,7 +76,9 @@ Requirements:
   development machine may not, and those two subtests fail without them. The
   uv-build, GraalPy and container subtests need none of them.
 - The Windows container test needs Docker in Windows container mode. The
-  `windows-latest` runner provides it.
+  `windows-latest` runner provides it. It calls the `docker` CLI (`build`, `run`,
+  `cp`, `exec`) instead of testcontainers-go, because testcontainers creates a
+  bridge network for every container, and a Windows engine has no bridge driver.
 - `GITHUB_TOKEN` or `GH_TOKEN` is optional. When set, GraalPy installs use it for
   GitHub API requests and avoid the anonymous rate limit. Without it, the plugin
   falls back to the asset URL it builds itself.

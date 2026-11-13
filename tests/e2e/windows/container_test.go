@@ -17,19 +17,15 @@
 package windows
 
 import (
-	"context"
-	"io"
+	"encoding/base64"
+	"errors"
+	"fmt"
 	"os"
 	"os/exec"
-	"strings"
+	"path/filepath"
 	"testing"
-
-	"github.com/containerd/platforms"
-	specs "github.com/opencontainers/image-spec/specs-go/v1"
-	tc "github.com/testcontainers/testcontainers-go"
-	tcexec "github.com/testcontainers/testcontainers-go/exec"
-
-	client "github.com/moby/moby/client"
+	"time"
+	"unicode/utf16"
 
 	"github.com/version-fox/vfox-python/tests/e2e/common"
 )
@@ -37,8 +33,12 @@ import (
 const windowsBaseImage = "mcr.microsoft.com/windows/servercore:ltsc2025-KB5122871-amd64"
 
 // TestContainerE2E builds tests/e2e/windows/Dockerfile once, starts a
-// long-lived Server Core container and drives GraalPy through pwsh exec
-// calls. The assertions stay in Go.
+// long-lived Server Core container and drives GraalPy through pwsh exec calls.
+// The assertions stay in Go.
+//
+// The suite talks to the docker CLI rather than to testcontainers-go:
+// testcontainers creates a bridge network for every container, and a Windows
+// engine has no bridge driver, so it cannot start a Windows container.
 func TestContainerE2E(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skip container E2E in short mode")
@@ -46,47 +46,24 @@ func TestContainerE2E(t *testing.T) {
 	if os.Getenv("VFOX_SKIP_CONTAINER_E2E") != "" {
 		t.Skip("container E2E disabled by VFOX_SKIP_CONTAINER_E2E")
 	}
-	// testcontainers reports every Windows host as rootless and gives up on host
-	// discovery unless DOCKER_HOST names the engine. Use the engine the docker CLI
-	// resolves, which is the one the workflow's docker commands reach.
-	if os.Getenv("DOCKER_HOST") == "" {
-		t.Setenv("DOCKER_HOST", dockerEndpoint(t))
-	}
-	// Ryuk has no Windows image; every container is terminated explicitly.
-	t.Setenv("TESTCONTAINERS_RYUK_DISABLED", "true")
 
-	ctx := context.Background()
 	repoRoot := common.RepoRoot(t)
-	image := buildImage(t, ctx, repoRoot)
-	plugin, err := os.ReadFile(common.BuildPluginZip(t, repoRoot))
-	if err != nil {
-		t.Fatalf("read plugin zip: %v", err)
-	}
+	image := buildImage(t, repoRoot)
+	plugin := common.BuildPluginZip(t, repoRoot)
 
-	ctr, err := tc.GenericContainer(ctx, tc.GenericContainerRequest{
-		ContainerRequest: tc.ContainerRequest{
-			Image:         image,
-			ImagePlatform: "windows/amd64",
-		},
-		Started: true,
-	})
-	if err != nil {
-		t.Fatalf("start container: %v", err)
-	}
+	name := fmt.Sprintf("vfox-python-e2e-%d", time.Now().UnixNano())
+	docker(t, "run", "--detach", "--name", name, image)
 	t.Cleanup(func() {
-		_ = ctr.Terminate(context.Background())
+		_, _ = exec.Command("docker", "rm", "--force", name).CombinedOutput()
 	})
-
-	if err := ctr.CopyToContainer(ctx, plugin, `C:/python-plugin.zip`, 0o644); err != nil {
-		t.Fatalf("copy plugin zip: %v", err)
-	}
-	execOK(t, ctx, ctr, `vfox add --source C:/python-plugin.zip`)
+	docker(t, "cp", plugin, name+":C:/python-plugin.zip")
+	execOK(t, name, `vfox add --source C:/python-plugin.zip`)
 
 	env := []string{"GRAALPY_VERSION=graalpy3.13-community-25.5.5"}
 	if token := os.Getenv("GITHUB_TOKEN"); token != "" {
 		env = append(env, "GITHUB_TOKEN="+token)
 	}
-	output := execOK(t, ctx, ctr, `
+	output := execOK(t, name, `
 Invoke-Expression "$(vfox activate pwsh)"
 vfox install "python@$env:GRAALPY_VERSION"
 vfox use -g "python@$env:GRAALPY_VERSION"
@@ -110,81 +87,73 @@ python -V
 	common.RequireContains(t, output, "pip", "GraalPy container pip")
 }
 
-// dockerEndpoint returns the engine endpoint of the current docker CLI context.
-func dockerEndpoint(t testing.TB) string {
+// buildImage builds the image with the same docker CLI command the workflow
+// used before the suite moved into Go.
+func buildImage(t testing.TB, repoRoot string) string {
 	t.Helper()
-	out, err := exec.Command("docker", "context", "inspect", "--format", "{{.Endpoints.docker.Host}}").Output()
-	if err != nil {
-		t.Fatalf("ask the docker CLI for its engine endpoint: %v", err)
+	const image = "vfox-python-e2e:windows"
+	cmd := exec.Command("docker", "build",
+		"--file", filepath.Join("tests", "e2e", "windows", "Dockerfile"),
+		"--build-arg", "BASE_IMAGE="+windowsBaseImage,
+		"--tag", image,
+		".")
+	cmd.Dir = repoRoot
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("docker build: %v", err)
 	}
-	endpoint := strings.TrimSpace(string(out))
-	if endpoint == "" {
-		t.Fatal("the docker CLI reported no engine endpoint")
-	}
-	return endpoint
+	return image
 }
 
-func buildImage(t testing.TB, ctx context.Context, repoRoot string) string {
+// docker runs a docker CLI command and fails the test if it does not succeed.
+func docker(t testing.TB, args ...string) string {
 	t.Helper()
-	provider, err := tc.NewDockerProvider()
+	output, err := exec.Command("docker", args...).CombinedOutput()
 	if err != nil {
-		t.Fatalf("new Docker provider: %v", err)
+		t.Fatalf("docker %v: %v\n%s", args, err, output)
 	}
-	t.Cleanup(func() { _ = provider.Close() })
-
-	pf, err := platforms.Parse("windows/amd64")
-	if err != nil {
-		t.Fatalf("parse platform: %v", err)
-	}
-
-	image := "vfox-python-e2e:windows"
-	baseImage := windowsBaseImage
-	tag, err := provider.BuildImage(ctx, &tc.ContainerRequest{
-		FromDockerfile: tc.FromDockerfile{
-			Context:        repoRoot,
-			Dockerfile:     "tests/e2e/windows/Dockerfile",
-			Repo:           "vfox-python-e2e",
-			Tag:            "windows",
-			BuildArgs:      map[string]*string{"BASE_IMAGE": &baseImage},
-			KeepImage:      true,
-			BuildLogWriter: os.Stdout,
-			BuildOptionsModifier: func(opts *client.ImageBuildOptions) {
-				opts.Platforms = []specs.Platform{pf}
-				opts.PullParent = true
-			},
-		},
-	})
-	if err != nil {
-		t.Fatalf("build image: %v", err)
-	}
-	if tag != image {
-		t.Fatalf("built image %s, want %s", tag, image)
-	}
-	return tag
+	return string(output)
 }
 
-func execRun(t testing.TB, ctx context.Context, ctr tc.Container, script string, env ...string) (int, string) {
+// execRun runs a PowerShell script in the container and returns its exit code
+// and combined output. The script travels as base64 over UTF-16LE, so no
+// quoting reaches the docker CLI or a shell.
+func execRun(t testing.TB, container, script string, env ...string) (int, string) {
 	t.Helper()
-	opts := []tcexec.ProcessOption{tcexec.Multiplexed()}
-	if len(env) > 0 {
-		opts = append(opts, tcexec.WithEnv(env))
+	args := []string{"exec"}
+	for _, item := range env {
+		args = append(args, "--env", item)
 	}
-	code, reader, err := ctr.Exec(ctx, []string{"pwsh", "-NoProfile", "-Command", pwshPrelude + " " + script}, opts...)
-	if err != nil {
-		t.Fatalf("exec: %v\n--- script ---\n%s", err, script)
+	args = append(args, container, "pwsh", "-NoProfile", "-EncodedCommand", encodePowerShell(pwshPrelude+" "+script))
+	output, err := exec.Command("docker", args...).CombinedOutput()
+	if err == nil {
+		return 0, string(output)
 	}
-	output, err := io.ReadAll(reader)
-	if err != nil {
-		t.Fatalf("read exec output: %v\n--- script ---\n%s", err, script)
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		return exitErr.ExitCode(), string(output)
 	}
-	return code, string(output)
+	t.Fatalf("docker exec: %v", err)
+	return -1, ""
 }
 
-func execOK(t testing.TB, ctx context.Context, ctr tc.Container, script string, env ...string) string {
+func execOK(t testing.TB, container, script string, env ...string) string {
 	t.Helper()
-	code, output := execRun(t, ctx, ctr, script, env...)
+	code, output := execRun(t, container, script, env...)
 	if code != 0 {
 		t.Fatalf("exec exited with code %d\n--- script ---\n%s\n--- output ---\n%s", code, script, output)
 	}
 	return output
+}
+
+// encodePowerShell returns the script in the form that pwsh -EncodedCommand
+// reads: UTF-16LE, then base64.
+func encodePowerShell(script string) string {
+	units := utf16.Encode([]rune(script))
+	raw := make([]byte, 0, 2*len(units))
+	for _, unit := range units {
+		raw = append(raw, byte(unit), byte(unit>>8))
+	}
+	return base64.StdEncoding.EncodeToString(raw)
 }

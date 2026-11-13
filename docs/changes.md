@@ -45,6 +45,11 @@
   `PythonCore`; `py -3.x` remains PythonCore-only, and vfox versions are selected
   with `py -V:VersionFox/<version>`. `PreUninstall` removes the entry when it
   still points at the version.
+- Windows MSI installs of old CPython releases, such as 3.4.4, need the Visual C++
+  runtime that the release was built with. When `ensurepip` exits with
+  `-1073741515`, the install fails and its output names the missing runtime. The
+  x64 redistributable for 3.4 and the install steps are in
+  [platforms.md](platforms.md#windows).
 
 ## 0.6.2
 

@@ -25,6 +25,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"os"
@@ -237,6 +238,47 @@ func writeReader(t testing.TB, dest string, reader io.Reader) {
 	defer file.Close()
 	if _, err := io.Copy(file, reader); err != nil {
 		t.Fatalf("write %s: %v", dest, err)
+	}
+}
+
+// vcRuntime2010URL is the Visual C++ 2010 SP1 x64 redistributable. CPython 3.3
+// and 3.4 link against its msvcr100.dll.
+const vcRuntime2010URL = "https://download.microsoft.com/download/1/6/5/165255E7-1014-4D0A-B094-B6A430A6BFFC/vcredist_x64.exe"
+
+// RequireVCRuntime2010 makes sure msvcr100.dll is in System32 before a test
+// runs an MSI-only CPython 3.4. The MSI's administrative image does not copy
+// the merge module's CRT into System32, so the interpreter cannot start on a
+// machine without the runtime. CI installs the redistributable; elsewhere the
+// test is skipped with the reason.
+func RequireVCRuntime2010(t testing.TB) {
+	t.Helper()
+	systemRoot := os.Getenv("SystemRoot")
+	if systemRoot == "" {
+		systemRoot = `C:\Windows`
+	}
+	dll := filepath.Join(systemRoot, "System32", "msvcr100.dll")
+	if _, err := os.Stat(dll); err == nil {
+		return
+	}
+	if os.Getenv("CI") != "true" {
+		t.Skipf("%s is missing; install the Visual C++ 2010 x64 redistributable to run this test", dll)
+	}
+	installer := filepath.Join(t.TempDir(), "vcredist_x64.exe")
+	download(t, vcRuntime2010URL, installer)
+	output, err := exec.Command(installer, "/quiet", "/norestart").CombinedOutput()
+	if err != nil {
+		var exitErr *exec.ExitError
+		if !errors.As(err, &exitErr) {
+			t.Fatalf("run %s: %v", installer, err)
+		}
+		// 1638: a newer 2010 runtime is already present. 3010: installed, and a
+		// restart is pending. Neither leaves the DLL missing.
+		if code := exitErr.ExitCode(); code != 1638 && code != 3010 {
+			t.Fatalf("install the Visual C++ 2010 runtime: exit code %d\n--- output ---\n%s", code, output)
+		}
+	}
+	if _, err := os.Stat(dll); err != nil {
+		t.Fatalf("%s is still missing after the Visual C++ 2010 install: %v", dll, err)
 	}
 }
 

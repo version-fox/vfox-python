@@ -15,7 +15,7 @@
 | `linux/container_test.go` | `TestContainerE2E`：一个没有构建包的 Ubuntu 24.04 容器跑 uv-build，每个 GraalPy 版本各一个容器 |
 | `linux/Dockerfile` | Ubuntu 24.04，只装 `ca-certificates`、`curl`、`tar`、`xz-utils` 和 `zip`；没有编译器，也没有 `-dev` 包 |
 | `windows/e2e_test.go` | `TestNativeE2E`：python.org EXE 安装包、镜像、uv-build、带启动器注册的 GraalPy、`.python-version` |
-| `windows/container_test.go` | `TestContainerE2E`：Server Core 容器，装有 PowerShell 7、Visual C++ 运行时和 vfox，跑 GraalPy |
+| `windows/container_test.go` | `TestContainerE2E`：由 docker 命令行驱动的 Server Core 容器，装有 PowerShell 7、Visual C++ 运行时和 vfox，跑 GraalPy |
 | `windows/Dockerfile`、`windows/bootstrap-tools.ps1` | 准备 Server Core 镜像：PowerShell 7、Visual C++ 运行时和 vfox |
 
 Dockerfile 只负责准备环境。Go 测试把插件复制进容器，然后在容器里执行每一步。
@@ -43,7 +43,7 @@ Linux，在容器里：
 Windows，在 runner 上：
 
 - `installer`：CPython 3.12.2，下载地址是 EXE：`python-3.12.2-amd64.exe`。
-- `MSI installer`：CPython 3.4.4，python.org 只发布了它的 MSI。下载地址是 `python-3.4.4.amd64.msi`，`python3` 会解析到插件创建的别名。
+- `MSI installer`：CPython 3.4.4，python.org 只发布了它的 MSI。下载地址是 `python-3.4.4.amd64.msi`，`python3` 会解析到插件创建的别名。子测试需要 `System32` 里有 `msvcr100.dll`：设置了 `CI=true`（GitHub Actions 会设置）且缺少该 DLL 时，子测试安装 Visual C++ 2010 x64 运行库；其他环境下则跳过，并给出原因。安装步骤见 [平台](platforms.md#windows)。
 - `mirror`、`uv-build`、`graalpy`、`python-version`：和 Linux 一样。GraalPy 子测试在
   `py -0p` 里找到自己的项，因为启动器注册默认开启。
 
@@ -74,6 +74,6 @@ go test -v -run 'TestNativeE2E/^(uv-build|graalpy|python-version)$' ./linux
 - `source build` 和 `mirror` 子测试需要 [平台](platforms.md#linux-构建依赖) 里列出的 Linux
   构建包。GitHub 的 Ubuntu runner 有这些包；开发机不一定有，缺少时这两个子测试会失败。
   uv-build、GraalPy 和容器子测试都不需要这些包。
-- Windows 容器测试需要开启 Windows 容器模式的 Docker。`windows-latest` runner 提供它。
+- Windows 容器测试需要开启 Windows 容器模式的 Docker。`windows-latest` runner 提供它。该测试直接调用 `docker` 命令行（`build`、`run`、`cp`、`exec`），没有使用 testcontainers-go：testcontainers 会为每个容器创建 bridge 网络，而 Windows 引擎没有 bridge 驱动。
 - `GITHUB_TOKEN` 或 `GH_TOKEN` 是可选的。设置后，GraalPy 安装会用它访问 GitHub API，
   避开匿名访问的限额；不设置时，插件会退回到自己构造的资源地址。

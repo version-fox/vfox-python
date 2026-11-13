@@ -68,6 +68,8 @@ python -V
 	})
 
 	t.Run("MSI installer", func(t *testing.T) {
+		// The MSI does not install msvcr100.dll, which CPython 3.4 needs.
+		common.RequireVCRuntime2010(t)
 		output := run(t, nil, `
 Invoke-Expression "$(vfox activate pwsh)"
 vfox install python@3.4.4
