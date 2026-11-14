@@ -76,6 +76,37 @@ jobs:
       # its own and disables os.execute and io.popen until a test stubs them.
       - name: Run the offline hook tests
         run: vfox plugin test .
+      # On Windows, VFOX_PYTHON_USE_UV_BUILD=1 reads the uv-build index. A closed proxy
+      # fails every attempt at once, so the search must wait between attempts (through
+      # PowerShell), announce each retry, and then fail after three attempts.
+      - name: Check that index retries wait on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          VFOX_HOME: ${{ runner.temp }}\vfox-retry-home
+          VFOX_PYTHON_USE_UV_BUILD: '1'
+          HTTPS_PROXY: 'http://127.0.0.1:1'
+        run: |
+          $ErrorActionPreference = 'Continue'
+          [System.IO.Directory]::CreateDirectory($env:VFOX_HOME) | Out-Null
+          $archive = Join-Path $env:RUNNER_TEMP 'python-plugin-retry.zip'
+          Compress-Archive -Path metadata.lua,hooks,lib -DestinationPath $archive
+          vfox add --source $archive
+          if ($LASTEXITCODE -ne 0) { throw "vfox add failed: $LASTEXITCODE" }
+          $watch = [System.Diagnostics.Stopwatch]::StartNew()
+          $output = vfox search python 2>&1
+          $exitCode = $LASTEXITCODE
+          $watch.Stop()
+          $text = [regex]::Replace(($output | Out-String), "\x1b\[[0-9;]*m", '')
+          Write-Output $text
+          if ($exitCode -eq 0) { throw 'vfox search python succeeded through a closed proxy' }
+          if ($text -notmatch 'Status: none') { throw 'the index failure was not a transport error' }
+          if ($text -notmatch 'after 3 attempts') { throw 'the index failure does not report three attempts' }
+          $retries = ([regex]::Matches($text, 'Trying again')).Count
+          if ($retries -lt 2) { throw "expected at least two retries, saw $retries" }
+          $seconds = $watch.Elapsed.TotalSeconds
+          if ($seconds -lt 3) { throw "the retries did not wait: the search took $seconds seconds" }
+          Write-Output "Index retries waited for $([math]::Round($seconds, 1)) seconds in all"
 
   layouts:
     name: Windows installer command layouts
