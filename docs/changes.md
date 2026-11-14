@@ -37,6 +37,10 @@
   free-threaded or pre-release install could win on its number alone. Both
   still fall back to any installed name when no CPython install exists. Name a
   free-threaded, pre-release or GraalPy install in full to select it.
+- Windows EXE installs no longer ship or run the WiX tools. The MSI packages are
+  read from the cabinet inside the installer with `expand.exe`, which ships with
+  Windows, and the `bin/` directory is gone. Antivirus software has no WiX tools
+  to quarantine. The same MSI packages are installed as before.
 
 ## 0.6.3
 

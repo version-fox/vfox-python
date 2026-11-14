@@ -62,7 +62,7 @@ func RepoRoot(t testing.TB) string {
 }
 
 // BuildPluginZip packages the plugin exactly as `vfox add --source` expects:
-// metadata.lua, hooks/, lib/ and the bundled WiX tools under bin/.
+// metadata.lua, hooks/ and lib/.
 func BuildPluginZip(t testing.TB, repoRoot string) string {
 	t.Helper()
 	dest := filepath.Join(t.TempDir(), "python-plugin.zip")
@@ -71,7 +71,7 @@ func BuildPluginZip(t testing.TB, repoRoot string) string {
 		t.Fatalf("create plugin zip: %v", err)
 	}
 	writer := zip.NewWriter(file)
-	for _, name := range []string{"metadata.lua", "hooks", "lib", "bin"} {
+	for _, name := range []string{"metadata.lua", "hooks", "lib"} {
 		root := filepath.Join(repoRoot, name)
 		err := filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
 			if walkErr != nil {

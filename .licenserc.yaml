@@ -13,8 +13,7 @@
 # limitations under the License.
 #
 # License header check (Apache SkyWalking Eyes). Lua, YAML, TOML, Python and
-# the ignore files take the header as a comment. The checked-in WiX binaries
-# under bin/ are third-party files and keep their own licence.
+# the ignore files take the header as a comment.
 header:
   license:
     spdx-id: Apache-2.0
@@ -45,7 +44,5 @@ header:
     - 'tests/fixtures/**'
     # go.sum is module checksum data; the Go tool rejects comments in it.
     - '**/go.sum'
-    # Third-party WiX tooling bundled for the Windows installer path.
-    - 'bin/**'
 
   comment: on-failure

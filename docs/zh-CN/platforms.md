@@ -17,7 +17,7 @@
 
 CPython 的源码构建取 pyenv 的 tag 和版本列表，把 pyenv 克隆到那个 tag，再运行
 它的 `python-build`。它需要 C 工具链和 Python 链接的头文件。Windows 则下载 python.org
-的安装包，把其中的 MSI 装进 `python-<版本>` 目录，再运行 `ensurepip`。EXE 需要先用自带的 WiX 工具解出 MSI。不需要编译器。GraalPy
+的安装包，把其中的 MSI 装进 `python-<版本>` 目录，再运行 `ensurepip`。EXE 需要先用 Windows 自带的 `expand.exe` 从安装包里解出 MSI。不需要编译器。GraalPy
 在所有支持的平台上都从 Oracle 的发布页下载并解压，不需要编译器；Linux 和
 macOS 有 amd64 和 arm64 资源，Windows 只有 amd64。
 
@@ -149,9 +149,9 @@ CPython 来自 python.org。当 python.org 为该架构提供 **EXE** 安装包�
 | 3.12.10 | `python-3.12.10-amd64.exe`，没有 MSI | EXE |
 | 2.7.18 | `python-2.7.18.amd64.msi`，没有 EXE | MSI |
 
-- **EXE：** 这个文件是一个捆绑包。插件用自带的 WiX `dark.exe` 解出其中的 MSI，删除
+- **EXE：** 这个文件是一个捆绑包。插件用 `expand.exe` 从捆绑包里解出其中的 MSI，删除
   `launcher.msi`、`path.msi`、`appendpath.msi` 和 `pip.msi`，再用
-  `msiexec /quiet /a <msi> TargetDir=<目录>` 把其余的 MSI 安装进 `python-<版本>` 目录，最后运行
+  `msiexec /quiet /a <msi> TargetDir=<目录>` 把其余的 MSI 安装进 `python-<版本>` 目录，然后删除临时目录，最后运行
   `ensurepip`。因为启动器、PATH 和 pip 的 MSI 都被跳过，vfox 的安装不会添加 `py.exe`，
   不改动 `PATH`，pip 由 `ensurepip` 提供。
 - **MSI：** 插件用同样的方式安装 MSI，即 `msiexec /quiet /a <msi> TargetDir=<目录>`，
