@@ -33,6 +33,10 @@ pyenv lists a newer patch than the index, a partial name such as `python@3.12` s
 installs the newest patch the index lists. The newer patch builds from source only
 when its exact version is named.
 
+`latest` is not resolved in the index. It stays the newest release in the list, so
+when pyenv lists a newer release than the index, `latest` builds that release from
+source.
+
 `VFOX_PYTHON_USE_UV_BUILD` selects the mode:
 
 - Unset: uv-build for a CPython release the index lists, and a source build for

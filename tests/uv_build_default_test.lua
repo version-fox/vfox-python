@@ -170,9 +170,17 @@ assert(package.version == "3.13.19" and isSource(package), tostring(package.vers
 package = plugin:PreInstall({ version = "2" })
 assert(package.version == "2.7.18" and isSource(package), tostring(package.version))
 
--- latest keeps its meaning: the first entry of the list.
+-- latest is the newest release of the list. It is never an older release that the
+-- index lists instead, and it takes the archive when the index lists that release.
 package = plugin:PreInstall({ version = "latest" })
 assert(package.version == "3.16.0" and package.note == "uv-build", tostring(package.version))
+
+-- When pyenv lists a newer release than the index, latest is that release, and it is
+-- built from source. The extra entry is removed again straight after the check.
+table.insert(pyenvVersions, "3.16.1")
+package = plugin:PreInstall({ version = "latest" })
+table.remove(pyenvVersions)
+assert(package.version == "3.16.1" and isSource(package), tostring(package.version))
 
 -- A release only pyenv lists is built from source: no archive is returned.
 reset()

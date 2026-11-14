@@ -25,6 +25,8 @@ vfox install python@3.12
 
 索引只列出部分版本，通常是每个版本线的最新补丁版。pyenv 列出的补丁版比索引新时，`python@3.12` 仍然安装索引列出的最新补丁版；较新的补丁版只有写出精确版本号时才会从源码编译。
 
+`latest` 不在索引里解析：它仍是列表里最新的版本。pyenv 列出的版本比索引新时，它会从源码编译。
+
 `VFOX_PYTHON_USE_UV_BUILD` 决定使用哪种模式：
 
 - 未设置：索引列出的 CPython 版本用 uv-build，其他 CPython 版本用源码构建；GraalPy、PyPy 和 Conda 保持各自的路径。当设置了 `VFOX_PYTHON_MIRROR`
