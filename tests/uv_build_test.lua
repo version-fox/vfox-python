@@ -102,6 +102,10 @@ local plugin = test.load({
     end,
 })
 
+-- A transient failure is sent again after a pause. os.execute is disabled in plugin
+-- tests, so the pause is replaced here; index_retry_test.lua checks the retries.
+pauseBeforeIndexRetry = function() end
+
 local available = plugin:Available({})
 assert(#available == 3, tostring(#available))
 -- The list is newest first whatever order the index returns: 3.13.1 free-threaded is
@@ -186,5 +190,6 @@ local ok, err = pcall(function()
     plugin:Available({})
 end)
 assert(not ok and tostring(err):find("503", 1, true), tostring(err))
+assert(tostring(err):find("after 3 attempts", 1, true), tostring(err))
 
 print("PASS: uv-build listing, archive priority, checksum and mirror")

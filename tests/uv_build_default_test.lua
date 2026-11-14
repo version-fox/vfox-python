@@ -93,6 +93,10 @@ os.getenv = function(name)
     return env[name]
 end
 
+-- A transient failure is sent again after a pause. The pause is replaced here, since
+-- os.execute is disabled in plugin tests; index_retry_test.lua checks the retries.
+pauseBeforeIndexRetry = function() end
+
 local function uvRequests()
     local count = 0
     for _, url in ipairs(state.requests) do
@@ -207,17 +211,21 @@ assert(uvRequests() == 0, "a non-CPython name must not read the uv-build index")
 -- An index that cannot be read is an error that names the opt-out; it is not a
 -- silent source build. The list still shows the pyenv names.
 state.uvStatus = 503
+reset()
 local ok, err = pcall(function()
     plugin:PreInstall({ version = "3.12.16" })
 end)
 assert(not ok and tostring(err):find("Could not read the uv-build index", 1, true), tostring(err))
 assert(tostring(err):find("VFOX_PYTHON_USE_UV_BUILD=0", 1, true), tostring(err))
+assert(uvRequests() == 3, "a failing index is sent three times before the install gives up")
 
 -- A partial request fails the same way: it must not fall back to a source build.
+reset()
 ok, err = pcall(function()
     plugin:PreInstall({ version = "3.13" })
 end)
 assert(not ok and tostring(err):find("Could not read the uv-build index", 1, true), tostring(err))
+assert(uvRequests() == 3, "a partial request also retries the index before it fails")
 assert(#plugin:Available({}) == 8, "the pyenv names are listed when the index fails")
 state.uvStatus = 200
 

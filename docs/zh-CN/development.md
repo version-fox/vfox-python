@@ -70,8 +70,9 @@ vfox 加载 `metadata.lua`，命令需要时调用相应的钩子，并向钩子
   安装失败，而不是跳过校验。GraalPy 会被拒绝，因为索引里只有 CPython。
 - 默认模式（未设置 `VFOX_PYTHON_USE_UV_BUILD`，在 Linux 和 macOS 上，且未设置 `VFOX_PYTHON_MIRROR`，除非同时设置了 `VFOX_PYTHON_UV_BUILD_MIRROR`）只在索引里查 CPython 版本，
   非 CPython 的名字从不在那里查找。索引列出该版本时，结果与 uv-build 模式相同。索引没有列出时，
-  PreInstall 会打印一行，并且不返回包，于是 vfox 运行 pyenv 源码构建。索引请求失败会报错，
+  PreInstall 会打印一行，并且不返回包，于是 vfox 运行 pyenv 源码构建。索引请求失败会先重试（见下），仍失败则报错，
   错误信息里写明 `VFOX_PYTHON_USE_UV_BUILD=0`。检测不到 libc 时，使用源码构建。
+- 索引请求（`lib/util.lua` 里的 `getIndexWithRetry`）遇到网络错误、HTTP 429 或 5xx 时会重发：总共最多三次，两次之间分别等待 1 秒和 2 秒。其他状态码原样返回。uv-build 索引和 pyenv 索引都用它。让索引失败的测试要替换 `pauseBeforeIndexRetry`，因为插件测试里 `os.execute` 被禁用。
 - `note = "uv-build"`、`"GraalPy"` 或 `"GraalPy Community"` 会显示在 vfox 里。
 
 ### PostInstall

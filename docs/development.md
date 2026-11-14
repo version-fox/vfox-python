@@ -84,9 +84,14 @@ looked up.
   index for a CPython version only; a non-CPython name is never looked up there.
   When the index lists the version, the result is the same as uv-build mode. When
   it does not, PreInstall prints a line and returns no archive, so vfox runs the
-  pyenv source build. A failed index request is an error that names
-  `VFOX_PYTHON_USE_UV_BUILD=0`. When no libc can be detected, the source build is
-  used.
+  pyenv source build. A failed index request is retried (see below); an index that
+  still fails is an error that names `VFOX_PYTHON_USE_UV_BUILD=0`. When no libc can be
+  detected, the source build is used.
+- Index requests (`getIndexWithRetry` in `lib/util.lua`) send a GET again on a transport
+  error, HTTP 429 or a 5xx: up to three attempts in all, with pauses of one and then two
+  seconds. Other statuses are returned as they are. The uv-build index and the pyenv index
+  both use it. A test that makes an index fail replaces `pauseBeforeIndexRetry`, because
+  `os.execute` is disabled in plugin tests.
 - `note = "uv-build"`, `"GraalPy"` or `"GraalPy Community"` is shown by vfox.
 
 ### PostInstall

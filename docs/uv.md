@@ -48,9 +48,11 @@ release from source.
 - `1`, `true`, `yes` or `on`: uv-build only. A version the index does not list is
   an error.
 
-If the index cannot be read, the install fails and names
-`VFOX_PYTHON_USE_UV_BUILD=0`, so it never starts a source build without saying
-so. If the index has no archive for this version on this platform, such as an
+An index request that fails with a network error, HTTP 429 or a 5xx status is
+sent again, up to three attempts in all, with a pause of one second and then two
+seconds. Other statuses are not retried. If the index still cannot be read after
+that, the install fails and names `VFOX_PYTHON_USE_UV_BUILD=0`, so it never starts a
+source build without saying so. If the index has no archive for this version on this platform, such as an
 architecture it does not cover, the install builds from source and prints a line
 saying so. On Linux, if the libc cannot be detected, the install builds from
 source; set `VFOX_PYTHON_UV_LIBC` to use uv-build.
