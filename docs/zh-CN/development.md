@@ -25,6 +25,7 @@ tests/windows_install_layouts.lua  Windows 命令路径，进程调用用 stub �
 tests/e2e/                      Go 端到端套件，覆盖 Linux 和 Windows，见 e2e.md
 tests/fixtures/                 .python-version 测试用的文件
 .github/workflows/              test、lint、license、e2e 和 publish
+.github/scripts/                文档中英文结构检查
 docs/, docs/zh-CN/              中英文文档
 Injection.lua                   vfox 注入对象的类型提示，不会被加载
 stylua.toml, .luarc.json        Lua 格式化和语言服务器设置
@@ -72,7 +73,7 @@ vfox 加载 `metadata.lua`，命令需要时调用相应的钩子，并向钩子
   非 CPython 的名字从不在那里查找。索引列出该版本时，结果与 uv-build 模式相同。索引没有列出时，
   PreInstall 会打印一行，并且不返回包，于是 vfox 运行 pyenv 源码构建。索引请求失败会先重试（见下），仍失败则报错，
   错误信息里写明 `VFOX_PYTHON_USE_UV_BUILD=0`。检测不到 libc 时，使用源码构建。
-- 索引请求（`lib/util.lua` 里的 `getIndexWithRetry`）遇到网络错误、HTTP 429 或 5xx 时会重发：总共最多三次，两次之间分别等待 1 秒和 2 秒。其他状态码原样返回。uv-build 索引和 pyenv 索引都用它。让索引失败的测试要替换 `pauseBeforeIndexRetry`，因为插件测试里 `os.execute` 被禁用。
+- 索引请求经过 `lib/util.lua` 里的 `readIndex`。遇到网络错误、HTTP 429、5xx，或 200 响应的正文不是带列表的 JSON（代理和强制门户都可能这样返回）时会重发，总共最多三次。重试前，如果响应带有不超过 10 秒的 `Retry-After`，就等待它指定的秒数；否则依次等待 1 秒和 2 秒。超过 10 秒的 `Retry-After` 立即失败，错误信息里写明等待时间。HTTP 日期格式的 `Retry-After` 不会被读取。其他状态码原样返回给调用方。uv-build 索引和 pyenv 索引都用它。`pauseBeforeIndexRetry` 通过 `os.execute` 运行 `sleep`（Windows 上是 PowerShell）；插件测试禁用了 `os.execute`，所以让索引失败的测试会替换它，`tests/index_retry_test.lua` 检查这两条命令。
 - `note = "uv-build"`、`"GraalPy"` 或 `"GraalPy Community"` 会显示在 vfox 里。
 
 ### PostInstall
@@ -238,6 +239,8 @@ VFOX_SKIP_CONTAINER_E2E=1 go test -v ./linux
 | 钩子测试 | 在 Linux 和 Windows 上 `vfox plugin test .` | `test.yml` |
 | Windows 命令路径 | GopherLua | `test.yml` |
 | 原生和容器 E2E | Linux 和 Windows 上的 Go 测试 | `e2e.yml` |
+| 索引重试等待 | Windows 上经关闭的代理执行 `vfox search` | `test.yml` |
+| 中英文文档 | `.github/scripts/check_docs_parity.py` | `lint.yml` |
 
 `stylua.toml` 用四空格、120 列、Unix 换行；`.gitattributes` 让 checkout 保持
 LF，这样 Windows 上的检查和 Linux 一致。LuaLS 读 `.luarc.json`，里面声明了
@@ -251,8 +254,8 @@ vfox 的全局变量，只关闭 `duplicate-set-field`（测试会有意替换 `
 
 - `test.yml` 在 `ubuntu-latest` 和 `windows-latest` 上用 vfox 1.1.0（校验和
   固定）跑离线测试，在 Linux 上跑 GopherLua 布局测试，并用带空格和 Shell 字符的路径，
-  由发布版 vfox 1.0.12 在 Windows 上通过 EXE 安装包真实安装一次 CPython 3.14.5。
-- `lint.yml` 跑 StyLua、LuaLS 和 actionlint。
+  由发布版 vfox 1.0.12 在 Windows 上通过 EXE 安装包真实安装一次 CPython 3.14.5。在 Windows 上，它还用关闭的代理执行 `VFOX_PYTHON_USE_UV_BUILD=1` 的搜索，检查索引重试确实等待，并在三次尝试后失败。
+- `lint.yml` 跑 StyLua、LuaLS 和 actionlint。它的 `docs` 作业运行 `.github/scripts/check_docs_parity.py`，比较中文页与英文页的结构而不比较句子：页面是否成对、`VFOX_*` 变量名、代码块数量和相对链接。译文是否通顺仍需人工阅读。
 - `license.yml` 跑许可证头检查。
 - `e2e.yml` 在 Linux 和 Windows 上真实构建、安装 Python，包括镜像、uv-build
   和 GraalPy，并检查 Windows 上的 PEP 514 注册。

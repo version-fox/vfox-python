@@ -25,6 +25,7 @@ tests/windows_install_layouts.lua  the Windows command paths, with stubbed proce
 tests/e2e/                      Go end-to-end suites for Linux and Windows; see e2e.md
 tests/fixtures/                 .python-version files used by the legacy-file test
 .github/workflows/              test, lint, license, e2e and publish
+.github/scripts/                the docs parity check
 docs/, docs/zh-CN/              documentation in English and Chinese
 Injection.lua                   type hints for what vfox injects, never loaded
 stylua.toml, .luarc.json        Lua formatter and language-server settings
@@ -87,11 +88,17 @@ looked up.
   pyenv source build. A failed index request is retried (see below); an index that
   still fails is an error that names `VFOX_PYTHON_USE_UV_BUILD=0`. When no libc can be
   detected, the source build is used.
-- Index requests (`getIndexWithRetry` in `lib/util.lua`) send a GET again on a transport
-  error, HTTP 429 or a 5xx: up to three attempts in all, with pauses of one and then two
-  seconds. Other statuses are returned as they are. The uv-build index and the pyenv index
-  both use it. A test that makes an index fail replaces `pauseBeforeIndexRetry`, because
-  `os.execute` is disabled in plugin tests.
+- Index requests go through `readIndex` in `lib/util.lua`. A request is sent again on
+  a transport error, HTTP 429, a 5xx, or a 200 whose body is not JSON with the list the
+  caller reads, since a proxy or a captive portal can answer that way. There are three
+  attempts in all. Before a retry the plugin waits for the `Retry-After` seconds when
+  the header is present and at most ten; otherwise for one second, then two. A longer
+  `Retry-After` fails at once, and the error names the wait. An HTTP-date `Retry-After`
+  is not read. Other statuses are returned to the caller as they are. The uv-build
+  index and the pyenv index both use it. `pauseBeforeIndexRetry` runs `sleep`, or
+  PowerShell on Windows, through `os.execute`, which plugin tests disable. The tests
+  that make an index fail replace it, and `tests/index_retry_test.lua` checks both
+  commands.
 - `note = "uv-build"`, `"GraalPy"` or `"GraalPy Community"` is shown by vfox.
 
 ### PostInstall
@@ -294,6 +301,8 @@ VFOX_SKIP_CONTAINER_E2E=1 go test -v ./linux
 | Hook tests | `vfox plugin test .` on Linux and Windows | `test.yml` |
 | Windows command paths | GopherLua | `test.yml` |
 | Native and container E2E | Go tests on Linux and Windows | `e2e.yml` |
+| Index retry waits | `vfox search` through a closed proxy, on Windows | `test.yml` |
+| Docs in English and Chinese | `.github/scripts/check_docs_parity.py` | `lint.yml` |
 
 `stylua.toml` uses four spaces, a 120-column limit and Unix line endings;
 `.gitattributes` keeps checkouts LF so the check agrees with Windows. LuaLS
@@ -310,8 +319,14 @@ is missing.
 - `test.yml` runs the offline tests on `ubuntu-latest` and `windows-latest` with
   vfox 1.1.0 (checksum-pinned), the GopherLua layouts on Linux, and a real
   install of CPython 3.14.5 through the EXE installer on Windows, with paths full
-  of spaces and shell characters, driven by the released vfox 1.0.12.
-- `lint.yml` runs StyLua, LuaLS and actionlint.
+  of spaces and shell characters, driven by the released vfox 1.0.12. On Windows it
+  also searches through a closed proxy with `VFOX_PYTHON_USE_UV_BUILD=1`, and checks
+  that the index retries wait and then fail after three attempts.
+- `lint.yml` runs StyLua, LuaLS and actionlint. Its `docs` job runs
+  `.github/scripts/check_docs_parity.py`. That check compares the structure of the
+  Chinese pages with the English ones, not their sentences: page pairs, `VFOX_*`
+  names, code block counts and relative links. Translation quality still needs a
+  reader.
 - `license.yml` runs the header check.
 - `e2e.yml` builds and installs real Pythons on Linux and Windows, including a
   mirror, uv-build and GraalPy, plus the Windows PEP 514 check.

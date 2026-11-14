@@ -48,14 +48,20 @@ release from source.
 - `1`, `true`, `yes` or `on`: uv-build only. A version the index does not list is
   an error.
 
-An index request that fails with a network error, HTTP 429 or a 5xx status is
-sent again, up to three attempts in all, with a pause of one second and then two
-seconds. Other statuses are not retried. If the index still cannot be read after
-that, the install fails and names `VFOX_PYTHON_USE_UV_BUILD=0`, so it never starts a
-source build without saying so. If the index has no archive for this version on this platform, such as an
+An index request is sent again when it fails with a network error, HTTP 429 or a
+5xx status, or when a 200 response does not hold the index, such as a captive
+portal's page. It is sent up to three times in all. Before a retry, the plugin waits
+for the seconds in the server's `Retry-After` header when the header is present and
+is at most ten; otherwise it waits one second, then two. A longer `Retry-After` is
+not waited for: the request fails at once, and the error says how long the server
+asked to wait. An HTTP-date `Retry-After` is not read. Other statuses, such as 404,
+are not retried. If the index still cannot be read, the install fails and names
+`VFOX_PYTHON_USE_UV_BUILD=0`, so it never starts a source build without saying so.
+
+If the index has no archive for this version on this platform, such as an
 architecture it does not cover, the install builds from source and prints a line
-saying so. On Linux, if the libc cannot be detected, the install builds from
-source; set `VFOX_PYTHON_UV_LIBC` to use uv-build.
+saying so. On Linux, if the libc cannot be detected, the install builds from source;
+set `VFOX_PYTHON_UV_LIBC` to use uv-build.
 
 The plugin asks `https://vault.vfox.dev/python/uv-build` for the builds of the
 running platform, architecture and libc, then hands vfox the archive URL and its
@@ -67,12 +73,16 @@ SHA-256. vfox downloads and verifies the archive, unpacks it, and calls
 - On Windows, if the archive has `ensurepip` but no pip command, pip is
   installed and `pip.cmd`/`pip3.cmd` shims are created.
 
+The archive download belongs to vfox, not to this plugin. vfox 1.1.0 has no setting
+for retrying a download, and the plugin cannot retry it, so run the install again if
+a download fails. The retries described above cover the index requests only.
+
 Only CPython archives are listed. GraalPy and other implementations are not
-part of uv-build. With `VFOX_PYTHON_USE_UV_BUILD=1`, `vfox install
-python@graalpy-24.2.0` fails with a message asking you to unset the variable or
-set it to `0`. Without the variable, GraalPy installs from Oracle's archive, as
-described in [GraalPy](graalpy.md). The plugin prefers,
-in order:
+part of uv-build. With `VFOX_PYTHON_USE_UV_BUILD=1`,
+`vfox install python@graalpy-24.2.0` fails with a message asking you to unset
+the variable or set it to `0`. Without the variable, GraalPy installs from
+Oracle's archive, as described in [GraalPy](graalpy.md). The plugin prefers, in
+order:
 
 1. `install_only_stripped`
 2. `install_only`

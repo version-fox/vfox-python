@@ -5,9 +5,10 @@
 ## Unreleased
 
 - Index requests to the uv-build and pyenv indexes are sent again on a network error,
-  HTTP 429 or a 5xx: up to three attempts in all, with pauses of one and then two seconds.
-  A failure that persists still fails the install. The default mode does not fall back to
-  a source build for it.
+  HTTP 429, a 5xx, or a 200 response that is not the index: up to three attempts in
+  all. The wait follows the server's `Retry-After` in seconds when it is at most ten,
+  and otherwise one second and then two. A failure that persists still fails the
+  install; the default mode does not fall back to a source build for it.
 - The uv-build index and pyenv version lists are sorted newest first with one
   comparator. With `VFOX_PYTHON_USE_UV_BUILD=1`, the list used to keep the order
   the index returned, so `latest` depended on that order. The pyenv list compared

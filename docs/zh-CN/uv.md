@@ -35,7 +35,9 @@ vfox install python@3.12
 - `0`、`false`、`no` 或 `off`：在 Linux 和 macOS 上源码构建。
 - `1`、`true`、`yes` 或 `on`：只用 uv-build。索引里没有列出的版本会报错。
 
-索引请求遇到网络错误、HTTP 429 或 5xx 状态码时会重发，总共最多三次，两次之间分别等待 1 秒和 2 秒；其他状态码不重试。重试后仍无法读取索引，安装会失败，并提示 `VFOX_PYTHON_USE_UV_BUILD=0`，因此不会在没有说明的情况下开始源码构建。如果索引在该平台上没有这个版本的包（比如索引不覆盖某个架构），安装会改为源码构建，并打印一行说明。在 Linux 上，如果无法识别 libc，安装会从源码构建；要使用 uv-build，请设置 `VFOX_PYTHON_UV_LIBC`。
+索引请求遇到网络错误、HTTP 429 或 5xx 状态码，或者 200 响应里不是索引（比如强制门户的页面）时会重发，总共最多三次。重试前，如果服务器返回了 `Retry-After` 头且不超过 10 秒，就等待它指定的秒数；否则依次等待 1 秒和 2 秒。超过 10 秒的 `Retry-After` 不等待：请求立即失败，错误信息里写明服务器要求的等待时间。HTTP 日期格式的 `Retry-After` 不会被读取。其他状态码（如 404）不重试。重试后仍无法读取索引，安装会失败，并提示 `VFOX_PYTHON_USE_UV_BUILD=0`，因此不会在没有说明的情况下开始源码构建。
+
+如果索引在该平台上没有这个版本的包（比如索引不覆盖某个架构），安装会改为源码构建，并打印一行说明。在 Linux 上，如果无法识别 libc，安装会从源码构建；要使用 uv-build，请设置 `VFOX_PYTHON_UV_LIBC`。
 
 插件向 `https://vault.vfox.dev/python/uv-build` 询问当前平台、架构和 libc 的
 构建，然后把包地址和 SHA-256 交给 vfox。vfox 下载、校验、解压，再调用
@@ -44,6 +46,8 @@ vfox install python@3.12
 - Unix 上，如果 `bin` 里脚本的 shebang 指向临时构建目录，会被修正。
 - Windows 上，如果包里带了 `ensurepip` 却没有 pip 命令，会安装 pip，并生成
   `pip.cmd`、`pip3.cmd` 两个 shim。
+
+归档由 vfox 下载，不由插件下载。vfox 1.1.0 没有下载重试的设置，插件也无法重试下载，所以下载失败时请重新运行安装。上面描述的重试只作用于索引请求。
 
 列表里只有 CPython 的包。GraalPy 和其他实现不在 uv-build 里。设置
 `VFOX_PYTHON_USE_UV_BUILD=1` 时，执行 `vfox install python@graalpy-24.2.0` 会失败，

@@ -78,7 +78,7 @@ sudo apt install --assume-yes make build-essential libssl-dev zlib1g-dev \
 随后会在 ensurepip 步骤失败：pip 是从 wheel 安装的，而 wheel 是 zip 压缩包，读取它需要 zlib
 （报错为 `No module named 'zlib'`）。
 
-想在 Ubuntu 上省掉这一步，就安装 uv-build 索引列出的版本。它不需要 `sudo`，也不需要 `apt`，在 Linux 上也是默认方式：
+想在 Ubuntu 上省掉这一步，就安装 uv-build 索引列出的版本。它不需要 `sudo` 或 `apt`，而且在 Linux 上是默认方式：
 
 ```bash
 vfox install python@3.12.16

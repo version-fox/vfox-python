@@ -64,8 +64,9 @@ unpacking. A mirror that serves different bytes fails the install with
 `Checksum error`, which is the intended behaviour: change the index or the
 mirror, do not bypass the check.
 
-On Linux and macOS, the default mode takes this mirror for every CPython version
-the index lists, when `VFOX_PYTHON_MIRROR` is not set. A `VFOX_PYTHON_MIRROR`
+On Linux and macOS, when `VFOX_PYTHON_MIRROR` is not set, the default mode downloads
+every CPython archive the index lists through `VFOX_PYTHON_UV_BUILD_MIRROR`, or from
+GitHub when that is not set. A `VFOX_PYTHON_MIRROR`
 setting keeps CPython on the python.org mirror and builds it from source, unless
 `VFOX_PYTHON_UV_BUILD_MIRROR` is set too. A source build still clones pyenv from
 GitHub, and neither mirror variable changes that clone. Set

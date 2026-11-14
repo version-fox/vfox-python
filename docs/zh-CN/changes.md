@@ -4,13 +4,13 @@
 
 ## 未发布
 
-- uv-build 和 pyenv 索引的请求遇到网络错误、HTTP 429 或 5xx 时会重发：总共最多三次，间隔 1 秒和 2 秒。持续失败仍会使安装失败；默认模式不会因此改为源码构建。
+- uv-build 和 pyenv 索引的请求遇到网络错误、HTTP 429、5xx，或 200 响应不是索引时会重发：总共最多三次。等待时间跟随服务器的 `Retry-After`（秒数，不超过 10 秒），否则依次为 1 秒和 2 秒。持续失败仍会使安装失败；默认模式不会因此改为源码构建。
 - uv-build 索引和 pyenv 版本列表现在用同一个比较函数从新到旧排序。过去 `VFOX_PYTHON_USE_UV_BUILD=1`
   的列表保留索引返回的顺序，`latest` 依赖这个顺序；pyenv 列表则把带后缀的名字（如 `3.13.18t`）当成
   `3.13.0` 来比较。`latest` 现在选最新的常规版本，并跳过自由线程版；自由线程版只有写出名字时才会安装。
 - 在 Linux 和 macOS 上，`vfox install python@<版本>` 现在会在 uv-build 索引列出某个 CPython 版本时，
   从它的 uv-build 预编译包安装；只有索引没有列出时才从源码构建。设置 `VFOX_PYTHON_USE_UV_BUILD=0`
-  可以让每个 CPython 都继续从源码构建，设置 `VFOX_PYTHON_USE_UV_BUILD=1` 则只使用 uv-build。GraalPy、
+  可以让每个 CPython 都从源码构建，设置 `VFOX_PYTHON_USE_UV_BUILD=1` 则只使用 uv-build。GraalPy、
   PyPy 和 Conda 的安装保持不变。`vfox search python` 会把 pyenv 的名字和只有 uv-build 列出的 CPython 版本一起列出。
   此变更之前已完成的安装不会被改动。若设置了 `VFOX_PYTHON_MIRROR`，CPython 保持走源码构建的路径，
   除非同时设置了 `VFOX_PYTHON_UV_BUILD_MIRROR`。
