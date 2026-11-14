@@ -12,10 +12,12 @@
 -- See the License for the specific language governing permissions and
 -- limitations under the License.
 
--- An index request that fails transiently is sent again: up to three attempts in all,
--- with a pause of one second and then two before the retries. A failure that persists
--- is still an error, and a client error such as 404 is not retried. os.execute is
--- disabled in plugin tests, so the pause is replaced and the test records it instead.
+-- An index request that fails transiently is sent again, up to three attempts in all.
+-- The wait is the Retry-After the server sent when it is usable (ten seconds at most),
+-- and otherwise one second and then two. A 200 whose body is not the expected index is
+-- sent again too, since a proxy or a captive portal can answer that way. Client errors
+-- such as 404 are not retried. os.execute is disabled in plugin tests, so the pause is
+-- replaced here and the test records the seconds instead.
 local test = require("vfox.test")
 local json = require("json")
 
@@ -40,8 +42,8 @@ local UV_BODY = json.encode({
 
 local PYENV_BODY = json.encode({ tagName = "v2.6.0", versions = { "3.12.16" } })
 
--- Each request takes the next step, and the last step repeats. A step is
--- { error = "..." } for a transport error, or { status = N, body = "..." }.
+-- Each request takes the next step, and the last step repeats. A step is { error = ... }
+-- for a transport error, or { status = N, body = ..., headers = ... } for a response.
 local state = { steps = {}, urls = {} }
 local pauses = {}
 local env = {}
@@ -56,30 +58,28 @@ local plugin = test.load({
         if step.error ~= nil then
             return nil, step.error
         end
-        return { status_code = step.status, body = step.body }
+        return { status_code = step.status, body = step.body, headers = step.headers }
     end,
 })
-
--- The real pause, kept before the test replaces it below.
-local realPause = pauseBeforeIndexRetry
 
 -- The plugin reads its variables at call time, so each case sets the ones it needs.
 os.getenv = function(name)
     return env[name]
 end
 
-pauseBeforeIndexRetry = function(attempt)
-    table.insert(pauses, attempt)
+-- The real pause, kept for the check of its commands below, and replaced for the cases.
+local realPause = pauseBeforeIndexRetry
+pauseBeforeIndexRetry = function(seconds)
+    table.insert(pauses, tostring(seconds))
 end
 
---- Runs fn against the given steps. It returns whether fn succeeded, its result or
+--- Runs fn against the given steps. It returns whether fn succeeded, its result or its
 --- error, the number of requests sent, and the pauses taken, as "1,2".
 local function run(steps, fn)
     state.urls = {}
     state.steps = steps
     pauses = {}
     local ok, result = pcall(fn)
-    -- table.concat hands back a lone number unchanged in GopherLua, so it is made a string.
     return ok, result, #state.urls, tostring(table.concat(pauses, ","))
 end
 
@@ -96,7 +96,7 @@ local TRANSPORT = { error = "connection reset by peer" }
 local UV_ENV = { VFOX_PYTHON_USE_UV_BUILD = "1", VFOX_PYTHON_UV_LIBC = "gnu" }
 local PYENV_ENV = { VFOX_PYTHON_USE_UV_BUILD = "0", VFOX_PYTHON_UV_LIBC = "gnu" }
 
--- A 503, then a success: one pause, two requests.
+-- A 503, then a success: one pause of one second, two requests.
 env = UV_ENV
 local ok, result, sent, paused = run({ { status = 503 }, OK }, available)
 assert(ok, tostring(result))
@@ -137,9 +137,46 @@ end)
 assert(ok and result.note == "uv-build" and result.sha256 == SHA, tostring(result))
 assert(sent == 2 and paused == "1", "sent " .. sent .. ", paused " .. paused)
 
--- The pyenv list is retried as well, in the source-build mode.
+-- A Retry-After in seconds replaces the fixed wait, whatever the case of its name.
+ok, result, sent, paused = run({ { status = 429, headers = { ["Retry-After"] = "3" } }, OK }, available)
+assert(ok and result[1].version == "3.12.16", tostring(result))
+assert(sent == 2 and paused == "3", "sent " .. sent .. ", paused " .. paused)
+
+ok, result, sent, paused = run({ { status = 503, headers = { ["retry-after"] = "4" } }, OK }, available)
+assert(ok and result[1].version == "3.12.16", tostring(result))
+assert(sent == 2 and paused == "4", "sent " .. sent .. ", paused " .. paused)
+
+-- A Retry-After longer than ten seconds is not waited for: one request, and the failure
+-- names the wait the server asked for.
+ok, result, sent, paused = run({ { status = 503, headers = { ["Retry-After"] = "60" } }, OK }, available)
+fails(ok, result, "asked to wait 60 seconds")
+fails(ok, result, "Status: 503")
+assert(sent == 1 and paused == "", "sent " .. sent .. ", paused " .. paused)
+
+-- An HTTP date is not read, so the fixed wait applies.
+ok, result, sent, paused =
+    run({ { status = 503, headers = { ["Retry-After"] = "Wed, 21 Oct 2026 07:28:00 GMT" } }, OK }, available)
+assert(ok and result[1].version == "3.12.16", tostring(result))
+assert(sent == 2 and paused == "1", "sent " .. sent .. ", paused " .. paused)
+
+-- A 200 with a body that is not JSON is sent again, as is one whose JSON lacks the list.
+ok, result, sent, paused = run({ { status = 200, body = "<html>captive portal</html>" }, OK }, available)
+assert(ok and result[1].version == "3.12.16", tostring(result))
+assert(sent == 2 and paused == "1", "sent " .. sent .. ", paused " .. paused)
+
+ok, result, sent, paused = run({ { status = 200, body = '{"message":"rate limited"}' }, OK }, available)
+assert(ok and result[1].version == "3.12.16", tostring(result))
+assert(sent == 2 and paused == "1", "sent " .. sent .. ", paused " .. paused)
+
+-- A body that never becomes an index fails after three attempts, and says what it was.
+ok, result, sent, paused = run({ { status = 200, body = "not json" } }, available)
+fails(ok, result, "the body is not the expected index")
+fails(ok, result, "after 3 attempts")
+assert(sent == 3 and paused == "1,2", "sent " .. sent .. ", paused " .. paused)
+
+-- The pyenv index is retried in the same way, in the source-build mode.
 env = PYENV_ENV
-ok, result, sent, paused = run({ { status = 500 }, { status = 200, body = PYENV_BODY } }, available)
+ok, result, sent, paused = run({ { status = 200, body = "<html>" }, { status = 200, body = PYENV_BODY } }, available)
 assert(ok and result[1].version == "3.12.16", tostring(result))
 assert(sent == 2 and paused == "1", "sent " .. sent .. ", paused " .. paused)
 assert(state.urls[1] == PYENV_INDEX, state.urls[1])

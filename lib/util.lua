@@ -828,30 +828,38 @@ local function uvBuildDownloadUrl(build)
     return trimTrailingSlash(mirror) .. "/" .. release .. "/" .. filename
 end
 
---- How many times an index request is sent before a failure stands. Both indexes are
---- read on the way to a CPython install, so one brief failure of a server should not
---- fail the install by itself.
+--- An index request is sent up to INDEX_ATTEMPTS times in all. Before each further
+--- attempt the plugin waits as long as the server's Retry-After asks, up to
+--- INDEX_MAX_WAIT_SECONDS. Without a usable Retry-After it waits INDEX_BACKOFF_SECONDS.
+--- A longer Retry-After is not waited for: the install fails and says how long it asked.
 local INDEX_ATTEMPTS = 3
+local INDEX_MAX_WAIT_SECONDS = 10
+local INDEX_BACKOFF_SECONDS = { 1, 2 }
 
---- Whether a response to an index request is worth another attempt: a transport error,
---- HTTP 429, or a 5xx. Any other status is an answer, such as a 404, and is kept.
-local function isTransientIndexFailure(resp, err)
-    if err ~= nil or resp == nil then
-        return true
+--- The number of seconds a Retry-After header asks for, or nil when there is no such
+--- header or it is an HTTP date, which is not read. The header name is matched without
+--- regard to case, because the response keeps the spelling the server used.
+local function retryAfterSeconds(resp)
+    if type(resp) ~= "table" or type(resp.headers) ~= "table" then
+        return nil
     end
-    local status = resp.status_code
-    return status == 429 or (type(status) == "number" and status >= 500)
+    for name, value in pairs(resp.headers) do
+        if type(name) == "string" and string.lower(name) == "retry-after" and type(value) == "string" then
+            local seconds = string.match(value, "^%s*(%d+)%s*$")
+            return seconds and tonumber(seconds) or nil
+        end
+    end
+    return nil
 end
 
---- Describes a failed index request for a warning, such as "HTTP 503".
-local function describeIndexFailure(resp, err)
-    if err ~= nil then
-        return tostring(err)
-    end
-    if resp == nil then
-        return "no response"
-    end
-    return "HTTP " .. tostring(resp.status_code)
+--- Whether a decoded uv-build index has the list the plugin reads.
+local function isUvBuildIndex(value)
+    return type(value.items) == "table" or type(value.versions) == "table"
+end
+
+--- Whether a decoded pyenv index has the list the plugin reads.
+local function isPyenvIndex(value)
+    return type(value.versions) == "table"
 end
 
 --- The part of an error message that says how often the request was sent: nothing for
@@ -863,64 +871,76 @@ local function attemptsNote(attempts)
     return " after " .. tostring(attempts) .. " attempts"
 end
 
---- Waits before the next attempt at an index request: one second before the second
---- attempt and two before the third. The wait runs in the shell, so if it fails the
---- next attempt simply comes sooner. Tests replace this function to skip the wait.
-function pauseBeforeIndexRetry(attempt)
-    local seconds = tostring(attempt)
+--- Waits `seconds` before the next attempt at an index request. The wait is a shell
+--- command: `sleep` on Linux and macOS, PowerShell on Windows. Tests replace it.
+function pauseBeforeIndexRetry(seconds)
     if runtimeOs() == "windows" then
-        os.execute(powerShellCommand("Start-Sleep -Seconds " .. seconds))
+        os.execute(powerShellCommand("Start-Sleep -Seconds " .. tostring(seconds)))
     else
-        os.execute("sleep " .. seconds)
+        os.execute("sleep " .. tostring(seconds))
     end
 end
 
---- Sends a GET request to an index. A transient failure is sent again, up to
---- INDEX_ATTEMPTS attempts in all, and each retry is announced. It returns the last
---- response, its error and the number of attempts, so a failure that persists is
---- reported by the caller as before.
-local function getIndexWithRetry(name, request)
-    local attempt = 1
-    local resp, err = http.get(request)
-    while isTransientIndexFailure(resp, err) and attempt < INDEX_ATTEMPTS do
+--- Reads an index and decodes it. A transient failure is sent again: a transport error,
+--- HTTP 429 or a 5xx, and a 200 whose body is not JSON or lacks the list the caller
+--- reads, since a proxy or a captive portal can answer that way. Returns the decoded
+--- index, or nil with the reason for the last failure and the number of attempts.
+local function readIndex(name, request, isIndex)
+    local attempts = 0
+    while true do
+        attempts = attempts + 1
+        local resp, err = http.get(request)
+        local transient, reason
+        if err ~= nil or resp == nil then
+            transient = true
+            reason = "Status: none, Error: " .. tostring(err or "none")
+        elseif resp.status_code == 200 then
+            local ok, value = pcall(json.decode, resp.body or "")
+            if ok and type(value) == "table" and isIndex(value) then
+                return value, nil, attempts
+            end
+            transient = true
+            reason = "Status: 200, Error: the body is not the expected index"
+        else
+            local status = resp.status_code
+            transient = status == 429 or (type(status) == "number" and status >= 500)
+            reason = "Status: " .. tostring(status) .. ", Error: none"
+        end
+        if not transient or attempts >= INDEX_ATTEMPTS then
+            return nil, reason, attempts
+        end
+        local asked = retryAfterSeconds(resp)
+        local wait = asked or INDEX_BACKOFF_SECONDS[attempts]
+        if wait > INDEX_MAX_WAIT_SECONDS then
+            return nil,
+                reason .. ", and the index asked to wait " .. tostring(asked) .. " seconds, more than the plugin waits",
+                attempts
+        end
         print(
             "Warning: the "
                 .. name
                 .. " request failed ("
-                .. describeIndexFailure(resp, err)
+                .. reason
                 .. "). Trying again, attempt "
-                .. tostring(attempt + 1)
+                .. tostring(attempts + 1)
                 .. " of "
                 .. tostring(INDEX_ATTEMPTS)
                 .. "."
         )
-        pauseBeforeIndexRetry(attempt)
-        attempt = attempt + 1
-        resp, err = http.get(request)
+        pauseBeforeIndexRetry(wait)
     end
-    return resp, err, attempt
 end
 
 local function getUvBuilds(osType, archType, libc)
     fixHeaders()
-    local resp, err, attempts = getIndexWithRetry("uv-build index", {
+    local index, reason, attempts = readIndex("uv-build index", {
         url = buildUvBuildUrl(osType, archType, libc),
         headers = REQUEST_HEADERS,
-    })
-    if err ~= nil or resp == nil or resp.status_code ~= 200 then
-        local statusCode = resp and resp.status_code or "none"
-        error(
-            "parsing uv-build release info failed"
-                .. attemptsNote(attempts)
-                .. ". Status: "
-                .. statusCode
-                .. ", Error: "
-                .. (err or "none")
-        )
+    }, isUvBuildIndex)
+    if index == nil then
+        error("parsing uv-build release info failed" .. attemptsNote(attempts) .. ". " .. reason)
     end
-
-    local jsonObj = json.decode(resp.body)
-    return jsonObj.items or jsonObj.versions or {}
+    return index.items or index.versions or {}
 end
 
 --- The build the listing has for version, the one with the best asset priority,
@@ -1745,23 +1765,14 @@ end
 
 function parseVersionFromPyenv()
     fixHeaders()
-    local resp, err, attempts = getIndexWithRetry("pyenv index", {
+    local jsonObj, reason, attempts = readIndex("pyenv index", {
         url = version_vault_url,
         headers = REQUEST_HEADERS,
-    })
-    if err ~= nil or resp == nil or resp.status_code ~= 200 then
-        local statusCode = resp and resp.status_code or "none"
-        error(
-            "parsing release info failed"
-                .. attemptsNote(attempts)
-                .. ". Status: "
-                .. statusCode
-                .. ", Error: "
-                .. (err or "none")
-        )
+    }, isPyenvIndex)
+    if jsonObj == nil then
+        error("parsing release info failed" .. attemptsNote(attempts) .. ". " .. reason)
     end
     local result = {}
-    local jsonObj = json.decode(resp.body)
 
     local tagName = jsonObj.tagName
     if tagName then
