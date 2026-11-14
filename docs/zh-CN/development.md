@@ -211,9 +211,10 @@ local versions = plugin:Available({})
 E2E 套件在 `tests/e2e` 里，使用 Go 编写。Linux 包在 runner 上安装 CPython
 源码构建（`VFOX_PYTHON_USE_UV_BUILD=0`）、镜像构建、uv-build 和 GraalPy，还会运行 `vfox link --detect` 和项目
 的 `.python-version`。Windows 包安装 CPython 和 uv-build，安装带 PEP 514 注册的
-GraalPy，并检查 `.python-version`。两个包也在 Docker 容器里跑 GraalPy 检查：Linux 包通过
-testcontainers-go，Windows 包直接调用 `docker` 命令行，因为 testcontainers-go 会为每个容器
-创建 bridge 网络，而 Windows 引擎没有 bridge 驱动。目录结构和本地命令见
+GraalPy，并检查 `.python-version`。两个包也在 Docker 容器里做检查。Linux 包通过 testcontainers-go 启动一个没有构建包的
+Ubuntu 24.04 容器，用默认设置从 uv-build 安装 CPython，并在里面检查 GraalPy；Windows 包直接调用
+`docker` 命令行，在 Server Core 容器里检查 GraalPy，因为 testcontainers-go 会为每个容器创建 bridge 网络，
+而 Windows 引擎没有 bridge 驱动。目录结构和本地命令见
 [端到端测试](e2e.md)。
 
 本地命令：
@@ -290,7 +291,7 @@ vfox 的全局变量，只关闭 `duplicate-set-field`（测试会有意替换 `
 | `VFOX_PYTHON_UV_LIBC` | Available、PreInstall | 覆盖 `gnu` / `musl` 识别 |
 | `VFOX_PYTHON_UV_BUILD_MIRROR` | PreInstall | uv-build 包的 HTTPS 镜像 |
 | `VFOX_PYTHON_REGISTER_PY_LAUNCHER` | PostInstall、PreUninstall | 把 Windows 安装注册到 `HKCU\Software\Python\VersionFox`；默认开启，`0`、`false`、`no`、`off` 关闭 |
-| `GITHUB_TOKEN`、`GH_TOKEN` | Available | 提高 Windows GraalPy 发布列表的 GitHub API 限额 |
+| `GITHUB_TOKEN`、`GH_TOKEN` | Available、PreInstall | 为查找 GraalPy 发布的 GitHub API 请求提供认证，提高限额 |
 | `UV_PYTHON_INSTALL_DIR` | Detect | uv 的 Python 目录 |
 | `PYENV_ROOT` | Detect | pyenv 根目录 |
 | `ASDF_DATA_DIR` | Detect | asdf 数据目录 |

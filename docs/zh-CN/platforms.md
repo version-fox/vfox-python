@@ -203,7 +203,7 @@ Linux 上会自动识别 libc，除非设置了 `VFOX_PYTHON_UV_LIBC`。Windows 
 约 600 MB。
 
 `tests/e2e` 里的 E2E 套件覆盖这些路径。Linux 上，runner 会安装源码构建、镜像构建、
-按小版本号安装的 uv-build、GraalPy 和 `vfox link`；没有构建包的 Ubuntu 容器会安装 uv-build 和
+按小版本号安装的 uv-build、GraalPy 和 `vfox link`；没有构建包的 Ubuntu 容器会用默认设置安装 CPython（uv-build 预编译包）和
 GraalPy。Windows 上，runner 会安装 EXE 安装包、只有 MSI 的 3.4.4、镜像构建、uv-build 和
 GraalPy；Server Core 容器会安装 GraalPy。
 

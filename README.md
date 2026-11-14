@@ -188,8 +188,8 @@ uv-build downloads can go through `VFOX_PYTHON_UV_BUILD_MIRROR`. See
 
 ## Thanks
 
-- [pyenv](https://github.com/pyenv/pyenv), whose version list and `python-build`
-  the default Linux and macOS installs use
+- [pyenv](https://github.com/pyenv/pyenv), whose `python-build` makes the Linux and
+  macOS source builds, and whose version list `vfox search python` shows there
 - [uv](https://github.com/astral-sh/uv), for the prebuilt Python archives and
   the `.python-version` convention
 - [python.org](https://www.python.org/), for the releases and Windows installers
