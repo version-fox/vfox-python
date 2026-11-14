@@ -62,9 +62,10 @@ the index has one; otherwise, and in every other mode, it resolves to the newest
 stable release that `Available({})` names for this mode. An exact version is not
 looked up.
 
-- `version = "latest"` is resolved to `Available({})[1].version`. The list is
-  newest CPython first, so this can be a pre-release; GraalPy is selected by
-  its full name.
+- `version = "latest"` is resolved to the first entry of `Available({})` that is
+  not a free-threaded build. The list is newest CPython first, so this can be a
+  pre-release; a free-threaded build is installed only when its name asks for it,
+  and GraalPy is selected by its full name.
 - On Windows, `Available` lists only the exact installer names on the download
   page. PreInstall still sends a HEAD request for the EXE and then for the MSI,
   and stops before any download when neither answers 200, with `Python <version>

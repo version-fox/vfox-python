@@ -1642,6 +1642,27 @@ local function pyenvVersionNote(version)
     return ""
 end
 
+--- Sorts CPython items ({ version = ... }) newest first, by python_version.newer_first.
+--- An item whose version does not start with a digit, such as a GraalPy or PyPy name,
+--- keeps its place after the CPython releases, in its original order.
+local function sortNewestFirst(items)
+    local releases, others = {}, {}
+    for _, item in ipairs(items) do
+        if string.match(item.version, "^%d") then
+            table.insert(releases, item)
+        else
+            table.insert(others, item)
+        end
+    end
+    table.sort(releases, function(a, b)
+        return python_version.newer_first(a.version, b.version)
+    end)
+    for _, item in ipairs(others) do
+        table.insert(releases, item)
+    end
+    return releases
+end
+
 function parseVersionFromPyenv()
     fixHeaders()
     local resp, err = http.get({
@@ -1662,32 +1683,22 @@ function parseVersionFromPyenv()
 
     local versions = jsonObj.versions
 
-    local numericVersions = {}
+    local releases = {}
     local namedVersions = {}
 
     for _, version in ipairs(versions) do
         if string.match(version, "^%d") then
-            table.insert(numericVersions, version)
+            table.insert(releases, { version = version, note = "" })
         else
             table.insert(namedVersions, version)
         end
     end
 
-    table.sort(numericVersions, function(a, b)
-        return compare_versions(a, b) > 0
-    end)
-
     table.sort(namedVersions, function(a, b)
         return compare_versions(a, b) > 0
     end)
 
-    for _, version in ipairs(numericVersions) do
-        table.insert(result, {
-            version = version,
-            note = "",
-        })
-    end
-
+    result = sortNewestFirst(releases)
     for _, version in ipairs(namedVersions) do
         table.insert(result, {
             version = version,
@@ -1713,44 +1724,7 @@ function parseVersionFromUvBuild()
             end
         end
     end
-    return result
-end
-
---- A name with a dash, such as 3.16-dev, is a development snapshot from pyenv. It
---- sorts after every release, so `latest` never picks one.
-local function isSnapshot(name)
-    return string.find(name, "-", 1, true) ~= nil
-end
-
---- Ranks names with the same numbers: a final build outranks its free-threaded
---- build, which outranks a pre-release, and a GIL pre-release outranks its
---- free-threaded pre-release.
-local function releaseRank(name)
-    local free = string.sub(name, -1) == "t"
-    local base = free and string.sub(name, 1, -2) or name
-    local pre = string.find(base, "%d%a") ~= nil
-    if pre then
-        return free and 0 or 1
-    end
-    return free and 2 or 3
-end
-
---- Newest first: snapshots last, then the release numbers, then releaseRank. Ties
---- sort by name, so the order does not depend on the order of the input.
-local function isNewerCandidate(a, b)
-    local snapshotA, snapshotB = isSnapshot(a), isSnapshot(b)
-    if snapshotA ~= snapshotB then
-        return snapshotB
-    end
-    local order = python_version.compare(string.match(a, "^[%d.]+"), string.match(b, "^[%d.]+"))
-    if order ~= 0 then
-        return order > 0
-    end
-    local rankA, rankB = releaseRank(a), releaseRank(b)
-    if rankA ~= rankB then
-        return rankA > rankB
-    end
-    return a > b
+    return sortNewestFirst(result)
 end
 
 --- The list for the default mode on Linux and macOS: every release the pyenv list
@@ -1772,31 +1746,27 @@ function parseVersionFromAuto()
         uvList = {}
     end
 
-    local numeric = {}
+    local releases = {}
     local seen = {}
-    local function addNumeric(version)
+    local function addRelease(version)
         if not seen[version] then
             seen[version] = true
-            table.insert(numeric, version)
+            table.insert(releases, { version = version, note = "" })
         end
     end
     local named = {}
     for _, item in ipairs(uvList) do
-        addNumeric(item.version)
+        addRelease(item.version)
     end
     for _, item in ipairs(pyenvList) do
         if string.match(item.version, "^%d") then
-            addNumeric(item.version)
+            addRelease(item.version)
         else
             table.insert(named, item)
         end
     end
-    table.sort(numeric, isNewerCandidate)
 
-    local result = {}
-    for _, version in ipairs(numeric) do
-        table.insert(result, { version = version, note = "" })
-    end
+    local result = sortNewestFirst(releases)
     for _, item in ipairs(named) do
         table.insert(result, item)
     end

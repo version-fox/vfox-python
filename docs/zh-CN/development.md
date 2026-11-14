@@ -57,8 +57,8 @@ vfox 加载 `metadata.lua`，命令需要时调用相应的钩子，并向钩子
 `sha256` 时校验，解压后按 `version` 命名。部分版本号（如 `3.12`）会先解析。在 Linux 和 macOS 的默认模式下，若 uv-build 索引里有匹配版本，
 就解析成它；否则（以及其他所有模式下）解析成 `Available({})` 里该模式最新的稳定版。精确版本号不会查列表。
 
-- `version = "latest"` 会解析成 `Available({})[1].version`。CPython 在列表最
-  前面、从新到旧排列，所以可能是预发布版；GraalPy 要用完整版本名。
+- `version = "latest"` 会解析成 `Available({})` 里第一个不是自由线程版的条目。CPython 在列表最
+  前面、从新到旧排列，所以可能是预发布版；自由线程版只有写出名字时才会安装；GraalPy 要用完整版本名。
 - Windows 上，`Available` 只列出下载页里当前架构的精确安装包文件名。PreInstall 仍会先对 EXE、
   再对 MSI 发 HEAD 请求；两者都没有返回 200 时，在任何下载开始前停止，并提示
   `Python <版本> has no Windows installer on python.org`。

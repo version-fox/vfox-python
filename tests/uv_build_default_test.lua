@@ -182,6 +182,13 @@ package = plugin:PreInstall({ version = "latest" })
 table.remove(pyenvVersions)
 assert(package.version == "3.16.1" and isSource(package), tostring(package.version))
 
+-- A free-threaded build newer than every standard release is never latest: latest is
+-- the newest standard release, here the index's 3.16.0 with its archive.
+table.insert(pyenvVersions, "3.16.1t")
+package = plugin:PreInstall({ version = "latest" })
+table.remove(pyenvVersions)
+assert(package.version == "3.16.0" and package.note == "uv-build", tostring(package.version))
+
 -- A release only pyenv lists is built from source: no archive is returned.
 reset()
 package = plugin:PreInstall({ version = "2.7.18" })
@@ -282,6 +289,15 @@ assert(#names == 8, table.concat(names, " "))
 for _, version in ipairs(names) do
     assert(version ~= "3.16.0" and version ~= "3.16.0a2", "uv-only release listed in source mode")
 end
+-- The pyenv list is newest first too. A 3.13.5 that pyenv lists falls below 3.13.18t,
+-- since 3.13.18t sorts by its release; the snapshot 3.16-dev comes after the releases.
+table.insert(pyenvVersions, "3.13.5")
+names = namesOf(plugin:Available({}))
+table.remove(pyenvVersions)
+assert(
+    table.concat(names, " ", 1, 7) == "3.13.19 3.13.18 3.13.18t 3.13.5 3.12.16 2.7.18 3.16-dev",
+    table.concat(names, " ")
+)
 package = plugin:PreInstall({ version = "3.12.16" })
 assert(isSource(package), "=0 must build from source")
 assert(uvRequests() == 0, "=0 must not read the uv-build index")

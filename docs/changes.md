@@ -4,6 +4,12 @@
 
 ## Unreleased
 
+- The uv-build index and pyenv version lists are sorted newest first with one
+  comparator. With `VFOX_PYTHON_USE_UV_BUILD=1`, the list used to keep the order
+  the index returned, so `latest` depended on that order. The pyenv list compared
+  a name with a suffix, such as `3.13.18t`, as if it were `3.13.0`. `latest` now
+  picks the newest standard release and skips free-threaded builds, which are
+  installed only when named.
 - On Linux and macOS, `vfox install python@<version>` now installs a CPython
   release from its prebuilt uv-build archive when the uv-build index lists it,
   and builds from source only when the index does not. Set

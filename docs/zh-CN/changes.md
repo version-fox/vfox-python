@@ -4,6 +4,9 @@
 
 ## 未发布
 
+- uv-build 索引和 pyenv 版本列表现在用同一个比较函数从新到旧排序。过去 `VFOX_PYTHON_USE_UV_BUILD=1`
+  的列表保留索引返回的顺序，`latest` 依赖这个顺序；pyenv 列表则把带后缀的名字（如 `3.13.18t`）当成
+  `3.13.0` 来比较。`latest` 现在选最新的常规版本，并跳过自由线程版；自由线程版只有写出名字时才会安装。
 - 在 Linux 和 macOS 上，`vfox install python@<版本>` 现在会在 uv-build 索引列出某个 CPython 版本时，
   从它的 uv-build 预编译包安装；只有索引没有列出时才从源码构建。设置 `VFOX_PYTHON_USE_UV_BUILD=0`
   可以让每个 CPython 都继续从源码构建，设置 `VFOX_PYTHON_USE_UV_BUILD=1` 则只使用 uv-build。GraalPy、

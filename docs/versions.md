@@ -35,10 +35,11 @@ name that matches, and a bare name beats the same release with a source suffix
 such as `-system`. A plain request never picks a free-threaded (`t`) or
 pre-release name, so `python@3.13` is not `python@3.13t`.
 
-`latest` is resolved by `PreInstall` to the first version `Available` returns.
-The list is newest CPython first, so this is the newest CPython release the
-platform lists, which can be a pre-release when one exists. GraalPy is
-selected by its full name. In the default mode on Linux and macOS, `latest` is not
+`latest` is resolved by `PreInstall` to the first version `Available` returns that
+is not a free-threaded build. The list is newest CPython first, so this is the newest
+standard CPython release the platform lists, which can be a pre-release when one
+exists. A free-threaded build such as `3.13.18t` is installed only when its name asks
+for it. GraalPy is selected by its full name. In the default mode on Linux and macOS, `latest` is not
 resolved in the uv-build index, so it stays the newest release in the list: it
 installs from its archive when the index lists that release, and is built from
 source, with a line saying so, when pyenv lists a newer one.

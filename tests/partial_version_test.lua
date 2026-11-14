@@ -185,4 +185,33 @@ assert(use("3.13t").version == "3.13.18t", use("3.13t").version)
 -- Only the free-threaded 3.13.18t is installed, and a plain request never picks it.
 assert(use("3.13").version == "3.13", use("3.13").version)
 
+-- newer_first orders a newest-first list: the release numbers decide, a final build
+-- comes before its free-threaded build and before its pre-release, and a pyenv
+-- snapshot comes after every release.
+local function newestFirst(list)
+    local copy = {}
+    for i, name in ipairs(list) do
+        copy[i] = name
+    end
+    table.sort(copy, python_version.newer_first)
+    return table.concat(copy, " ")
+end
+assert(
+    newestFirst({ "3.13.5", "3.13.18t", "3.12.16", "3.16-dev", "3.16.0a2", "3.16.0", "3.13.18" })
+        == "3.16.0 3.16.0a2 3.13.18 3.13.18t 3.13.5 3.12.16 3.16-dev",
+    newestFirst({ "3.13.5", "3.13.18t", "3.12.16", "3.16-dev", "3.16.0a2", "3.16.0", "3.13.18" })
+)
+-- A free-threaded build sorts by its release, not by the digits of its suffix.
+assert(python_version.newer_first("3.13.18t", "3.13.5"), "3.13.18t is newer than 3.13.5")
+assert(not python_version.newer_first("3.13.5", "3.13.18t"), "3.13.5 is not newer than 3.13.18t")
+-- A final build outranks the pre-release of the same numbers.
+assert(python_version.newer_first("3.16.0", "3.16.0a2"), "3.16.0 is newer than its pre-release")
+-- latest skips free-threaded builds, and a plain request never picks one either.
+assert(python_version.is_free_threaded("3.13.18t"), "3.13.18t is free-threaded")
+assert(python_version.is_free_threaded("3.16.0a2t"), "3.16.0a2t is free-threaded")
+assert(not python_version.is_free_threaded("3.13.18"), "3.13.18 is not free-threaded")
+assert(not python_version.is_free_threaded("3.16.0a2"), "a pre-release is not free-threaded")
+assert(not python_version.is_free_threaded("graalpy-24.2.0"), "GraalPy is not free-threaded")
+assert(not python_version.is_free_threaded("3.16-dev"), "a snapshot is not free-threaded")
+
 print("PASS: partial versions resolve in PreInstall and PreUse")

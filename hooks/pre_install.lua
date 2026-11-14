@@ -40,11 +40,23 @@ local function resolvePartialVersion(plugin, requested)
     return python_version.find_release(names, requested) or requested
 end
 
+--- The version `latest` installs: the first entry of the list that is not a
+--- free-threaded build. The list is newest first, and a free-threaded build is
+--- installed only when a request names it.
+local function latestVersion(list)
+    for _, item in ipairs(list) do
+        if not python_version.is_free_threaded(item.version) then
+            return item.version
+        end
+    end
+    error("No standard CPython release is listed, so latest has nothing to install. Name a version instead.")
+end
+
 function PLUGIN:PreInstall(ctx)
     local version = ctx.version
 
     if version == "latest" then
-        version = self:Available({})[1].version
+        version = latestVersion(self:Available({}))
     end
     version = resolvePartialVersion(self, version)
 
