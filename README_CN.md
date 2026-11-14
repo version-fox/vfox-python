@@ -164,7 +164,7 @@ uv-build 的下载可以走 `VFOX_PYTHON_UV_BUILD_MIRROR`。两个变量和镜�
 
 ## 致谢
 
-- [pyenv](https://github.com/pyenv/pyenv)，Linux 和 macOS 的默认安装沿用它的版本列表和 `python-build`
+- [pyenv](https://github.com/pyenv/pyenv)，Linux 和 macOS 的源码构建用它的 `python-build`，`vfox search python` 列出的版本名也来自它
 - [uv](https://github.com/astral-sh/uv)，提供预编译 Python 包和 `.python-version` 约定
 - [python.org](https://www.python.org/)，提供各版本和 Windows 安装包
 - [Oracle GraalPy](https://github.com/oracle/graalpython)，提供 GraalPy 各版本

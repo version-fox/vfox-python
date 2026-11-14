@@ -13,7 +13,7 @@
 | `common/` | 构建插件 zip、安装 vfox 1.1.0、运行主机命令、读取 uv-build 索引、断言 |
 | `linux/e2e_test.go` | `TestNativeE2E`：源码构建、镜像、uv-build、GraalPy、`vfox link --detect`、`.python-version` |
 | `linux/container_test.go` | `TestContainerE2E`：一个没有构建包的 Ubuntu 24.04 容器跑默认安装，每个 GraalPy 版本各一个容器 |
-| `linux/Dockerfile` | Ubuntu 24.04，只装 `ca-certificates`、`curl`、`tar`、`xz-utils` 和 `zip`；没有编译器，也没有 `-dev` 包 |
+| `linux/Dockerfile` | Ubuntu 24.04，只装 `ca-certificates`、`curl`、`tar`、`xz-utils` 和 `zip`，另装 vfox 1.1.0（`/usr/local/bin/vfox`）；没有编译器，也没有 `-dev` 包 |
 | `windows/e2e_test.go` | `TestNativeE2E`：python.org EXE 安装包、镜像、uv-build、带启动器注册的 GraalPy、`.python-version` |
 | `windows/container_test.go` | `TestContainerE2E`：由 docker 命令行驱动的 Server Core 容器，装有 PowerShell 7、Visual C++ 运行时和 vfox，跑 GraalPy |
 | `windows/Dockerfile`、`windows/bootstrap-tools.ps1` | 准备 Server Core 镜像：PowerShell 7、Visual C++ 运行时和 vfox |

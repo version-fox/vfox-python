@@ -2,7 +2,7 @@
 
 [中文](zh-CN/changes.md) | [English](changes.md)
 
-## Unreleased
+## 0.6.4
 
 - Index requests to the uv-build and pyenv indexes are sent again on a network error,
   HTTP 429, a 5xx, or a 200 response that is not the index: up to three attempts in
@@ -52,6 +52,9 @@
   read from the cabinet inside the installer with `expand.exe`, which ships with
   Windows, and the `bin/` directory is gone. Antivirus software has no WiX tools
   to quarantine. The same MSI packages are installed as before.
+- CI: a docs check in `lint.yml` compares the Chinese pages with the English ones. The
+  Linux E2E suite installs CPython from uv-build with the default settings in a bare
+  Ubuntu 24.04 container, and the Windows test job checks that index retries wait.
 
 ## 0.6.3
 

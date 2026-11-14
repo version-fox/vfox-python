@@ -58,10 +58,10 @@ asked to wait. An HTTP-date `Retry-After` is not read. Other statuses, such as 4
 are not retried. If the index still cannot be read, the install fails and names
 `VFOX_PYTHON_USE_UV_BUILD=0`, so it never starts a source build without saying so.
 
-If the index has no archive for this version on this platform, such as an
+In the default mode, if the index has no archive for this version on this platform, such as an
 architecture it does not cover, the install builds from source and prints a line
-saying so. On Linux, if the libc cannot be detected, the install builds from source;
-set `VFOX_PYTHON_UV_LIBC` to use uv-build.
+saying so. On Linux, if the libc cannot be detected, the default mode builds from source
+too; set `VFOX_PYTHON_UV_LIBC` to use uv-build.
 
 The plugin asks `https://vault.vfox.dev/python/uv-build` for the builds of the
 running platform, architecture and libc, then hands vfox the archive URL and its
@@ -105,8 +105,9 @@ The request carries `os`, `arch` and, on Linux, `libc`:
 | `VFOX_PYTHON_UV_BUILD_MIRROR` | downloads the archives through a mirror |
 
 Linux libc detection runs `ldd --version`, looks for the musl loader, then asks
-`getconf GNU_LIBC_VERSION`; if all of that fails it prints a warning and uses
-`gnu`. Set the variable when detection is wrong.
+`getconf GNU_LIBC_VERSION`. When all of that fails, `VFOX_PYTHON_USE_UV_BUILD=1` prints a
+warning and uses `gnu`; the default mode builds from source instead. Set the variable
+when detection is wrong.
 
 The mirror must be an HTTPS URL and must mirror GitHub release downloads at
 `<mirror>/<release>/<filename>`. The default GitHub URL becomes

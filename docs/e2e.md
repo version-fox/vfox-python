@@ -14,7 +14,7 @@ in Docker containers. `.github/workflows/e2e.yml` only installs Go and runs
 | `common/` | builds the plugin zip, installs vfox 1.1.0, runs host commands, reads the uv-build index, asserts |
 | `linux/e2e_test.go` | `TestNativeE2E`: source build, mirror, uv-build, GraalPy, `vfox link --detect`, `.python-version` |
 | `linux/container_test.go` | `TestContainerE2E`: a bare Ubuntu 24.04 container for the default install, and one for each GraalPy release |
-| `linux/Dockerfile` | Ubuntu 24.04 with `ca-certificates`, `curl`, `tar`, `xz-utils` and `zip`; no compiler and no `-dev` packages |
+| `linux/Dockerfile` | Ubuntu 24.04 with `ca-certificates`, `curl`, `tar`, `xz-utils` and `zip`, plus vfox 1.1.0 at `/usr/local/bin/vfox`; no compiler and no `-dev` packages |
 | `windows/e2e_test.go` | `TestNativeE2E`: python.org EXE installer, mirror, uv-build, GraalPy with launcher registration, `.python-version` |
 | `windows/container_test.go` | `TestContainerE2E`: a Server Core container, driven by the docker CLI, with PowerShell 7, the Visual C++ runtime and vfox, GraalPy |
 | `windows/Dockerfile`, `windows/bootstrap-tools.ps1` | provision the Server Core image: PowerShell 7, the Visual C++ runtime and vfox |

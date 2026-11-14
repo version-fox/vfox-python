@@ -37,7 +37,7 @@ vfox install python@3.12
 
 索引请求遇到网络错误、HTTP 429 或 5xx 状态码，或者 200 响应里不是索引（比如强制门户的页面）时会重发，总共最多三次。重试前，如果服务器返回了 `Retry-After` 头且不超过 10 秒，就等待它指定的秒数；否则依次等待 1 秒和 2 秒。超过 10 秒的 `Retry-After` 不等待：请求立即失败，错误信息里写明服务器要求的等待时间。HTTP 日期格式的 `Retry-After` 不会被读取。其他状态码（如 404）不重试。重试后仍无法读取索引，安装会失败，并提示 `VFOX_PYTHON_USE_UV_BUILD=0`，因此不会在没有说明的情况下开始源码构建。
 
-如果索引在该平台上没有这个版本的包（比如索引不覆盖某个架构），安装会改为源码构建，并打印一行说明。在 Linux 上，如果无法识别 libc，安装会从源码构建；要使用 uv-build，请设置 `VFOX_PYTHON_UV_LIBC`。
+在默认模式下，如果索引在该平台上没有这个版本的包（比如索引不覆盖某个架构），安装会改为源码构建，并打印一行说明。在 Linux 上，如果无法识别 libc，默认模式同样从源码构建；要使用 uv-build，请设置 `VFOX_PYTHON_UV_LIBC`。
 
 插件向 `https://vault.vfox.dev/python/uv-build` 询问当前平台、架构和 libc 的
 构建，然后把包地址和 SHA-256 交给 vfox。vfox 下载、校验、解压，再调用
@@ -74,7 +74,7 @@ vfox install python@3.12
 | `VFOX_PYTHON_UV_BUILD_MIRROR` | 让预编译包走镜像下载 |
 
 Linux 上先运行 `ldd --version`，再找 musl 的加载器，最后问
-`getconf GNU_LIBC_VERSION`；都失败时打印警告并按 `gnu` 处理。识别不对时设置
+`getconf GNU_LIBC_VERSION`。都失败时，`VFOX_PYTHON_USE_UV_BUILD=1` 打印警告并按 `gnu` 处理；默认模式则改为源码构建。识别不对时设置
 上面的变量。
 
 镜像必须是 HTTPS 地址，并按 `<镜像>/<release>/<文件名>` 镜像 GitHub 的 release

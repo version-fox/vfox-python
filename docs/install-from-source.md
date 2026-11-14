@@ -7,7 +7,7 @@ Try `main` before the next release:
 ```bash
 git clone https://github.com/version-fox/vfox-python.git
 cd vfox-python
-zip -qr /tmp/vfox-python.zip metadata.lua hooks lib bin
+zip -qr /tmp/vfox-python.zip metadata.lua hooks lib
 vfox add --source /tmp/vfox-python.zip
 ```
 

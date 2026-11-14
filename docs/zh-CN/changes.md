@@ -2,7 +2,7 @@
 
 [中文](changes.md) | [English](../changes.md)
 
-## 未发布
+## 0.6.4
 
 - uv-build 和 pyenv 索引的请求遇到网络错误、HTTP 429、5xx，或 200 响应不是索引时会重发：总共最多三次。等待时间跟随服务器的 `Retry-After`（秒数，不超过 10 秒），否则依次为 1 秒和 2 秒。持续失败仍会使安装失败；默认模式不会因此改为源码构建。
 - uv-build 索引和 pyenv 版本列表现在用同一个比较函数从新到旧排序。过去 `VFOX_PYTHON_USE_UV_BUILD=1`
@@ -28,6 +28,8 @@
   没有 CPython 安装时，回退仍然选已安装的任意名字。要选中自由线程、预发布版或 GraalPy，请写完整名字。
 - Windows 上的 EXE 安装不再携带或运行 WiX 工具。插件用 Windows 自带的 `expand.exe` 从安装包里解出 MSI，
   `bin/` 目录已移除。杀毒软件因此没有 WiX 工具可以隔离。安装的 MSI 与以前相同。
+- CI：`lint.yml` 里的文档检查会比较中文页与英文页的结构。Linux 的 E2E 套件在没有构建包的
+  Ubuntu 24.04 容器里，用默认设置从 uv-build 安装 CPython；Windows 测试任务会检查索引重试是否真的等待。
 
 ## 0.6.3
 

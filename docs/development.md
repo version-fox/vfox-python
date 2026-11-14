@@ -272,10 +272,11 @@ installs CPython from source (`VFOX_PYTHON_USE_UV_BUILD=0`), through the mirror,
 and also runs `vfox link --detect` and a project `.python-version` on the
 runner. The Windows package installs CPython and uv-build, installs GraalPy
 with PEP 514 registration, and checks `.python-version`. Both packages also
-run GraalPy checks in Docker containers: the Linux package through
-testcontainers-go, the Windows package through the `docker` CLI, because
-testcontainers-go creates a bridge network for every container and a Windows
-engine has no bridge driver.
+run container checks. The Linux package starts a bare Ubuntu 24.04 container,
+installs CPython from uv-build with the default settings and checks GraalPy there, through
+testcontainers-go. The Windows package checks GraalPy in a Server Core container through the
+`docker` CLI, because testcontainers-go creates a bridge network for every container and a
+Windows engine has no bridge driver.
 See [E2E](e2e.md) for the layout and the local commands.
 
 Local commands:
@@ -365,7 +366,7 @@ updating that tool does not release this plugin.
 | `VFOX_PYTHON_UV_LIBC` | Available, PreInstall | `gnu` or `musl` override |
 | `VFOX_PYTHON_UV_BUILD_MIRROR` | PreInstall | HTTPS mirror for uv-build archives |
 | `VFOX_PYTHON_REGISTER_PY_LAUNCHER` | PostInstall, PreUninstall | register Windows installs under `HKCU\Software\Python\VersionFox`; on by default, `0`, `false`, `no` or `off` disables |
-| `GITHUB_TOKEN`, `GH_TOKEN` | Available | raise the GitHub API limit for the Windows GraalPy release list |
+| `GITHUB_TOKEN`, `GH_TOKEN` | Available, PreInstall | authenticate the GitHub API requests for GraalPy release lookups, which raises the rate limit |
 | `UV_PYTHON_INSTALL_DIR` | Detect | uv's Python directory |
 | `PYENV_ROOT` | Detect | pyenv root |
 | `ASDF_DATA_DIR` | Detect | asdf data directory |
