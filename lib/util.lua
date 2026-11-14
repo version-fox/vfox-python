@@ -16,6 +16,7 @@ local http = require("http")
 local html = require("html")
 local json = require("json")
 local windowsCommand = require("windows_command")
+local python_version = require("python_version")
 
 -- get mirror
 local PYTHON_URL = "https://www.python.org/ftp/python/"
@@ -413,13 +414,27 @@ end
 
 local pyenvBranch = ""
 
-function useUvBuild()
+-- VFOX_PYTHON_USE_UV_BUILD: 1, true, yes or on asks for uv-build only; 0, false,
+-- no or off asks for the source build (or the installer on Windows). Unset, or a
+-- value that is neither, leaves the default in place. nil means unset.
+local function uvBuildSetting()
     local value = os.getenv(UV_BUILD_ENV)
     if value == nil then
+        return nil
+    end
+    value = string.lower((value:gsub("^%s+", ""):gsub("%s+$", "")))
+    if value == "1" or value == "true" or value == "yes" or value == "on" then
+        return true
+    end
+    if value == "0" or value == "false" or value == "no" or value == "off" then
         return false
     end
-    value = string.lower(value)
-    return value == "1" or value == "true" or value == "yes" or value == "on"
+    return nil
+end
+
+--- Whether VFOX_PYTHON_USE_UV_BUILD asks for uv-build only.
+function useUvBuild()
+    return uvBuildSetting() == true
 end
 
 local function containsTraversalSegment(value)
@@ -549,7 +564,9 @@ local function runtimeArch()
     return archType
 end
 
-local function runtimeLibc(osType)
+--- The libc an index request names: the VFOX_PYTHON_UV_LIBC override, "none" off
+--- Linux, the detected libc, or nil on Linux when detection fails.
+local function detectLibc(osType)
     local configuredLibc = os.getenv("VFOX_PYTHON_UV_LIBC")
     if configuredLibc and configuredLibc ~= "" then
         return configuredLibc
@@ -595,8 +612,36 @@ local function runtimeLibc(osType)
         end
     end
 
+    return nil
+end
+
+local function runtimeLibc(osType)
+    local libc = detectLibc(osType)
+    if libc ~= nil then
+        return libc
+    end
     print("Warning: Could not detect libc, using gnu as default. Set VFOX_PYTHON_UV_LIBC to override.")
     return "gnu"
+end
+
+local function isSetEnv(name)
+    local value = os.getenv(name)
+    return value ~= nil and value ~= ""
+end
+
+--- Whether CPython installs try uv-build first when the index lists the version:
+--- with no VFOX_PYTHON_USE_UV_BUILD setting, on Linux and macOS. Windows keeps the
+--- python.org installers unless uv-build is asked for. A python.org mirror keeps
+--- CPython on the source path, because uv-build downloads come from GitHub unless
+--- VFOX_PYTHON_UV_BUILD_MIRROR is set too.
+function uvBuildAutoEnabled()
+    if uvBuildSetting() ~= nil or runtimeOs() == "windows" then
+        return false
+    end
+    if isSetEnv("VFOX_PYTHON_MIRROR") and not isSetEnv(UV_BUILD_MIRROR_ENV) then
+        return false
+    end
+    return true
 end
 
 local function getUvBuildPlatform()
@@ -738,11 +783,12 @@ local function getUvBuilds(osType, archType, libc)
     return jsonObj.items or jsonObj.versions or {}
 end
 
-local function findUvBuild(version)
-    local osType, archType, libc = getUvBuildPlatform()
+--- The build the listing has for version, the one with the best asset priority,
+--- or nil when the listing has none.
+local function selectUvBuild(builds, version)
     local selectedBuild = nil
     local selectedPriority = nil
-    for _, build in ipairs(getUvBuilds(osType, archType, libc)) do
+    for _, build in ipairs(builds) do
         if isSupportedUvBuild(build) and uvBuildVersion(build) == version then
             local priority = uvBuildAssetPriority(build)
             if selectedBuild == nil or priority < selectedPriority then
@@ -751,6 +797,12 @@ local function findUvBuild(version)
             end
         end
     end
+    return selectedBuild
+end
+
+local function findUvBuild(version)
+    local osType, archType, libc = getUvBuildPlatform()
+    local selectedBuild = selectUvBuild(getUvBuilds(osType, archType, libc), version)
     if selectedBuild ~= nil then
         return selectedBuild
     end
@@ -764,6 +816,60 @@ local function findUvBuild(version)
             .. "/"
             .. libc
     )
+end
+
+--- The error for an index that cannot be read in the default mode. It names the
+--- opt-out, so the user is not left with a silent source build.
+local function uvBuildAutoIndexError(detail)
+    return "Could not read the uv-build index: "
+        .. tostring(detail)
+        .. ". Set VFOX_PYTHON_USE_UV_BUILD=0 to build from source with pyenv instead."
+end
+
+--- The build for a CPython version on this machine in the default mode. It returns
+--- nil and the reason when the index has none, so PreInstall can build from
+--- source. A failed request raises instead: the message names the opt-out, so the
+--- user is not left with a silent source build.
+local function findAutoUvBuild(version)
+    local osType, archType = runtimeOs(), runtimeArch()
+    local libc = detectLibc(osType)
+    if libc == nil then
+        return nil, "the C library could not be detected; set VFOX_PYTHON_UV_LIBC to use uv-build"
+    end
+    local ok, builds = pcall(getUvBuilds, osType, archType, libc)
+    if not ok then
+        error(uvBuildAutoIndexError(builds))
+    end
+    local selectedBuild = selectUvBuild(builds, version)
+    if selectedBuild == nil then
+        return nil, "uv-build has no build for " .. osType .. "/" .. archType .. "/" .. libc
+    end
+    return selectedBuild
+end
+
+--- The CPython versions the uv-build index lists for this platform, as a set of
+--- names. A partial request in the default mode resolves against this set first.
+--- It is nil when the libc is unknown, because the index is then not asked (see
+--- findAutoUvBuild). A request that fails raises, so the install stops before it
+--- starts a source build.
+function uvBuildAutoVersionSet()
+    local osType, archType = runtimeOs(), runtimeArch()
+    local libc = detectLibc(osType)
+    if libc == nil then
+        return nil
+    end
+    local ok, builds = pcall(getUvBuilds, osType, archType, libc)
+    if not ok then
+        error(uvBuildAutoIndexError(builds))
+    end
+    local names = {}
+    for _, build in ipairs(builds) do
+        local version = isSupportedUvBuild(build) and uvBuildVersion(build) or nil
+        if version ~= nil then
+            names[version] = true
+        end
+    end
+    return names
 end
 
 local function pathExists(path)
@@ -982,10 +1088,10 @@ function isLinkedPythonInstall(versionPath, version)
     return string.find(output, "yes", 1, true) ~= nil
 end
 
-function uvBuildPreInstall(version)
+--- The PreInstall result for a selected build. vfox downloads the URL, checks the
+--- sha256 and unpacks the archive.
+local function uvBuildPackage(build, version)
     local ok, value = pcall(function()
-        local build = findUvBuild(version)
-        -- Return url/sha256 so vfox core performs download, checksum verification, and archive extraction.
         return {
             version = version,
             url = uvBuildDownloadUrl(build),
@@ -998,17 +1104,42 @@ function uvBuildPreInstall(version)
         local err = value
         error("uv-build PreInstall failed: " .. tostring(err))
     end
-    local uvBuildPackage = value
-    if uvBuildPackage == nil then
+    local pkg = value
+    if pkg == nil then
         error("uv-build PreInstall did not provide install metadata")
     end
-    if isNilOrEmpty(uvBuildPackage.url) then
+    if isNilOrEmpty(pkg.url) then
         error("uv-build PreInstall failed: url is required")
     end
-    if isNilOrEmpty(uvBuildPackage.sha256) then
+    if isNilOrEmpty(pkg.sha256) then
         error("uv-build PreInstall failed: sha256 is required")
     end
-    return uvBuildPackage
+    return pkg
+end
+
+function uvBuildPreInstall(version)
+    local ok, build = pcall(findUvBuild, version)
+    if not ok then
+        error("uv-build PreInstall failed: " .. tostring(build))
+    end
+    return uvBuildPackage(build, version)
+end
+
+--- PreInstall for a CPython version in the default mode: the archive when the
+--- index lists it, or nil when PreInstall should return the source build instead.
+function uvBuildAutoPreInstall(version)
+    local build, reason = findAutoUvBuild(version)
+    if build == nil then
+        print(
+            "Python "
+                .. version
+                .. " has no uv-build archive here ("
+                .. reason
+                .. "). Building it from source with pyenv."
+        )
+        return nil
+    end
+    return uvBuildPackage(build, version)
 end
 
 local graalPyReleaseCaches = {}
@@ -1194,10 +1325,29 @@ function parseGraalPyWindowsVersions()
     return result
 end
 
+--- A source build starts from an empty install path. vfox removes the directory of
+--- a failed install and clears an interrupted one before it runs again, so a Python
+--- already in the path was unpacked from an archive. Building over it would replace
+--- it without a word, so the build stops and says how to recover.
+local function uvBuildRejectUnpackedArchive(path, version)
+    if pathExists(path .. "/bin/python") then
+        error(
+            "Python "
+                .. version
+                .. " is already in "
+                .. path
+                .. ", so the source build is not started. Run `vfox uninstall python@"
+                .. version
+                .. "` and install it again."
+        )
+    end
+end
+
 function linuxCompile(ctx)
     local sdkInfo = ctx.sdkInfo["python"]
     local path = sdkInfo.path
     local version = sdkInfo.version
+    uvBuildRejectUnpackedArchive(path, version)
     local pyenv_url = "https://github.com/pyenv/pyenv.git"
     local dest_pyenv_path = ctx.rootPath .. "/pyenv"
     local branch = ""
@@ -1234,6 +1384,14 @@ function linuxCompile(ctx)
     if status ~= 0 then
         error("remove build tool failed")
     end
+end
+
+--- Whether PreInstall returned a uv-build archive for this install. PreInstall sets
+--- the note of that package to "uv-build", and vfox passes the note on to
+--- PostInstall in sdkInfo, so PostInstall needs no second request to the index.
+function uvBuildNoteArchive(ctx)
+    local sdkInfo = ctx.sdkInfo["python"]
+    return sdkInfo ~= nil and sdkInfo.note == "uv-build"
 end
 
 function uvBuildInstall(ctx)
@@ -1431,7 +1589,8 @@ function parseVersionFromPyenv()
         headers = REQUEST_HEADERS,
     })
     if err ~= nil or resp.status_code ~= 200 then
-        error("paring release info failed." .. err)
+        local statusCode = resp and resp.status_code or "none"
+        error("parsing release info failed. Status: " .. statusCode .. ", Error: " .. (err or "none"))
     end
     local result = {}
     local jsonObj = json.decode(resp.body)
@@ -1493,6 +1652,93 @@ function parseVersionFromUvBuild()
                 seen[version] = true
             end
         end
+    end
+    return result
+end
+
+--- A name with a dash, such as 3.16-dev, is a development snapshot from pyenv. It
+--- sorts after every release, so `latest` never picks one.
+local function isSnapshot(name)
+    return string.find(name, "-", 1, true) ~= nil
+end
+
+--- Ranks names with the same numbers: a final build outranks its free-threaded
+--- build, which outranks a pre-release, and a GIL pre-release outranks its
+--- free-threaded pre-release.
+local function releaseRank(name)
+    local free = string.sub(name, -1) == "t"
+    local base = free and string.sub(name, 1, -2) or name
+    local pre = string.find(base, "%d%a") ~= nil
+    if pre then
+        return free and 0 or 1
+    end
+    return free and 2 or 3
+end
+
+--- Newest first: snapshots last, then the release numbers, then releaseRank. Ties
+--- sort by name, so the order does not depend on the order of the input.
+local function isNewerCandidate(a, b)
+    local snapshotA, snapshotB = isSnapshot(a), isSnapshot(b)
+    if snapshotA ~= snapshotB then
+        return snapshotB
+    end
+    local order = python_version.compare(string.match(a, "^[%d.]+"), string.match(b, "^[%d.]+"))
+    if order ~= 0 then
+        return order > 0
+    end
+    local rankA, rankB = releaseRank(a), releaseRank(b)
+    if rankA ~= rankB then
+        return rankA > rankB
+    end
+    return a > b
+end
+
+--- The list for the default mode on Linux and macOS: every release the pyenv list
+--- names, plus the CPython releases only the uv-build index lists. The source of
+--- each install is chosen in PreInstall, so the list is the same whichever source
+--- an install ends up using.
+function parseVersionFromAuto()
+    local okPyenv, pyenvList = pcall(parseVersionFromPyenv)
+    local okUv, uvList = pcall(parseVersionFromUvBuild)
+    if not okPyenv and not okUv then
+        error("Could not list Python versions. pyenv: " .. tostring(pyenvList) .. "; uv-build: " .. tostring(uvList))
+    end
+    if not okPyenv then
+        print("Warning: Could not list the pyenv versions: " .. tostring(pyenvList))
+        pyenvList = {}
+    end
+    if not okUv then
+        print("Warning: Could not list the uv-build versions: " .. tostring(uvList))
+        uvList = {}
+    end
+
+    local numeric = {}
+    local seen = {}
+    local function addNumeric(version)
+        if not seen[version] then
+            seen[version] = true
+            table.insert(numeric, version)
+        end
+    end
+    local named = {}
+    for _, item in ipairs(uvList) do
+        addNumeric(item.version)
+    end
+    for _, item in ipairs(pyenvList) do
+        if string.match(item.version, "^%d") then
+            addNumeric(item.version)
+        else
+            table.insert(named, item)
+        end
+    end
+    table.sort(numeric, isNewerCandidate)
+
+    local result = {}
+    for _, version in ipairs(numeric) do
+        table.insert(result, { version = version, note = "" })
+    end
+    for _, item in ipairs(named) do
+        table.insert(result, item)
     end
     return result
 end

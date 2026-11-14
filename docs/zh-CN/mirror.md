@@ -59,6 +59,11 @@ export VFOX_PYTHON_UV_BUILD_MIRROR=https://registry.npmmirror.com/-/binary/pytho
 解压前，插件会用 uv-build 索引里的 SHA-256 校验每个包。镜像提供的字节不一致时
 安装会以 `Checksum error` 失败，这是有意的：应该改索引或镜像，不要绕过校验。
 
+在 Linux 和 macOS 上，未设置 `VFOX_PYTHON_MIRROR` 时，默认模式会对索引列出的每个 CPython 版本使用这个镜像。
+若设置了 `VFOX_PYTHON_MIRROR`，CPython 会保持经 python.org 镜像从源码构建，除非同时设置了 `VFOX_PYTHON_UV_BUILD_MIRROR`。
+源码构建仍然从 GitHub 克隆 pyenv，两个镜像变量都不会改变这次克隆。设置 `VFOX_PYTHON_USE_UV_BUILD=0` 可以从源码构建；
+设置 `VFOX_PYTHON_USE_UV_BUILD=1` 则只使用 uv-build。
+
 ## GraalPy
 
 两个镜像变量都不适用于 GraalPy。所有平台都直接从 GitHub 下载 Oracle 的发布

@@ -56,8 +56,10 @@ for the older hooks; the newer modules (`python_version`, `detect_python`,
 
 It returns `version`, `url`, `headers`, `sha256` and `note`; vfox downloads the
 URL, verifies `sha256` when present, unpacks the archive and names the install
-after `version`. A partial version such as `3.12` is resolved first, to the newest
-stable release that `Available({})` names for this mode; an exact version is not
+after `version`. A partial version such as `3.12` is resolved first. In the default
+mode on Linux and macOS it resolves to the newest match in the uv-build index when
+the index has one; otherwise, and in every other mode, it resolves to the newest
+stable release that `Available({})` names for this mode. An exact version is not
 looked up.
 
 - `version = "latest"` is resolved to `Available({})[1].version`. The list is
@@ -76,6 +78,14 @@ looked up.
   archive must be HTTPS; an unusable checksum fails the install instead of
   skipping verification. A GraalPy version is rejected because the index
   contains CPython only.
+- The default mode (no `VFOX_PYTHON_USE_UV_BUILD`, Linux and macOS, and no
+  `VFOX_PYTHON_MIRROR` unless `VFOX_PYTHON_UV_BUILD_MIRROR` is set) checks the
+  index for a CPython version only; a non-CPython name is never looked up there.
+  When the index lists the version, the result is the same as uv-build mode. When
+  it does not, PreInstall prints a line and returns no archive, so vfox runs the
+  pyenv source build. A failed index request is an error that names
+  `VFOX_PYTHON_USE_UV_BUILD=0`. When no libc can be detected, the source build is
+  used.
 - `note = "uv-build"`, `"GraalPy"` or `"GraalPy Community"` is shown by vfox.
 
 ### PostInstall
@@ -92,10 +102,14 @@ directory (`path`) and name (`version`).
   under its `graalpy*-<platform>` directory and runs the bundled `ensurepip`.
   On Unix it repairs shebangs; on Windows it runs `bin/python.exe` and creates
   pip shims if the launchers are missing.
-- In uv-build mode, the archive has already been unpacked by vfox; the hook
-  finds the payload under `path/python-<version>`, repairs shebangs on Unix and
-  ensures pip on Windows. `resolvePythonInstallPath` handles the MSI, uv-build
-  and GraalPy layouts.
+- In uv-build mode, and in the default mode when PreInstall returned an archive,
+  vfox has already unpacked the archive. PostInstall takes the archive path when
+  the note that PreInstall set is `uv-build`; vfox passes the note on in `sdkInfo`,
+  so PostInstall does not ask the index again. A source build stops if a Python
+  already sits in the install path: vfox clears the directory of a failed or
+  interrupted install, so that Python came from an archive, and building over it
+  would replace it silently. The hook repairs shebangs on Unix and ensures pip on
+  Windows. `resolvePythonInstallPath` handles the MSI, uv-build and GraalPy layouts.
 - Paths outside `ctx.rootPath` are rejected for uv-build, so a malformed index
   cannot make the hook write elsewhere.
 - Unless `VFOX_PYTHON_REGISTER_PY_LAUNCHER` is `0`, `false`, `no` or `off`, the
@@ -240,7 +254,7 @@ It checks native argument encoding, MSI target quoting, the `%` junction,
 exit-code propagation and every failure path.
 
 The E2E suite lives in `tests/e2e` and is written in Go. The Linux package
-installs CPython from source, through the mirror, through uv-build and GraalPy,
+installs CPython from source (`VFOX_PYTHON_USE_UV_BUILD=0`), through the mirror, through uv-build and GraalPy,
 and also runs `vfox link --detect` and a project `.python-version` on the
 runner. The Windows package installs CPython and uv-build, installs GraalPy
 with PEP 514 registration, and checks `.python-version`. Both packages also
@@ -326,7 +340,7 @@ updating that tool does not release this plugin.
 | Variable | Used by | Meaning |
 | --- | --- | --- |
 | `VFOX_PYTHON_MIRROR` | PreInstall, PostInstall | python.org mirror; a trailing `/` is added |
-| `VFOX_PYTHON_USE_UV_BUILD` | Available, PreInstall, PostInstall | use uv-build archives |
+| `VFOX_PYTHON_USE_UV_BUILD` | Available, PreInstall, PostInstall | unset: uv-build for a CPython version the index lists, on Linux and macOS; `0`, `false`, `no` or `off`: source build; `1`, `true`, `yes` or `on`: uv-build only |
 | `VFOX_PYTHON_UV_LIBC` | Available, PreInstall | `gnu` or `musl` override |
 | `VFOX_PYTHON_UV_BUILD_MIRROR` | PreInstall | HTTPS mirror for uv-build archives |
 | `VFOX_PYTHON_REGISTER_PY_LAUNCHER` | PostInstall, PreUninstall | register Windows installs under `HKCU\Software\Python\VersionFox`; on by default, `0`, `false`, `no` or `off` disables |

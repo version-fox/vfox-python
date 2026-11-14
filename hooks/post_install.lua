@@ -19,7 +19,7 @@ function PLUGIN:PostInstall(ctx)
     local version = ctx.sdkInfo["python"].version
     if isGraalPyVersion(version) and parseGraalPyVersion(version) then
         result = graalPyInstall(ctx)
-    elseif useUvBuild() then
+    elseif useUvBuild() or uvBuildNoteArchive(ctx) then
         result = uvBuildInstall(ctx)
     elseif OS_TYPE == "windows" then
         result = windowsInstall(ctx)

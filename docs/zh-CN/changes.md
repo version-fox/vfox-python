@@ -4,6 +4,15 @@
 
 ## 未发布
 
+- 在 Linux 和 macOS 上，`vfox install python@<版本>` 现在会在 uv-build 索引列出某个 CPython 版本时，
+  从它的 uv-build 预编译包安装；只有索引没有列出时才从源码构建。设置 `VFOX_PYTHON_USE_UV_BUILD=0`
+  可以让每个 CPython 都继续从源码构建，设置 `VFOX_PYTHON_USE_UV_BUILD=1` 则只使用 uv-build。GraalPy、
+  PyPy 和 Conda 的安装保持不变。`vfox search python` 会把 pyenv 的名字和只有 uv-build 列出的 CPython 版本一起列出。
+  此变更之前已完成的安装不会被改动。若设置了 `VFOX_PYTHON_MIRROR`，CPython 保持走源码构建的路径，
+  除非同时设置了 `VFOX_PYTHON_UV_BUILD_MIRROR`。
+- 在 Linux 和 macOS 的默认模式下，部分版本号（如 `python@3.12`）先在 uv-build 索引里解析，
+  所以会安装索引列出的最新 3.12 预编译包。精确版本号仍可选中任何版本，包括索引里没有的较新 pyenv 补丁版。
+- 无法读取 pyenv 版本索引时，报错会写出 HTTP 状态码，而不是因为 Lua 字符串拼接错误而失败。
 - 部分版本号（如 `python@3.12`）现在会选中名字带 `-opt` 的链接安装，如 `3.12.8-opt`；
   `python@3.13t` 会选中自由线程的链接安装，如 `3.13.1t-uv`。来源后缀不再被当作版本的一部分。
 - `.python-version` 中的部分版本号（如 `3.13`）与 `vfox use` 遵循同一规则：不再选中自由线程

@@ -4,14 +4,16 @@
 
 ## 安装的是什么
 
-| 平台 | 默认 | `VFOX_PYTHON_USE_UV_BUILD=1` |
-| --- | --- | --- |
-| Linux x86_64 | CPython 用 pyenv 从源码编译；GraalPy 用 Oracle 压缩包 | uv-build 预编译包 |
-| Linux arm64 | CPython 用 pyenv 从源码编译；GraalPy 用 Oracle 压缩包 | uv-build 预编译包 |
-| Linux armv7 | CPython 用 pyenv 从源码编译；没有 GraalPy 构建 | 有包时用 uv-build 预编译包 |
-| Linux musl / Alpine | 用 pyenv 从源码编译 | uv-build 的 musl 预编译包 |
-| macOS Intel 和 Apple silicon | CPython 用 pyenv 从源码编译；GraalPy 用 Oracle 压缩包 | uv-build 预编译包 |
-| Windows x86_64、arm64、386 | CPython 用 python.org 的 EXE 或 MSI；GraalPy 用 amd64 压缩包 | uv-build 预编译包 |
+| 平台 | 默认 | `VFOX_PYTHON_USE_UV_BUILD=0` | `VFOX_PYTHON_USE_UV_BUILD=1` |
+| --- | --- | --- | --- |
+| Linux x86_64 | CPython 在 uv-build 索引列出该版本时用 uv-build 预编译包，否则用 pyenv 从源码编译；GraalPy 用 Oracle 压缩包 | CPython 用 pyenv 从源码编译；GraalPy 用 Oracle 压缩包 | uv-build 预编译包 |
+| Linux arm64 | 同 Linux x86_64 | 同 Linux x86_64 | uv-build 预编译包 |
+| Linux armv7 | 同 Linux x86_64，没有 GraalPy 构建 | 用 pyenv 从源码编译；没有 GraalPy 构建 | 有包时用 uv-build 预编译包 |
+| Linux musl / Alpine | 索引列出该版本时用 uv-build 的 musl 预编译包，否则用 pyenv 从源码编译 | 用 pyenv 从源码编译 | uv-build 的 musl 预编译包 |
+| macOS Intel 和 Apple silicon | 同 Linux x86_64 | CPython 用 pyenv 从源码编译；GraalPy 用 Oracle 压缩包 | uv-build 预编译包 |
+| Windows x86_64、arm64、386 | CPython 用 python.org 的 EXE 或 MSI；GraalPy 用 amd64 压缩包 | CPython 用 python.org 的 EXE 或 MSI；GraalPy 用 amd64 压缩包 | uv-build 预编译包 |
+
+在默认模式下，若设置了 `VFOX_PYTHON_MIRROR`，CPython 会保持走源码构建的路径，除非同时设置了 `VFOX_PYTHON_UV_BUILD_MIRROR`。
 
 CPython 的源码构建取 pyenv 的 tag 和版本列表，把 pyenv 克隆到那个 tag，再运行
 它的 `python-build`。它需要 C 工具链和 Python 链接的头文件。Windows 则下载 python.org
@@ -30,7 +32,8 @@ macOS 有 amd64 和 arm64 资源，Windows 只有 amd64。
   安全版本不在列表里，2.5 以前的版本也不列出；预发布安装包的文件名匹配不上稳定
   的精确文件名，Windows 上需要预发布版时请用 uv-build。
 - **uv-build：** 索引里当前平台、架构和 libc 有的 CPython 包，包括
-  `freethreaded` 构建。GraalPy 不在此模式中。
+  `freethreaded` 构建。GraalPy 不在此模式中。在 Linux 和 macOS 的默认模式下，
+  `vfox search python` 会把 pyenv 的名字和这些 CPython 版本一起列出；索引没有的版本则从源码编译。
 
 自由线程版本在每种来源上都用同样的 `t` 后缀选中：
 
@@ -40,25 +43,26 @@ VFOX_PYTHON_USE_UV_BUILD=1 vfox install python@3.13t
 ```
 
 部分版本号在每种模式下都会解析：`python@3.13t` 选出该模式列出的、最新的 3.13 自由线程版本；
-只写 `python@3.13` 则不会选中自由线程构建。
+只写 `python@3.13` 则不会选中自由线程构建。在 Linux 和 macOS 的默认模式下，先搜索 uv-build 索引，
+详见 [uv.md](uv.md)。
 
 Windows 的自由线程版本通过 uv-build 提供；稳定安装包列表里没有 `t` 构建。
 
 ## Linux 构建依赖
 
-只有 **源码构建** 需要本节列出的包，而源码构建是 Linux 上 CPython 的默认方式。另外两条
-路径都不需要这些包：
+只有 **源码构建** 需要本节列出的包。从 uv-build 安装的 CPython 不需要这些包，
+索引列出的版本默认就用 uv-build：
 
 | 安装的内容 | 需要这些包吗？ |
 | --- | --- |
-| CPython，源码构建（默认） | 需要 |
-| CPython，设置 `VFOX_PYTHON_USE_UV_BUILD=1` | 不需要 |
+| CPython，源码构建（索引没有的版本，或设置 `VFOX_PYTHON_USE_UV_BUILD=0`） | 需要 |
+| CPython，uv-build（索引列出的版本默认使用，或设置 `VFOX_PYTHON_USE_UV_BUILD=1`） | 不需要 |
 | GraalPy | 不需要 |
 
 uv-build 下载的是预编译的 CPython 包，GraalPy 是 Oracle 的压缩包，两者都不运行编译器。
-Linux 容器套件会检查 uv-build 这条路径：它启动一个没有编译器、也没有 `-dev` 包的
-Ubuntu 24.04 镜像，安装 uv-build 的 CPython，然后导入 `ssl`、`sqlite3`、`bz2`、`lzma`、
-`ctypes`、`readline`、`curses`、`zlib` 和 `hashlib`。
+Linux 容器套件会检查默认的情况：它启动一个没有编译器、也没有 `-dev` 包的
+Ubuntu 24.04 镜像，从 uv-build 索引安装一个 CPython，然后导入 `ssl`、`sqlite3`、`bz2`、
+`lzma`、`ctypes`、`readline`、`curses`、`zlib` 和 `hashlib`。
 
 在 Ubuntu 上做源码构建，需要安装这些包：
 
@@ -74,14 +78,14 @@ sudo apt install --assume-yes make build-essential libssl-dev zlib1g-dev \
 随后会在 ensurepip 步骤失败：pip 是从 wheel 安装的，而 wheel 是 zip 压缩包，读取它需要 zlib
 （报错为 `No module named 'zlib'`）。
 
-想在 Ubuntu 上省掉这一步，就用 uv-build。它不需要 `sudo`，也不需要 `apt`：
+想在 Ubuntu 上省掉这一步，就安装 uv-build 索引列出的版本。它不需要 `sudo`，也不需要 `apt`，在 Linux 上也是默认方式：
 
 ```bash
-export VFOX_PYTHON_USE_UV_BUILD=1
-vfox install python@3.12
+vfox install python@3.12.16
+vfox use -g python@3.12.16
 ```
 
-`python@3.12` 会安装 uv-build 索引里最新的 3.12 版本，`vfox use -g python@3.12` 选中它。
+部分版本号（如 `python@3.12`）会选中 uv-build 索引列出的最新 3.12 版本，并安装它的预编译包。pyenv 列出的、索引里没有的较新补丁版会从源码编译，只有写出它的精确版本号才会选中它。
 
 Fedora 和 RHEL 的源码构建：
 

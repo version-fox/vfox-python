@@ -4,6 +4,21 @@
 
 ## Unreleased
 
+- On Linux and macOS, `vfox install python@<version>` now installs a CPython
+  release from its prebuilt uv-build archive when the uv-build index lists it,
+  and builds from source only when the index does not. Set
+  `VFOX_PYTHON_USE_UV_BUILD=0` to keep building every CPython from source, or
+  `VFOX_PYTHON_USE_UV_BUILD=1` to use uv-build only. GraalPy, PyPy and Conda
+  installs are unchanged. `vfox search python` lists the pyenv names together
+  with the CPython releases only uv-build lists. Installs made before this
+  change are not touched. A `VFOX_PYTHON_MIRROR` setting keeps CPython on the
+  source path, unless `VFOX_PYTHON_UV_BUILD_MIRROR` is set too.
+- In the default mode on Linux and macOS, a partial name such as `python@3.12`
+  resolves in the uv-build index first, so it installs the newest 3.12 that has an
+  archive. An exact name still selects any release, including a newer pyenv patch
+  that the index does not list.
+- When the pyenv version index cannot be read, the error names the HTTP status
+  instead of failing with a Lua concatenation error.
 - A partial version such as `python@3.12` now selects a linked install named
   with `-opt`, such as `3.12.8-opt`, and `python@3.13t` selects a linked
   free-threaded install, such as `3.13.1t-uv`. The source suffix is no longer

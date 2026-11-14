@@ -64,6 +64,14 @@ unpacking. A mirror that serves different bytes fails the install with
 `Checksum error`, which is the intended behaviour: change the index or the
 mirror, do not bypass the check.
 
+On Linux and macOS, the default mode takes this mirror for every CPython version
+the index lists, when `VFOX_PYTHON_MIRROR` is not set. A `VFOX_PYTHON_MIRROR`
+setting keeps CPython on the python.org mirror and builds it from source, unless
+`VFOX_PYTHON_UV_BUILD_MIRROR` is set too. A source build still clones pyenv from
+GitHub, and neither mirror variable changes that clone. Set
+`VFOX_PYTHON_USE_UV_BUILD=0` to build from source, or `VFOX_PYTHON_USE_UV_BUILD=1`
+to use uv-build only.
+
 ## GraalPy
 
 Neither mirror variable applies to GraalPy. Every platform downloads Oracle's

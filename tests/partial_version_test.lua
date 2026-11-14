@@ -25,7 +25,8 @@ local reads = 0
 local plugin = test.load({
     os = "linux",
     arch = "amd64",
-    env = {},
+    -- The source-build path: the default would also read the uv-build index.
+    env = { VFOX_PYTHON_USE_UV_BUILD = "0" },
     http = function()
         reads = reads + 1
         local quoted = {}

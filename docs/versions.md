@@ -28,7 +28,9 @@ vfox use python@3.12           # newest installed 3.12.x
 ```
 
 A partial name resolves in both directions. `PreInstall` picks the newest stable
-release that the mode's version list names. `PreUse` picks the newest installed
+release that the mode's version list names; in the default mode on Linux and macOS
+it first picks the newest match in the uv-build index, and uses the list only when
+the index has none. `PreUse` picks the newest installed
 name that matches, and a bare name beats the same release with a source suffix
 such as `-system`. A plain request never picks a free-threaded (`t`) or
 pre-release name, so `python@3.13` is not `python@3.13t`.
@@ -42,9 +44,14 @@ selected by its full name.
 
 | Platform | Source | What is listed |
 | --- | --- | --- |
-| Linux, macOS | the plugin's pyenv index | every release pyenv knows, including CPython, GraalPy, PyPy and Conda |
+| Linux, macOS | the plugin's pyenv index; in the default mode also the uv-build index | every release pyenv knows, including CPython, GraalPy, PyPy and Conda; in the default mode also the CPython releases only uv-build lists |
 | Windows | the python.org download page and Oracle's GraalPy releases | stable CPython installers for the running architecture, plus GraalPy amd64 releases |
 | any, `VFOX_PYTHON_USE_UV_BUILD=1` | the uv-build index | CPython archives for the platform, architecture and libc |
+
+In the default mode on Linux and macOS, a CPython release that both lists name is
+listed once. The newest release comes first, and a final release comes before its
+pre-release and its free-threaded build. The source of each install is chosen by
+PreInstall, not by the list: see [uv.md](uv.md).
 
 On Windows the plugin reads the download page once and keeps only the exact
 installer name for the architecture: `python-<version>-amd64.exe`,
@@ -171,8 +178,9 @@ macOS it is a `.tar.gz`; on Windows it is a `graalpy*-windows-amd64.zip`.
 In uv-build mode, `display_version` wins when the index provides it; otherwise a
 `freethreaded` build gets the `t` suffix, so `3.13.1` with `variant =
 "freethreaded"` is `3.13.1t`. Only CPython builds with an HTTPS archive URL are
-listed. A GraalPy version is rejected with a message that asks you to unset
-`VFOX_PYTHON_USE_UV_BUILD`. See [uv.md](uv.md).
+listed. With `VFOX_PYTHON_USE_UV_BUILD=1`, a GraalPy version is rejected with a
+message that asks you to unset `VFOX_PYTHON_USE_UV_BUILD` or set it to `0`. See
+[uv.md](uv.md).
 
 A partial name such as `3.12` or `3.13t` resolves to the newest matching release
 in the index, and the install is recorded under the full name, such as `3.12.16`.

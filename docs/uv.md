@@ -13,18 +13,43 @@ There are two independent things called uv here:
 
 ## uv-build
 
-Set `VFOX_PYTHON_USE_UV_BUILD=1` before installing. A partial name resolves to
-the newest release in the uv-build index, so `python@3.12` installs the newest
-3.12 and `python@3.13t` the newest free-threaded 3.13:
+On Linux and macOS, a CPython install uses uv-build by default. The plugin
+installs the archive when the uv-build index lists the version, and builds from
+source with pyenv otherwise. A partial name resolves in the index first, so
+`python@3.12` installs the newest 3.12 that the index lists, and `python@3.13t` the
+newest free-threaded 3.13 that it lists. Only a line the index does not list
+resolves in the list that `vfox search python` shows, and is built from source:
 
 ```bash
-export VFOX_PYTHON_USE_UV_BUILD=1
 vfox install python@3.12
 ```
 
 This path needs none of the `apt` packages a source build needs, and no `sudo`.
-On Ubuntu, skip the apt step in [platforms.md](platforms.md#linux-build-dependencies)
-and install with this variable set.
+A source build still needs them; see
+[platforms.md](platforms.md#linux-build-dependencies).
+
+The index lists only some releases, normally the newest patch of each line. When
+pyenv lists a newer patch than the index, a partial name such as `python@3.12` still
+installs the newest patch the index lists. The newer patch builds from source only
+when its exact version is named.
+
+`VFOX_PYTHON_USE_UV_BUILD` selects the mode:
+
+- Unset: uv-build for a CPython release the index lists, and a source build for
+  any other CPython release. GraalPy, PyPy and Conda keep their own paths. When
+  `VFOX_PYTHON_MIRROR` is set and `VFOX_PYTHON_UV_BUILD_MIRROR` is not, CPython is
+  a source build from the python.org mirror, because uv-build downloads would come
+  from GitHub.
+- `0`, `false`, `no` or `off`: a source build on Linux and macOS.
+- `1`, `true`, `yes` or `on`: uv-build only. A version the index does not list is
+  an error.
+
+If the index cannot be read, the install fails and names
+`VFOX_PYTHON_USE_UV_BUILD=0`, so it never starts a source build without saying
+so. If the index has no archive for this version on this platform, such as an
+architecture it does not cover, the install builds from source and prints a line
+saying so. On Linux, if the libc cannot be detected, the install builds from
+source; set `VFOX_PYTHON_UV_LIBC` to use uv-build.
 
 The plugin asks `https://vault.vfox.dev/python/uv-build` for the builds of the
 running platform, architecture and libc, then hands vfox the archive URL and its
@@ -37,9 +62,10 @@ SHA-256. vfox downloads and verifies the archive, unpacks it, and calls
   installed and `pip.cmd`/`pip3.cmd` shims are created.
 
 Only CPython archives are listed. GraalPy and other implementations are not
-part of uv-build; `vfox install python@graalpy-24.2.0` with this mode enabled
-fails with a message asking you to unset `VFOX_PYTHON_USE_UV_BUILD`. The
-GraalPy install path is described in [GraalPy](graalpy.md). The plugin prefers,
+part of uv-build. With `VFOX_PYTHON_USE_UV_BUILD=1`, `vfox install
+python@graalpy-24.2.0` fails with a message asking you to unset the variable or
+set it to `0`. Without the variable, GraalPy installs from Oracle's archive, as
+described in [GraalPy](graalpy.md). The plugin prefers,
 in order:
 
 1. `install_only_stripped`
@@ -58,7 +84,7 @@ The request carries `os`, `arch` and, on Linux, `libc`:
 
 | Variable | Effect |
 | --- | --- |
-| `VFOX_PYTHON_USE_UV_BUILD` | `1`, `true`, `yes` or `on` switches to uv-build |
+| `VFOX_PYTHON_USE_UV_BUILD` | Unset: uv-build for CPython when the index lists the version, otherwise a source build. `0`, `false`, `no` or `off`: source build. `1`, `true`, `yes` or `on`: uv-build only |
 | `VFOX_PYTHON_UV_LIBC` | `gnu` or `musl`; overrides Linux detection |
 | `VFOX_PYTHON_UV_BUILD_MIRROR` | downloads the archives through a mirror |
 

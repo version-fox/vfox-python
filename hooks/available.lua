@@ -31,7 +31,11 @@ function PLUGIN:Available(ctx)
             print("Warning: Could not list GraalPy releases: " .. tostring(graalPy))
         end
         return result
-    else
-        return parseVersionFromPyenv()
     end
+
+    if uvBuildAutoEnabled() then
+        return parseVersionFromAuto()
+    end
+
+    return parseVersionFromPyenv()
 end

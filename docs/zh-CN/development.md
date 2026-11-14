@@ -54,8 +54,8 @@ vfox 加载 `metadata.lua`，命令需要时调用相应的钩子，并向钩子
 ### PreInstall
 
 返回 `version`、`url`、`headers`、`sha256` 和 `note`；vfox 下载 URL，有
-`sha256` 时校验，解压后按 `version` 命名。部分版本号（如 `3.12`）会先解析成 `Available({})` 里该模式最新的
-稳定版；精确版本号不会查列表。
+`sha256` 时校验，解压后按 `version` 命名。部分版本号（如 `3.12`）会先解析。在 Linux 和 macOS 的默认模式下，若 uv-build 索引里有匹配版本，
+就解析成它；否则（以及其他所有模式下）解析成 `Available({})` 里该模式最新的稳定版。精确版本号不会查列表。
 
 - `version = "latest"` 会解析成 `Available({})[1].version`。CPython 在列表最
   前面、从新到旧排列，所以可能是预发布版；GraalPy 要用完整版本名。
@@ -68,6 +68,10 @@ vfox 加载 `metadata.lua`，命令需要时调用相应的钩子，并向钩子
   使用前校验对应的 `.sha256`。
 - uv-build 模式返回索引里的包地址和校验和。地址必须是 HTTPS；校验和不可用时
   安装失败，而不是跳过校验。GraalPy 会被拒绝，因为索引里只有 CPython。
+- 默认模式（未设置 `VFOX_PYTHON_USE_UV_BUILD`，在 Linux 和 macOS 上，且未设置 `VFOX_PYTHON_MIRROR`，除非同时设置了 `VFOX_PYTHON_UV_BUILD_MIRROR`）只在索引里查 CPython 版本，
+  非 CPython 的名字从不在那里查找。索引列出该版本时，结果与 uv-build 模式相同。索引没有列出时，
+  PreInstall 会打印一行，并且不返回包，于是 vfox 运行 pyenv 源码构建。索引请求失败会报错，
+  错误信息里写明 `VFOX_PYTHON_USE_UV_BUILD=0`。检测不到 libc 时，使用源码构建。
 - `note = "uv-build"`、`"GraalPy"` 或 `"GraalPy Community"` 会显示在 vfox 里。
 
 ### PostInstall
@@ -83,8 +87,11 @@ vfox 加载 `metadata.lua`，命令需要时调用相应的钩子，并向钩子
 - GraalPy 压缩包已经由 vfox 解压；钩子在 `graalpy*-<平台>` 目录下找 payload，
   运行包里自带的 `ensurepip`。Unix 上修 shebang；Windows 上用
   `bin/python.exe` 运行，缺少启动器时创建 pip shim。
-- uv-build 模式下，包已经由 vfox 解压；钩子在 `path/python-<版本>` 下找
-  payload，Unix 上修 shebang，Windows 上确保 pip 可用。
+- uv-build 模式下，以及默认模式里 PreInstall 返回了归档的情况下，包已经由 vfox 解压。
+  PostInstall 在 PreInstall 设置的 `note` 为 `uv-build` 时走归档路径；vfox 会把 `note` 放进
+  `sdkInfo` 传给 PostInstall，所以 PostInstall 不会再问一次索引。如果安装目录里已经有 Python，
+  源码构建会停止：vfox 会清理失败或中断的安装目录，因此那个 Python 来自归档，直接覆盖会悄悄替换掉它。
+  钩子负责在 Unix 上修 shebang，在 Windows 上确保 pip 可用。
   `resolvePythonInstallPath` 处理 MSI、uv-build 和 GraalPy 三种布局。
 - uv-build 会拒绝 `ctx.rootPath` 之外的路径，避免错误的索引让钩子写到别处。
 - 除非 `VFOX_PYTHON_REGISTER_PY_LAUNCHER` 设为 `0`、`false`、`no` 或 `off`，钩子都会按
@@ -200,7 +207,7 @@ local versions = plugin:Available({})
 `%` junction、退出码传递和每条失败路径。
 
 E2E 套件在 `tests/e2e` 里，使用 Go 编写。Linux 包在 runner 上安装 CPython
-源码构建、镜像构建、uv-build 和 GraalPy，还会运行 `vfox link --detect` 和项目
+源码构建（`VFOX_PYTHON_USE_UV_BUILD=0`）、镜像构建、uv-build 和 GraalPy，还会运行 `vfox link --detect` 和项目
 的 `.python-version`。Windows 包安装 CPython 和 uv-build，安装带 PEP 514 注册的
 GraalPy，并检查 `.python-version`。两个包也在 Docker 容器里跑 GraalPy 检查：Linux 包通过
 testcontainers-go，Windows 包直接调用 `docker` 命令行，因为 testcontainers-go 会为每个容器
@@ -276,7 +283,7 @@ vfox 的全局变量，只关闭 `duplicate-set-field`（测试会有意替换 `
 | 变量 | 使用者 | 含义 |
 | --- | --- | --- |
 | `VFOX_PYTHON_MIRROR` | PreInstall、PostInstall | python.org 镜像；结尾没有 `/` 会自动补上 |
-| `VFOX_PYTHON_USE_UV_BUILD` | Available、PreInstall、PostInstall | 使用 uv-build 预编译包 |
+| `VFOX_PYTHON_USE_UV_BUILD` | Available、PreInstall、PostInstall | 未设置：在 Linux 和 macOS 上，索引列出的 CPython 版本用 uv-build；`0`、`false`、`no` 或 `off`：源码构建；`1`、`true`、`yes` 或 `on`：只用 uv-build |
 | `VFOX_PYTHON_UV_LIBC` | Available、PreInstall | 覆盖 `gnu` / `musl` 识别 |
 | `VFOX_PYTHON_UV_BUILD_MIRROR` | PreInstall | uv-build 包的 HTTPS 镜像 |
 | `VFOX_PYTHON_REGISTER_PY_LAUNCHER` | PostInstall、PreUninstall | 把 Windows 安装注册到 `HKCU\Software\Python\VersionFox`；默认开启，`0`、`false`、`no`、`off` 关闭 |

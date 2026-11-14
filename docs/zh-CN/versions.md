@@ -26,7 +26,7 @@ vfox install python@3.12.2     # 正好这个版本
 vfox use python@3.12           # 已安装的 3.12.x 里最新的
 ```
 
-部分版本号两边都会解析。`PreInstall` 选出版本列表里最新的稳定版；`PreUse` 选出已安装里
+部分版本号两边都会解析。`PreInstall` 选出版本列表里最新的稳定版；在 Linux 和 macOS 的默认模式下，它先选出 uv-build 索引里最新的匹配版本，索引里没有时才用版本列表；`PreUse` 选出已安装里
 最新的匹配项，同一版本时裸名字优先于带 `-system` 等来源后缀的名字。普通请求从不选自由线程
 （`t`）或预发布版，所以 `python@3.13` 不会选到 `python@3.13t`。
 
@@ -38,9 +38,12 @@ vfox use python@3.12           # 已安装的 3.12.x 里最新的
 
 | 平台 | 来源 | 列出什么 |
 | --- | --- | --- |
-| Linux、macOS | 插件里的 pyenv 索引 | pyenv 收录的全部版本，包括 CPython、GraalPy、PyPy 和 Conda |
+| Linux、macOS | 插件里的 pyenv 索引；默认模式下还包括 uv-build 索引 | pyenv 收录的全部版本，包括 CPython、GraalPy、PyPy 和 Conda；默认模式下还包括只有 uv-build 列出的 CPython 版本 |
 | Windows | python.org 下载页和 Oracle 的 GraalPy 发布 | 当前架构的稳定 CPython 安装包，以及 GraalPy 的 Windows amd64 版本 |
 | 任意平台，`VFOX_PYTHON_USE_UV_BUILD=1` | uv-build 索引 | 当前平台、架构和 libc 的 CPython 包 |
+
+在 Linux 和 macOS 的默认模式下，两个列表都列出的 CPython 版本只列一次。最新的版本排在最前面，
+正式版排在它的预发布版和自由线程构建之前。每个安装用哪种来源，由 PreInstall 决定，而不是由列表决定：见 [uv.md](uv.md)。
 
 Windows 上，插件只读一次下载页，然后按当前架构只留下安装包名完全匹配的条目：
 `python-<版本>-amd64.exe`，386 上是 `python-<版本>.exe`，arm64 上是
@@ -146,7 +149,7 @@ SHA-256 后解压。Linux 和 macOS 上是 `.tar.gz`，Windows 上是
 
 uv-build 模式下，索引提供 `display_version` 时用它；否则 `freethreaded`
 构建会加 `t`，也就是 `3.13.1` 配 `variant = "freethreaded"` 时叫 `3.13.1t`。
-列表里只保留有 HTTPS 包地址的 CPython 构建。GraalPy 版本会被拒绝，并提示取消
-`VFOX_PYTHON_USE_UV_BUILD`。详见 [uv.md](uv.md)。
+列表里只保留有 HTTPS 包地址的 CPython 构建。设置 `VFOX_PYTHON_USE_UV_BUILD=1` 时，
+GraalPy 版本会被拒绝，并提示取消 `VFOX_PYTHON_USE_UV_BUILD` 或把它设为 `0`。详见 [uv.md](uv.md)。
 
 部分版本号（如 `3.12`、`3.13t`）会解析为索引里最新的匹配版本，安装记录的是完整版本名（如 `3.12.16`）。
