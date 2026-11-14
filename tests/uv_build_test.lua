@@ -102,11 +102,16 @@ local plugin = test.load({
     end,
 })
 
+-- A transient failure is sent again after a pause. os.execute is disabled in plugin
+-- tests, so the pause is replaced here; index_retry_test.lua checks the retries.
+pauseBeforeIndexRetry = function() end
+
 local available = plugin:Available({})
 assert(#available == 3, tostring(#available))
-assert(available[1].version == "3.12.8", available[1].version)
-assert(available[2].version == "3.13.1t", available[2].version)
--- The invalid checksum is rejected by PreInstall, not hidden from the list.
+-- The list is newest first whatever order the index returns: 3.13.1 free-threaded is
+-- newer than 3.12.8. The invalid checksum is rejected by PreInstall, not hidden here.
+assert(available[1].version == "3.13.1t", available[1].version)
+assert(available[2].version == "3.12.8", available[2].version)
 assert(available[3].version == "3.11.11", available[3].version)
 
 local package = plugin:PreInstall({ version = "3.12.8" })
@@ -119,6 +124,7 @@ assert(
 )
 assert(package.sha256 == string.rep("b", 64), tostring(package.sha256))
 
+-- latest skips the free-threaded 3.13.1t: it is newer, but is installed only when named.
 local latest = plugin:PreInstall({ version = "latest" })
 assert(latest.version == "3.12.8", latest.version)
 
@@ -184,5 +190,6 @@ local ok, err = pcall(function()
     plugin:Available({})
 end)
 assert(not ok and tostring(err):find("503", 1, true), tostring(err))
+assert(tostring(err):find("after 3 attempts", 1, true), tostring(err))
 
 print("PASS: uv-build listing, archive priority, checksum and mirror")

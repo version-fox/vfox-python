@@ -33,8 +33,8 @@ import (
 
 // TestContainerE2E builds tests/e2e/linux/Dockerfile once and runs each
 // scenario in its own Ubuntu container. The image holds only the tools the
-// Dockerfile installs and no build packages, so the uv-build subtest proves
-// that uv-build needs no apt install. The assertions stay in Go.
+// Dockerfile installs and no build packages, so the default-install subtest
+// proves that a CPython install needs no apt install. The assertions stay in Go.
 func TestContainerE2E(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skip container E2E in short mode")
@@ -52,17 +52,17 @@ func TestContainerE2E(t *testing.T) {
 	}
 	uvVersion := common.NewestUvBuildVersion(t)
 
-	t.Run("uv-build without build packages", func(t *testing.T) {
+	t.Run("default install without build packages", func(t *testing.T) {
 		ctr := startContainer(t, ctx, image, plugin)
 		output := execOK(t, ctx, ctr, `
 set -euo pipefail
 eval "$(vfox activate bash)"
-VFOX_PYTHON_USE_UV_BUILD=1 vfox install "python@$UV_MINOR"
-vfox use -g "python@$UV_MINOR"
+vfox install "python@$UV_VERSION"
+vfox use -g "python@$UV_VERSION"
 eval "$(vfox env -s bash)"
 python -c 'import ssl, sqlite3, bz2, lzma, ctypes, readline, curses, zlib, hashlib, sys; print("stdlib ok", sys.version.split()[0])'
 python -m pip --version
-`, "UV_MINOR="+common.MinorVersion(uvVersion))
+`, "UV_VERSION="+uvVersion)
 		common.RequireContains(t, output, "stdlib ok "+uvVersion, "uv-build stdlib without build packages")
 		common.RequireContains(t, output, "pip", "uv-build pip")
 	})

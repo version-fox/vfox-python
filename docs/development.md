@@ -25,6 +25,7 @@ tests/windows_install_layouts.lua  the Windows command paths, with stubbed proce
 tests/e2e/                      Go end-to-end suites for Linux and Windows; see e2e.md
 tests/fixtures/                 .python-version files used by the legacy-file test
 .github/workflows/              test, lint, license, e2e and publish
+.github/scripts/                the docs parity check
 docs/, docs/zh-CN/              documentation in English and Chinese
 Injection.lua                   type hints for what vfox injects, never loaded
 stylua.toml, .luarc.json        Lua formatter and language-server settings
@@ -56,13 +57,16 @@ for the older hooks; the newer modules (`python_version`, `detect_python`,
 
 It returns `version`, `url`, `headers`, `sha256` and `note`; vfox downloads the
 URL, verifies `sha256` when present, unpacks the archive and names the install
-after `version`. A partial version such as `3.12` is resolved first, to the newest
-stable release that `Available({})` names for this mode; an exact version is not
+after `version`. A partial version such as `3.12` is resolved first. In the default
+mode on Linux and macOS it resolves to the newest match in the uv-build index when
+the index has one; otherwise, and in every other mode, it resolves to the newest
+stable release that `Available({})` names for this mode. An exact version is not
 looked up.
 
-- `version = "latest"` is resolved to `Available({})[1].version`. The list is
-  newest CPython first, so this can be a pre-release; GraalPy is selected by
-  its full name.
+- `version = "latest"` is resolved to the first entry of `Available({})` that is
+  not a free-threaded build. The list is newest CPython first, so this can be a
+  pre-release; a free-threaded build is installed only when its name asks for it,
+  and GraalPy is selected by its full name.
 - On Windows, `Available` lists only the exact installer names on the download
   page. PreInstall still sends a HEAD request for the EXE and then for the MSI,
   and stops before any download when neither answers 200, with `Python <version>
@@ -76,6 +80,25 @@ looked up.
   archive must be HTTPS; an unusable checksum fails the install instead of
   skipping verification. A GraalPy version is rejected because the index
   contains CPython only.
+- The default mode (no `VFOX_PYTHON_USE_UV_BUILD`, Linux and macOS, and no
+  `VFOX_PYTHON_MIRROR` unless `VFOX_PYTHON_UV_BUILD_MIRROR` is set) checks the
+  index for a CPython version only; a non-CPython name is never looked up there.
+  When the index lists the version, the result is the same as uv-build mode. When
+  it does not, PreInstall prints a line and returns no archive, so vfox runs the
+  pyenv source build. A failed index request is retried (see below); an index that
+  still fails is an error that names `VFOX_PYTHON_USE_UV_BUILD=0`. When no libc can be
+  detected, the source build is used.
+- Index requests go through `readIndex` in `lib/util.lua`. A request is sent again on
+  a transport error, HTTP 429, a 5xx, or a 200 whose body is not JSON with the list the
+  caller reads, since a proxy or a captive portal can answer that way. There are three
+  attempts in all. Before a retry the plugin waits for the `Retry-After` seconds when
+  the header is present and at most ten; otherwise for one second, then two. A longer
+  `Retry-After` fails at once, and the error names the wait. An HTTP-date `Retry-After`
+  is not read. Other statuses are returned to the caller as they are. The uv-build
+  index and the pyenv index both use it. `pauseBeforeIndexRetry` runs `sleep`, or
+  PowerShell on Windows, through `os.execute`, which plugin tests disable. The tests
+  that make an index fail replace it, and `tests/index_retry_test.lua` checks both
+  commands.
 - `note = "uv-build"`, `"GraalPy"` or `"GraalPy Community"` is shown by vfox.
 
 ### PostInstall
@@ -93,10 +116,14 @@ directory (`path`) and name (`version`).
   under its `graalpy*-<platform>` directory and runs the bundled `ensurepip`.
   On Unix it repairs shebangs; on Windows it runs `bin/python.exe` and creates
   pip shims if the launchers are missing.
-- In uv-build mode, the archive has already been unpacked by vfox; the hook
-  finds the payload under `path/python-<version>`, repairs shebangs on Unix and
-  ensures pip on Windows. `resolvePythonInstallPath` handles the MSI, uv-build
-  and GraalPy layouts.
+- In uv-build mode, and in the default mode when PreInstall returned an archive,
+  vfox has already unpacked the archive. PostInstall takes the archive path when
+  the note that PreInstall set is `uv-build`; vfox passes the note on in `sdkInfo`,
+  so PostInstall does not ask the index again. A source build stops if a Python
+  already sits in the install path: vfox clears the directory of a failed or
+  interrupted install, so that Python came from an archive, and building over it
+  would replace it silently. The hook repairs shebangs on Unix and ensures pip on
+  Windows. `resolvePythonInstallPath` handles the MSI, uv-build and GraalPy layouts.
 - Paths outside `ctx.rootPath` are rejected for uv-build, so a malformed index
   cannot make the hook write elsewhere.
 - Unless `VFOX_PYTHON_REGISTER_PY_LAUNCHER` is `0`, `false`, `no` or `off`, the
@@ -241,7 +268,7 @@ It checks native argument encoding, MSI target quoting, the `%` junction,
 exit-code propagation and every failure path.
 
 The E2E suite lives in `tests/e2e` and is written in Go. The Linux package
-installs CPython from source, through the mirror, through uv-build and GraalPy,
+installs CPython from source (`VFOX_PYTHON_USE_UV_BUILD=0`), through the mirror, through uv-build and GraalPy,
 and also runs `vfox link --detect` and a project `.python-version` on the
 runner. The Windows package installs CPython and uv-build, installs GraalPy
 with PEP 514 registration, and checks `.python-version`. Both packages also
@@ -274,6 +301,8 @@ VFOX_SKIP_CONTAINER_E2E=1 go test -v ./linux
 | Hook tests | `vfox plugin test .` on Linux and Windows | `test.yml` |
 | Windows command paths | GopherLua | `test.yml` |
 | Native and container E2E | Go tests on Linux and Windows | `e2e.yml` |
+| Index retry waits | `vfox search` through a closed proxy, on Windows | `test.yml` |
+| Docs in English and Chinese | `.github/scripts/check_docs_parity.py` | `lint.yml` |
 
 `stylua.toml` uses four spaces, a 120-column limit and Unix line endings;
 `.gitattributes` keeps checkouts LF so the check agrees with Windows. LuaLS
@@ -290,8 +319,14 @@ is missing.
 - `test.yml` runs the offline tests on `ubuntu-latest` and `windows-latest` with
   vfox 1.1.0 (checksum-pinned), the GopherLua layouts on Linux, and a real
   install of CPython 3.14.5 through the EXE installer on Windows, with paths full
-  of spaces and shell characters, driven by the released vfox 1.0.12.
-- `lint.yml` runs StyLua, LuaLS and actionlint.
+  of spaces and shell characters, driven by the released vfox 1.0.12. On Windows it
+  also searches through a closed proxy with `VFOX_PYTHON_USE_UV_BUILD=1`, and checks
+  that the index retries wait and then fail after three attempts.
+- `lint.yml` runs StyLua, LuaLS and actionlint. Its `docs` job runs
+  `.github/scripts/check_docs_parity.py`. That check compares the structure of the
+  Chinese pages with the English ones, not their sentences: page pairs, `VFOX_*`
+  names, code block counts and relative links. Translation quality still needs a
+  reader.
 - `license.yml` runs the header check.
 - `e2e.yml` builds and installs real Pythons on Linux and Windows, including a
   mirror, uv-build and GraalPy, plus the Windows PEP 514 check.
@@ -326,7 +361,7 @@ updating that tool does not release this plugin.
 | Variable | Used by | Meaning |
 | --- | --- | --- |
 | `VFOX_PYTHON_MIRROR` | PreInstall, PostInstall | python.org mirror; a trailing `/` is added |
-| `VFOX_PYTHON_USE_UV_BUILD` | Available, PreInstall, PostInstall | use uv-build archives |
+| `VFOX_PYTHON_USE_UV_BUILD` | Available, PreInstall, PostInstall | unset: uv-build for a CPython version the index lists, on Linux and macOS; `0`, `false`, `no` or `off`: source build; `1`, `true`, `yes` or `on`: uv-build only |
 | `VFOX_PYTHON_UV_LIBC` | Available, PreInstall | `gnu` or `musl` override |
 | `VFOX_PYTHON_UV_BUILD_MIRROR` | PreInstall | HTTPS mirror for uv-build archives |
 | `VFOX_PYTHON_REGISTER_PY_LAUNCHER` | PostInstall, PreUninstall | register Windows installs under `HKCU\Software\Python\VersionFox`; on by default, `0`, `false`, `no` or `off` disables |

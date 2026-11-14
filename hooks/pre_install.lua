@@ -15,13 +15,23 @@
 require("util")
 local python_version = require("python_version")
 
---- Resolves a partial request such as "3.12" to the newest stable release that
---- the version list for this mode names. An exact request is returned without
---- reading the list. A partial request that matches nothing is returned as it
---- is, so the install reports the request the user typed.
+--- Resolves a partial request such as "3.12" to a release. In the default mode on
+--- Linux and macOS the uv-build index is searched first, so the newest release it
+--- lists on that line is installed as an archive. Only a line the index does not
+--- list falls back to the list Available returns, and is then built from source.
+--- An exact request is returned without reading any list. A partial request that
+--- matches nothing is returned as it is, so the install reports the request the
+--- user typed.
 local function resolvePartialVersion(plugin, requested)
     if not python_version.is_partial(requested) then
         return requested
+    end
+    if uvBuildAutoEnabled() then
+        local indexNames = uvBuildAutoVersionSet()
+        local match = indexNames and python_version.find_release(indexNames, requested)
+        if match then
+            return match
+        end
     end
     local names = {}
     for _, item in ipairs(plugin:Available({})) do
@@ -30,18 +40,30 @@ local function resolvePartialVersion(plugin, requested)
     return python_version.find_release(names, requested) or requested
 end
 
+--- The version `latest` installs: the first entry of the list that is not a
+--- free-threaded build. The list is newest first, and a free-threaded build is
+--- installed only when a request names it.
+local function latestVersion(list)
+    for _, item in ipairs(list) do
+        if not python_version.is_free_threaded(item.version) then
+            return item.version
+        end
+    end
+    error("No standard CPython release is listed, so latest has nothing to install. Name a version instead.")
+end
+
 function PLUGIN:PreInstall(ctx)
     local version = ctx.version
 
     if version == "latest" then
-        version = self:Available({})[1].version
+        version = latestVersion(self:Available({}))
     end
     version = resolvePartialVersion(self, version)
 
     if useUvBuild() then
         if isGraalPyVersion(version) then
             error(
-                "uv-build provides CPython only; unset VFOX_PYTHON_USE_UV_BUILD to install "
+                "uv-build provides CPython only; unset VFOX_PYTHON_USE_UV_BUILD (or set it to 0) to install "
                     .. version
                     .. " from pyenv or Oracle's GraalPy releases."
             )
@@ -58,6 +80,15 @@ function PLUGIN:PreInstall(ctx)
         end
         -- On Linux and macOS the legacy graalpython-* names still go through
         -- pyenv's python-build definition.
+    end
+
+    -- Linux and macOS by default: a CPython release that the uv-build index lists
+    -- is installed from its archive, and any other release is built from source.
+    if uvBuildAutoEnabled() and string.match(version, "^%d") then
+        local package = uvBuildAutoPreInstall(version)
+        if package ~= nil then
+            return package
+        end
     end
 
     if OS_TYPE == "windows" and not checkIsReleaseVersion(version) then

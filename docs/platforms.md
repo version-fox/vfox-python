@@ -4,14 +4,17 @@
 
 ## What is installed
 
-| Platform | Default | `VFOX_PYTHON_USE_UV_BUILD=1` |
-| --- | --- | --- |
-| Linux x86_64 | source build with pyenv for CPython; Oracle archive for GraalPy | prebuilt uv-build archive |
-| Linux arm64 | source build with pyenv for CPython; Oracle archive for GraalPy | prebuilt uv-build archive |
-| Linux armv7 | source build with pyenv for CPython; no GraalPy build | prebuilt uv-build archive when available |
-| Linux musl / Alpine | source build with pyenv | prebuilt musl archive |
-| macOS Intel and Apple silicon | source build with pyenv for CPython; Oracle archive for GraalPy | prebuilt uv-build archive |
-| Windows x86_64, arm64, 386 | python.org EXE or MSI for CPython; GraalPy amd64 zip | prebuilt uv-build archive |
+| Platform | Default | `VFOX_PYTHON_USE_UV_BUILD=0` | `VFOX_PYTHON_USE_UV_BUILD=1` |
+| --- | --- | --- | --- |
+| Linux x86_64 | prebuilt uv-build archive for CPython when the index lists the version, otherwise a source build with pyenv; Oracle archive for GraalPy | source build with pyenv for CPython; Oracle archive for GraalPy | prebuilt uv-build archive |
+| Linux arm64 | same as Linux x86_64 | same as Linux x86_64 | prebuilt uv-build archive |
+| Linux armv7 | same as Linux x86_64, with no GraalPy build | source build with pyenv; no GraalPy build | prebuilt uv-build archive when available |
+| Linux musl / Alpine | prebuilt musl archive when the index lists the version, otherwise a source build with pyenv | source build with pyenv | prebuilt musl archive |
+| macOS Intel and Apple silicon | same as Linux x86_64 | source build with pyenv for CPython; Oracle archive for GraalPy | prebuilt uv-build archive |
+| Windows x86_64, arm64, 386 | python.org EXE or MSI for CPython; GraalPy amd64 zip | python.org EXE or MSI for CPython; GraalPy amd64 zip | prebuilt uv-build archive |
+
+In the default mode, a `VFOX_PYTHON_MIRROR` setting keeps CPython on the source
+path, unless `VFOX_PYTHON_UV_BUILD_MIRROR` is also set.
 
 The CPython source build takes the pyenv tag and version list, clones pyenv at
 that tag, and runs its `python-build`. It needs a C toolchain and the headers
@@ -36,7 +39,9 @@ amd64.
   filename; use uv-build for a pre-release on Windows.
 - **uv-build:** CPython archives that the index has for the platform,
   architecture and libc, including `freethreaded` builds. GraalPy is not
-  available in this mode.
+  available in this mode. In the default mode on Linux and macOS, `vfox search
+  python` lists the pyenv names together with these CPython releases; a version
+  the index lacks is built from source.
 
 A free-threaded release is selected with the same `t` suffix on every source:
 
@@ -47,26 +52,28 @@ VFOX_PYTHON_USE_UV_BUILD=1 vfox install python@3.13t
 
 A partial name resolves in each mode: `python@3.13t` is the newest free-threaded
 3.13 release that the mode lists, and a plain `python@3.13` never picks a
-free-threaded build.
+free-threaded build. In the default mode on Linux and macOS, the uv-build index is
+searched first; see [uv.md](uv.md).
 
 Windows free-threaded releases come through uv-build; the stable installer list
 does not include the `t` builds.
 
 ## Linux build dependencies
 
-Only a **source build** needs the packages in this section, and a source build
-is the default for CPython on Linux. Two other paths need none of them:
+Only a **source build** needs the packages in this section. A CPython install
+from uv-build needs none of them, and uv-build is the default for a version the
+index lists:
 
 | What you install | Needs these packages? |
 | --- | --- |
-| CPython, source build (default) | yes |
-| CPython, with `VFOX_PYTHON_USE_UV_BUILD=1` | no |
+| CPython, source build (a version the index lacks, or `VFOX_PYTHON_USE_UV_BUILD=0`) | yes |
+| CPython, uv-build (the default for a listed version, or `VFOX_PYTHON_USE_UV_BUILD=1`) | no |
 | GraalPy | no |
 
 uv-build downloads a prebuilt CPython archive and GraalPy is an Oracle archive,
-so neither runs a compiler. The Linux container suite checks the uv-build case:
+so neither runs a compiler. The Linux container suite checks the default case:
 it starts an Ubuntu 24.04 image with no compiler and no `-dev` packages,
-installs a uv-build CPython, and imports `ssl`, `sqlite3`, `bz2`, `lzma`,
+installs a CPython from the uv-build index, and imports `ssl`, `sqlite3`, `bz2`, `lzma`,
 `ctypes`, `readline`, `curses`, `zlib` and `hashlib`.
 
 On Ubuntu, the source build needs these packages:
@@ -84,15 +91,17 @@ builds no `zlib` module, and `make install` then fails in ensurepip: pip is
 installed from a wheel, which is a zip archive and needs zlib to be read
 (`No module named 'zlib'`).
 
-To avoid that step on Ubuntu, use uv-build. It needs no `sudo` and no `apt`:
+To avoid that step on Ubuntu, install a version the uv-build index lists. It
+needs no `sudo` and no `apt`, and it is the default on Linux:
 
 ```bash
-export VFOX_PYTHON_USE_UV_BUILD=1
-vfox install python@3.12
+vfox install python@3.12.16
+vfox use -g python@3.12.16
 ```
 
-`python@3.12` installs the newest 3.12 release in the uv-build index, and
-`vfox use -g python@3.12` selects it.
+A partial name such as `python@3.12` picks the newest 3.12 that the uv-build index
+lists, and installs its archive. A newer pyenv patch that the index does not list is
+built from source, and only its exact name selects it.
 
 Fedora and RHEL, for a source build:
 
@@ -217,7 +226,9 @@ https://vault.vfox.dev/python/uv-build?os=<linux|windows|darwin>&arch=<x86_64|aa
 
 On Linux, libc is detected unless `VFOX_PYTHON_UV_LIBC` is set. Windows and
 macOS do not send `libc`. A platform without an archive fails before vfox
-downloads anything. See [uv.md](uv.md) for archive selection and checksums.
+downloads anything with `VFOX_PYTHON_USE_UV_BUILD=1`; in the default mode, the
+install builds from source instead. See [uv.md](uv.md) for archive selection and
+checksums.
 
 ## Time and disk
 
@@ -227,8 +238,9 @@ A GraalPy install is a download and unpack: about 150 MB on Linux and 600 MB on
 Windows.
 
 The E2E suites in `tests/e2e` cover these paths. On Linux the runner installs a
-source build, a mirror build, uv-build (by its minor version), GraalPy and
-`vfox link`, and a bare Ubuntu container installs uv-build and GraalPy. On Windows
+source build (`VFOX_PYTHON_USE_UV_BUILD=0`), a mirror build, uv-build (by its
+minor version), GraalPy and `vfox link`, and a bare Ubuntu container installs a
+CPython with the default settings, and GraalPy. On Windows
 the runner installs the EXE installer, the MSI-only 3.4.4, a mirror build, uv-build
 and GraalPy, and a Server Core container installs GraalPy.
 

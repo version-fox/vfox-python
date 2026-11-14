@@ -13,7 +13,7 @@ in Docker containers. `.github/workflows/e2e.yml` only installs Go and runs
 | --- | --- |
 | `common/` | builds the plugin zip, installs vfox 1.1.0, runs host commands, reads the uv-build index, asserts |
 | `linux/e2e_test.go` | `TestNativeE2E`: source build, mirror, uv-build, GraalPy, `vfox link --detect`, `.python-version` |
-| `linux/container_test.go` | `TestContainerE2E`: a bare Ubuntu 24.04 container for uv-build, and one for each GraalPy release |
+| `linux/container_test.go` | `TestContainerE2E`: a bare Ubuntu 24.04 container for the default install, and one for each GraalPy release |
 | `linux/Dockerfile` | Ubuntu 24.04 with `ca-certificates`, `curl`, `tar`, `xz-utils` and `zip`; no compiler and no `-dev` packages |
 | `windows/e2e_test.go` | `TestNativeE2E`: python.org EXE installer, mirror, uv-build, GraalPy with launcher registration, `.python-version` |
 | `windows/container_test.go` | `TestContainerE2E`: a Server Core container, driven by the docker CLI, with PowerShell 7, the Visual C++ runtime and vfox, GraalPy |
@@ -26,8 +26,8 @@ into the container and drive every step from there.
 
 Linux, on the runner:
 
-- `source build`: CPython 3.12.2 built from source.
-- `mirror`: CPython 3.12.1 from the huaweicloud mirror.
+- `source build`: CPython 3.12.2 built from source, with `VFOX_PYTHON_USE_UV_BUILD=0`.
+- `mirror`: CPython 3.12.1 built from source through the huaweicloud mirror, with `VFOX_PYTHON_USE_UV_BUILD=0`.
 - `uv-build`: `python@3.11` installs the newest CPython 3.11 uv-build archive, `vfox use` selects it, and the check reads the full version and pip.
 - `graalpy`: GraalPy 24.2.0, asserted by implementation name.
 - `link`: `vfox link --detect python` adopts an installed Python, and `vfox list` shows it as linked.
@@ -35,7 +35,7 @@ Linux, on the runner:
 
 Linux, in containers:
 
-- `uv-build without build packages`: the uv-build CPython imports `ssl`, `sqlite3`, `bz2`, `lzma`, `ctypes`, `readline`, `curses`, `zlib` and `hashlib`, and pip runs. This is the check behind the answer in [platforms.md](platforms.md#linux-build-dependencies): uv-build needs no apt packages.
+- `default install without build packages`: `vfox install` of the exact CPython version that the uv-build index lists, with the default settings, takes the uv-build archive. The installed CPython imports `ssl`, `sqlite3`, `bz2`, `lzma`, `ctypes`, `readline`, `curses`, `zlib` and `hashlib`, and pip runs. This is the check behind the answer in [platforms.md](platforms.md#linux-build-dependencies): a uv-build install needs no apt packages.
 - `graalpy-24.2.0` and `graalpy-community-24.2.0`: GraalPy installs and runs with pip, and a `.python-version` selects the uv-build CPython over the global GraalPy.
 
 Windows, on the runner:

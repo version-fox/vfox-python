@@ -12,7 +12,7 @@
 | --- | --- |
 | `common/` | 构建插件 zip、安装 vfox 1.1.0、运行主机命令、读取 uv-build 索引、断言 |
 | `linux/e2e_test.go` | `TestNativeE2E`：源码构建、镜像、uv-build、GraalPy、`vfox link --detect`、`.python-version` |
-| `linux/container_test.go` | `TestContainerE2E`：一个没有构建包的 Ubuntu 24.04 容器跑 uv-build，每个 GraalPy 版本各一个容器 |
+| `linux/container_test.go` | `TestContainerE2E`：一个没有构建包的 Ubuntu 24.04 容器跑默认安装，每个 GraalPy 版本各一个容器 |
 | `linux/Dockerfile` | Ubuntu 24.04，只装 `ca-certificates`、`curl`、`tar`、`xz-utils` 和 `zip`；没有编译器，也没有 `-dev` 包 |
 | `windows/e2e_test.go` | `TestNativeE2E`：python.org EXE 安装包、镜像、uv-build、带启动器注册的 GraalPy、`.python-version` |
 | `windows/container_test.go` | `TestContainerE2E`：由 docker 命令行驱动的 Server Core 容器，装有 PowerShell 7、Visual C++ 运行时和 vfox，跑 GraalPy |
@@ -24,8 +24,8 @@ Dockerfile 只负责准备环境。Go 测试把插件复制进容器，然后在
 
 Linux，在 runner 上：
 
-- `source build`：从源码构建 CPython 3.12.2。
-- `mirror`：从华为云镜像安装 CPython 3.12.1。
+- `source build`：从源码构建 CPython 3.12.2，设置 `VFOX_PYTHON_USE_UV_BUILD=0`。
+- `mirror`：通过华为云镜像从源码构建 CPython 3.12.1，设置 `VFOX_PYTHON_USE_UV_BUILD=0`。
 - `uv-build`：`python@3.11` 安装最新的 CPython 3.11 uv-build 包，`vfox use` 选中它，检查完整版本号和 pip。
 - `graalpy`：GraalPy 24.2.0，按实现名断言。
 - `link`：`vfox link --detect python` 纳入已安装的 Python，`vfox list` 显示为已链接。
@@ -34,9 +34,9 @@ Linux，在 runner 上：
 
 Linux，在容器里：
 
-- `uv-build without build packages`：uv-build 的 CPython 能导入 `ssl`、`sqlite3`、`bz2`、
-  `lzma`、`ctypes`、`readline`、`curses`、`zlib` 和 `hashlib`，pip 也能运行。这是
-  [平台](platforms.md#linux-构建依赖) 里“uv-build 不需要 apt 包”这一说法的依据。
+- `default install without build packages`：用默认设置对 uv-build 索引列出的某个 CPython 精确版本执行 `vfox install`，会使用 uv-build 包。
+  安装好的 CPython 能导入 `ssl`、`sqlite3`、`bz2`、`lzma`、`ctypes`、`readline`、`curses`、`zlib` 和 `hashlib`，pip 也能运行。这是
+  [平台](platforms.md#linux-构建依赖) 里“uv-build 安装不需要 apt 包”这一说法的依据。
 - `graalpy-24.2.0` 和 `graalpy-community-24.2.0`：GraalPy 能安装并运行、pip 可用，并且
   `.python-version` 能让 uv-build 的 CPython 优先于全局的 GraalPy。
 

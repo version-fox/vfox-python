@@ -11,16 +11,33 @@
 
 ## uv-build
 
-安装前设置 `VFOX_PYTHON_USE_UV_BUILD=1`。部分版本号会解析成 uv-build 索引里最新的对应版本，
-所以 `python@3.12` 装的是最新的 3.12，`python@3.13t` 装的是最新的 3.13 自由线程版本：
+在 Linux 和 macOS 上，CPython 默认使用 uv-build：索引列出该版本时，插件安装它的预编译包；
+否则用 pyenv 从源码编译。部分版本号先在索引里解析，所以 `python@3.12` 装的是索引列出的最新 3.12，
+`python@3.13t` 装的是索引列出的最新 3.13 自由线程版本。只有索引没有列出的版本系列，才会改用
+`vfox search python` 列出的列表，并从源码编译：
 
 ```bash
-export VFOX_PYTHON_USE_UV_BUILD=1
 vfox install python@3.12
 ```
 
-这条路径不需要源码构建所需的任何 `apt` 包，也不需要 `sudo`。在 Ubuntu 上，跳过
-[平台](platforms.md#linux-构建依赖) 里的 apt 步骤，设置这个变量后直接安装即可。
+这条路径不需要源码构建所需的任何 `apt` 包，也不需要 `sudo`。源码构建仍然需要它们，
+见 [平台](platforms.md#linux-构建依赖)。
+
+索引只列出部分版本，通常是每个版本线的最新补丁版。pyenv 列出的补丁版比索引新时，`python@3.12` 仍然安装索引列出的最新补丁版；较新的补丁版只有写出精确版本号时才会从源码编译。
+
+`latest` 不在索引里解析：它仍是列表里最新的常规版本（跳过自由线程版）。pyenv 列出的版本比索引新时，它会从源码编译。
+
+`VFOX_PYTHON_USE_UV_BUILD` 决定使用哪种模式：
+
+- 未设置：索引列出的 CPython 版本用 uv-build，其他 CPython 版本用源码构建；GraalPy、PyPy 和 Conda 保持各自的路径。当设置了 `VFOX_PYTHON_MIRROR`
+  且未设置 `VFOX_PYTHON_UV_BUILD_MIRROR` 时，CPython 是经 python.org 镜像的源码构建，
+  因为 uv-build 的下载会来自 GitHub。
+- `0`、`false`、`no` 或 `off`：在 Linux 和 macOS 上源码构建。
+- `1`、`true`、`yes` 或 `on`：只用 uv-build。索引里没有列出的版本会报错。
+
+索引请求遇到网络错误、HTTP 429 或 5xx 状态码，或者 200 响应里不是索引（比如强制门户的页面）时会重发，总共最多三次。重试前，如果服务器返回了 `Retry-After` 头且不超过 10 秒，就等待它指定的秒数；否则依次等待 1 秒和 2 秒。超过 10 秒的 `Retry-After` 不等待：请求立即失败，错误信息里写明服务器要求的等待时间。HTTP 日期格式的 `Retry-After` 不会被读取。其他状态码（如 404）不重试。重试后仍无法读取索引，安装会失败，并提示 `VFOX_PYTHON_USE_UV_BUILD=0`，因此不会在没有说明的情况下开始源码构建。
+
+如果索引在该平台上没有这个版本的包（比如索引不覆盖某个架构），安装会改为源码构建，并打印一行说明。在 Linux 上，如果无法识别 libc，安装会从源码构建；要使用 uv-build，请设置 `VFOX_PYTHON_UV_LIBC`。
 
 插件向 `https://vault.vfox.dev/python/uv-build` 询问当前平台、架构和 libc 的
 构建，然后把包地址和 SHA-256 交给 vfox。vfox 下载、校验、解压，再调用
@@ -30,10 +47,12 @@ vfox install python@3.12
 - Windows 上，如果包里带了 `ensurepip` 却没有 pip 命令，会安装 pip，并生成
   `pip.cmd`、`pip3.cmd` 两个 shim。
 
-列表里只有 CPython 的包。GraalPy 和其他实现不在 uv-build 里；在这个模式下
-执行 `vfox install python@graalpy-24.2.0` 会失败，并提示取消
-`VFOX_PYTHON_USE_UV_BUILD`。GraalPy 的安装路径见 [GraalPy](graalpy.md)。插件按
-这个顺序优先：
+归档由 vfox 下载，不由插件下载。vfox 1.1.0 没有下载重试的设置，插件也无法重试下载，所以下载失败时请重新运行安装。上面描述的重试只作用于索引请求。
+
+列表里只有 CPython 的包。GraalPy 和其他实现不在 uv-build 里。设置
+`VFOX_PYTHON_USE_UV_BUILD=1` 时，执行 `vfox install python@graalpy-24.2.0` 会失败，
+并提示取消该变量或把它设为 `0`。不设置该变量时，GraalPy 从 Oracle 的压缩包安装，
+见 [GraalPy](graalpy.md)。插件按这个顺序优先：
 
 1. `install_only_stripped`
 2. `install_only`
@@ -50,7 +69,7 @@ vfox install python@3.12
 
 | 变量 | 作用 |
 | --- | --- |
-| `VFOX_PYTHON_USE_UV_BUILD` | `1`、`true`、`yes` 或 `on` 时改用 uv-build |
+| `VFOX_PYTHON_USE_UV_BUILD` | 未设置：索引列出该 CPython 版本时用 uv-build，否则源码构建。`0`、`false`、`no` 或 `off`：源码构建。`1`、`true`、`yes` 或 `on`：只用 uv-build |
 | `VFOX_PYTHON_UV_LIBC` | `gnu` 或 `musl`，覆盖 Linux 的识别结果 |
 | `VFOX_PYTHON_UV_BUILD_MIRROR` | 让预编译包走镜像下载 |
 

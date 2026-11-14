@@ -4,8 +4,8 @@
 
 [vfox](https://vfox.dev/) 的 Python 插件。
 
-它可以从 python.org 安装 CPython，在 Linux 和 macOS 上从源码编译 CPython，也
-可以下载 uv-build 的预编译包。GraalPy 在所有支持的平台上都来自 Oracle 发布的
+它在 Windows 上从 python.org 安装 CPython。在 Linux 和 macOS 上，有对应的 uv-build
+预编译包时下载它，否则从源码编译 CPython。GraalPy 在所有支持的平台上都来自 Oracle 发布的
 压缩包。它还能纳入本机已有的 Python——系统包管理器、uv、pyenv、Conda 等等——
 并读取项目里的 `.python-version`，让为 pyenv 和 uv 写的项目按文件里写的版本
 打开。
@@ -48,14 +48,15 @@ vfox install python@graalpy-24.2.0
 
 | 平台 | 默认来源 | 版本范围 |
 | --- | --- | --- |
-| Linux | CPython 用 pyenv 从源码编译；GraalPy 用 Oracle 压缩包 | pyenv 收录的全部版本，包括 GraalPy、PyPy 和 Conda |
-| macOS | CPython 用 pyenv 从源码编译；GraalPy 用 Oracle 压缩包 | pyenv 收录的全部版本，包括 GraalPy、PyPy 和 Conda |
+| Linux | CPython 在 uv-build 索引列出该版本时用 uv-build 预编译包，否则用 pyenv 从源码编译；GraalPy 用 Oracle 压缩包 | pyenv 收录的全部版本，包括 GraalPy、PyPy 和 Conda，以及只有 uv-build 列出的 CPython 版本 |
+| macOS | CPython 在 uv-build 索引列出该版本时用 uv-build 预编译包，否则用 pyenv 从源码编译；GraalPy 用 Oracle 压缩包 | pyenv 收录的全部版本，包括 GraalPy、PyPy 和 Conda，以及只有 uv-build 列出的 CPython 版本 |
 | Windows | CPython 用 python.org 安装包；GraalPy 用 Oracle 压缩包 | 当前架构的稳定 CPython 安装包，以及 GraalPy 的 amd64 版本 |
 
 Windows 上，python.org 没有为仅提供源码的安全版本发布安装包，稳定的安装包名也
 覆盖不了预发布版和自由线程的 CPython 构建，所以这些版本不在列表里。设置
-`VFOX_PYTHON_USE_UV_BUILD=1` 后，Linux、macOS 和 Windows 都改为下载 uv-build
-的预编译包；uv-build 只包含 CPython。详见
+`VFOX_PYTHON_USE_UV_BUILD=0` 后，Linux 和 macOS 上的每个 CPython 都从源码编译；设置
+`VFOX_PYTHON_USE_UV_BUILD=1` 后，只使用 uv-build 的预编译包，适用于 Linux、macOS 和
+Windows；uv-build 只包含 CPython。详见
 [docs/zh-CN/uv.md](docs/zh-CN/uv.md)。
 
 `py.exe` 不读取 `PATH`。Windows 上的安装会自动注册到 vfox 自己的 PEP 514
@@ -114,15 +115,17 @@ echo graalpy-24.2.0 > .python-version
 
 ## uv
 
-uv-build 是可选的预编译来源。`python@3.12` 会安装它的索引里最新的 3.12 版本：
+在 Linux 和 macOS 上，CPython 安装在 uv-build 索引列出该版本时使用它的预编译包，因此不需要编译器或构建依赖。
+索引只列出部分版本，通常是每个版本线的最新补丁版，所以较旧的补丁版会用 pyenv 从源码编译，索引没有列出的版本也是如此。GraalPy 来自 Oracle 的压缩包；PyPy 和 Conda 用 pyenv 从源码编译。部分版本号（如 `python@3.12`）会先在 uv-build 索引里选出最新的 3.12 版本，并安装它的预编译包。只有索引没有列出的版本系列，才会改为选中 `vfox search python` 列出的、最新的匹配版本，并从源码编译。要编译索引里还没有的较新补丁版，请写出它的精确版本号：
 
 ```bash
-export VFOX_PYTHON_USE_UV_BUILD=1
-vfox install python@3.12
+vfox install python@3.12        # uv-build 索引里最新的 3.12，安装预编译包
+vfox install python@3.12.16     # 精确的 3.12.16
 ```
 
-uv-build 不需要编译器或构建依赖。Linux 上会自动识别 libc；要覆盖识别结果，
-设置 `VFOX_PYTHON_UV_LIBC=gnu` 或 `VFOX_PYTHON_UV_LIBC=musl`。
+设置 `VFOX_PYTHON_USE_UV_BUILD=0` 可以始终从源码编译；设置 `VFOX_PYTHON_USE_UV_BUILD=1` 则只使用 uv-build，索引里没有列出的版本会失败。若设置了 `VFOX_PYTHON_MIRROR`，CPython 的源码构建会继续经由该镜像，除非同时设置了 `VFOX_PYTHON_UV_BUILD_MIRROR`。
+Linux 上会自动识别 libc；要覆盖识别结果，设置 `VFOX_PYTHON_UV_LIBC=gnu` 或
+`VFOX_PYTHON_UV_LIBC=musl`。
 `uv python install` 装的 Python 和别的安装一样，会被
 `vfox link --detect python` 找到。预编译包的细节，以及怎样让 uv 使用 vfox
 选中的解释器而不是再下载一份，见

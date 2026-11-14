@@ -45,3 +45,13 @@ jobs:
         run: mise x aqua:LuaLS/lua-language-server@3.19.1 -- lua-language-server --check . --checklevel=Warning
       - name: Check workflow files
         run: mise x aqua:rhysd/actionlint@1.7.7 -- actionlint
+
+  docs:
+    name: Docs in English and Chinese
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Check that the Chinese pages match the English ones
+        run: python3 -I .github/scripts/check_docs_parity.py .

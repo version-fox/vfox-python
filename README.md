@@ -4,8 +4,9 @@
 
 Python plugin for [vfox](https://vfox.dev/).
 
-It installs CPython from python.org, compiles CPython from source on Linux and
-macOS, or downloads a prebuilt uv-build archive. GraalPy comes from Oracle's
+It installs CPython from python.org on Windows. On Linux and macOS it downloads a
+prebuilt uv-build archive when one exists, and compiles CPython from source
+otherwise. GraalPy comes from Oracle's
 release archives on every supported platform. It also adopts the Pythons
 already on the machine — system packages, uv, pyenv, Conda and others — and
 reads a project's `.python-version`, so pyenv and uv projects open on the
@@ -52,14 +53,15 @@ The available versions depend on the platform:
 
 | Platform | Default source | Versions |
 | --- | --- | --- |
-| Linux | pyenv source build for CPython; Oracle archive for GraalPy | every release pyenv knows, including GraalPy, PyPy and Conda |
-| macOS | pyenv source build for CPython; Oracle archive for GraalPy | every release pyenv knows, including GraalPy, PyPy and Conda |
+| Linux | uv-build archive for CPython when the index has the version, otherwise a pyenv source build; Oracle archive for GraalPy | every release pyenv knows, including GraalPy, PyPy and Conda, plus CPython releases only uv-build lists |
+| macOS | uv-build archive for CPython when the index has the version, otherwise a pyenv source build; Oracle archive for GraalPy | every release pyenv knows, including GraalPy, PyPy and Conda, plus CPython releases only uv-build lists |
 | Windows | python.org installer for CPython; Oracle zip for GraalPy | stable CPython installers for the architecture, plus GraalPy amd64 releases |
 
 On Windows, source-only security releases and pre-release or free-threaded
 CPython builds are left out because python.org's stable installer names do not
-cover them. `VFOX_PYTHON_USE_UV_BUILD=1` switches to prebuilt uv-build archives
-on Linux, macOS and Windows; uv-build contains CPython only. See
+cover them. `VFOX_PYTHON_USE_UV_BUILD=0` builds every CPython from source on
+Linux and macOS, and `VFOX_PYTHON_USE_UV_BUILD=1` uses prebuilt uv-build archives
+only, on Linux, macOS and Windows; uv-build contains CPython only. See
 [docs/uv.md](docs/uv.md).
 
 `py.exe` does not read `PATH`. Windows installs are registered automatically
@@ -120,16 +122,26 @@ echo graalpy-24.2.0 > .python-version
 
 ## uv
 
-uv-build is the optional prebuilt source. `python@3.12` installs the newest 3.12
-release in its index:
+On Linux and macOS, a CPython install takes the prebuilt uv-build archive when the
+index lists the version, so it needs no compiler or build dependencies. The index
+lists only some releases, normally the newest patch of each line, so an older
+patch builds from source with pyenv, as does a version the index does not list.
+GraalPy comes from Oracle's archive; PyPy and Conda build from source with pyenv.
+A partial name such as `python@3.12` picks the newest 3.12 that the index lists, and
+installs its archive. Only a line the index does not list falls back to the newest
+match in `vfox search python`, which is built from source. To build a newer patch
+that the index does not list yet, name its exact version:
 
 ```bash
-export VFOX_PYTHON_USE_UV_BUILD=1
-vfox install python@3.12
+vfox install python@3.12        # newest 3.12 in the uv-build index, as an archive
+vfox install python@3.12.16     # exactly 3.12.16
 ```
 
-uv-build needs no compiler or build dependencies. On Linux the libc is
-detected automatically; set `VFOX_PYTHON_UV_LIBC=gnu` or
+Set `VFOX_PYTHON_USE_UV_BUILD=0` to always build from source, or
+`VFOX_PYTHON_USE_UV_BUILD=1` to use uv-build only, which fails for a version the
+index does not list. If `VFOX_PYTHON_MIRROR` is set, CPython keeps its source
+build on that mirror, unless `VFOX_PYTHON_UV_BUILD_MIRROR` is set too. On Linux the
+libc is detected automatically; set `VFOX_PYTHON_UV_LIBC=gnu` or
 `VFOX_PYTHON_UV_LIBC=musl` to override it. uv-managed Pythons from
 `uv python install` are picked up by `vfox link --detect python` like any other
 installation. See [docs/uv.md](docs/uv.md) for the archive and for how to make

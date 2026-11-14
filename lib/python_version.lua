@@ -292,4 +292,59 @@ function python_version.find_release(names, request)
     return best
 end
 
+--- Whether a name is a development snapshot from pyenv, such as 3.16-dev. A snapshot
+--- has a dash; a release name never does.
+local function isSnapshot(name)
+    return string.find(name, "-", 1, true) ~= nil
+end
+
+--- The release numbers of a name, without its suffix: 3.16.0a2 gives 3.16.0 and
+--- 3.13.18t gives 3.13.18, so a pre-release or a free-threaded build sorts with its
+--- release.
+local function numberPart(name)
+    local release = releaseOf(name)
+    return release:match("^[%d.]+") or release
+end
+
+--- Ranks names that have the same release numbers: a final build outranks its
+--- free-threaded build, which outranks a pre-release, which outranks a
+--- free-threaded pre-release.
+local function sameNumberRank(name)
+    local _, free, pre = releaseOf(name)
+    if pre then
+        return free and 0 or 1
+    end
+    return free and 2 or 3
+end
+
+--- Whether a name is a free-threaded build, such as 3.13.18t. A free-threaded build is
+--- installed only when a request names it, so `latest` skips it.
+function python_version.is_free_threaded(name)
+    if type(name) ~= "string" then
+        return false
+    end
+    local _, free = releaseOf(name)
+    return free
+end
+
+--- Whether `a` is listed before `b` in a newest-first list of CPython names. The
+--- release numbers decide, then sameNumberRank. A snapshot such as 3.16-dev comes
+--- after every release. Names that still tie sort by name, so the order does not
+--- depend on the order of the input.
+function python_version.newer_first(a, b)
+    local snapshotA, snapshotB = isSnapshot(a), isSnapshot(b)
+    if snapshotA ~= snapshotB then
+        return snapshotB
+    end
+    local order = python_version.compare(numberPart(a), numberPart(b))
+    if order ~= 0 then
+        return order > 0
+    end
+    local rankA, rankB = sameNumberRank(a), sameNumberRank(b)
+    if rankA ~= rankB then
+        return rankA > rankB
+    end
+    return a > b
+end
+
 return python_version

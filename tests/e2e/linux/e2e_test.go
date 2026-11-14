@@ -55,8 +55,9 @@ func TestNativeE2E(t *testing.T) {
 	// .python-version subtest asks for it, so it runs after uv-build.
 	var uvVersion string
 
+	// The default is uv-build for CPython, so the source-build subtests opt out.
 	t.Run("source build", func(t *testing.T) {
-		output := run(t, nil, `
+		output := run(t, map[string]string{"VFOX_PYTHON_USE_UV_BUILD": "0"}, `
 set -euo pipefail
 eval "$(vfox activate bash)"
 vfox install python@3.12.2
@@ -69,7 +70,8 @@ python -V
 
 	t.Run("mirror", func(t *testing.T) {
 		output := run(t, map[string]string{
-			"VFOX_PYTHON_MIRROR": "https://mirrors.huaweicloud.com/python/",
+			"VFOX_PYTHON_MIRROR":       "https://mirrors.huaweicloud.com/python/",
+			"VFOX_PYTHON_USE_UV_BUILD": "0",
 		}, `
 set -euo pipefail
 eval "$(vfox activate bash)"
