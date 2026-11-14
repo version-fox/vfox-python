@@ -16,6 +16,7 @@ local http = require("http")
 local html = require("html")
 local json = require("json")
 local windowsCommand = require("windows_command")
+local bundle = require("bundle")
 
 -- get mirror
 local PYTHON_URL = "https://www.python.org/ftp/python/"
@@ -290,11 +291,75 @@ function windowsInstallMsi(path, url, version, filename)
     createPythonAliases(qInstallPath, version)
 end
 
+-- Runs a command that must succeed, or raises an error that names the step.
+local function runWindowsCommand(command, step)
+    if os.execute(command) ~= 0 then
+        error("could not " .. step)
+    end
+end
+
+-- Writes one attached container of the installer to a file, so expand.exe can unpack it.
+local function writeCabinet(file, range, target)
+    local data = bundle.readRange(file, range)
+    local out = io.open(target, "wb")
+    if out == nil then
+        error("cannot write " .. target)
+    end
+    out:write(data)
+    out:close()
+end
+
+-- Writes the MSI packages of a python.org EXE into <scratch>\packages, under the names the
+-- bundle manifest gives them. Burn keeps the packages in an attached cabinet, and its manifest,
+-- in the UX cabinet, names each one. expand.exe, which ships with Windows, unpacks both.
+function extractBundlePackages(installerPath, scratchPath)
+    local file = io.open(installerPath, "rb")
+    if file == nil then
+        error("cannot read the installer")
+    end
+    local ranges = bundle.containers(file)
+    local uxPath = scratchPath .. "\\ux"
+    local packagesPath = scratchPath .. "\\packages"
+    runWindowsCommand(windowsCommand.makeDirectory(uxPath), "create " .. uxPath)
+    runWindowsCommand(windowsCommand.makeDirectory(packagesPath), "create " .. packagesPath)
+
+    writeCabinet(file, ranges[0], scratchPath .. "\\ux.cab")
+    runWindowsCommand(windowsCommand.expand(scratchPath .. "\\ux.cab", uxPath), "unpack the UX cabinet")
+    local manifestFile = io.open(uxPath .. "\\0", "rb")
+    if manifestFile == nil then
+        error("the UX cabinet has no bundle manifest")
+    end
+    local manifest = bundle.parseManifest(manifestFile:read("*a"))
+    manifestFile:close()
+
+    local packageRange = ranges[manifest.attachedIndex]
+    if packageRange == nil then
+        error("the bundle manifest names a container the installer does not have")
+    end
+    writeCabinet(file, packageRange, scratchPath .. "\\packages.cab")
+    file:close()
+    runWindowsCommand(windowsCommand.expand(scratchPath .. "\\packages.cab", packagesPath), "unpack the packages")
+
+    local named = {}
+    for _, payload in ipairs(manifest.payloads) do
+        if payload.file ~= nil and payload.file:lower():match("%.msi$") and not named[payload.file] then
+            named[payload.file] = true
+            local renamed, renameErr =
+                os.rename(packagesPath .. "\\" .. payload.source, packagesPath .. "\\" .. payload.file)
+            if not renamed then
+                error("cannot name " .. payload.file .. ": " .. tostring(renameErr))
+            end
+        end
+    end
+    if next(named) == nil then
+        error("the bundle manifest lists no MSI packages")
+    end
+end
+
 function windowsInstallExe(path, url, version, filename)
     --- Attention system difference
     local qInstallFile = path .. "\\" .. filename
     local qInstallPath = path
-    local msiPath = path .. "\\AttachedContainer"
 
     -- download
     print("Downloading installer...")
@@ -309,32 +374,21 @@ function windowsInstallExe(path, url, version, filename)
         error("Downloading installer failed")
     end
 
-    -- Extract
-    print("Extracting installer...")
-    local wixBin = RUNTIME.pluginDirPath .. "\\bin\\WiX\\dark.exe"
-    -- Antivirus software can quarantine the WiX tools. Name the missing file
-    -- rather than running nothing (issue #297).
-    local wixFile = io.open(wixBin, "r")
-    if not wixFile then
-        error(
-            "WiX dark.exe is missing at "
-                .. wixBin
-                .. ". Antivirus software may have quarantined the plugin files; restore them, exclude "
-                .. RUNTIME.pluginDirPath
-                .. " from scanning, and install again."
-        )
+    -- Packages: the bundle keeps its MSI packages in a cabinet inside the installer. expand.exe,
+    -- which ships with Windows, unpacks it, so the plugin bundles no extraction tool. The
+    -- scratch folder lives under TEMP, which has no percent signs for the installer to expand.
+    local tempRoot = os.getenv("TEMP")
+    if tempRoot == nil or tempRoot == "" or tempRoot:find("%", 1, true) then
+        error("Installer packages need a TEMP directory without percent signs")
     end
-    io.close(wixFile)
-    local command = windowsCommand.native(wixBin, { "-x", qInstallPath, qInstallFile })
-    local exitCode = os.execute(command)
-    if exitCode ~= 0 then
-        error(
-            "Extract failed: dark.exe exited with code "
-                .. tostring(exitCode)
-                .. " for "
-                .. qInstallFile
-                .. ". If dark.exe printed nothing, antivirus software may have blocked it."
-        )
+    local scratchPath = tempRoot .. "\\vfox-python-" .. os.time() .. "-" .. math.random(100000, 999999)
+    local msiPath = scratchPath .. "\\packages"
+    print("Extracting installer packages...")
+    local ok, extractErr = pcall(extractBundlePackages, qInstallFile, scratchPath)
+    if not ok then
+        os.execute(windowsCommand.removeTree(scratchPath))
+        os.remove(qInstallFile)
+        error("Extracting installer packages failed for " .. qInstallFile .. ": " .. tostring(extractErr))
     end
 
     -- Cleaning up ...
@@ -390,6 +444,12 @@ function windowsInstallExe(path, url, version, filename)
             error("Install msi failed: " .. file)
         end
         os.remove(qInstallPath .. "\\" .. file)
+    end
+
+    -- The MSI packages are installed, so their scratch folder is no longer needed.
+    print("Removing installer packages...")
+    if os.execute(windowsCommand.removeTree(scratchPath)) ~= 0 then
+        print("Warning: could not remove " .. scratchPath)
     end
 
     -- Install pip

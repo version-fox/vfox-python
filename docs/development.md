@@ -16,6 +16,7 @@ hooks/parse_legacy_file.lua     .python-version
 hooks/detect.lua                vfox link --detect: find Pythons on the machine
 lib/util.lua                    versions, downloads, Windows install, uv-build, shebangs
 lib/windows_command.lua         base64 PowerShell commands and the MSI junction
+lib/bundle.lua                  reads the attached cabinets and the manifest of a python.org EXE
 lib/pep514.lua                  Windows Python launcher registration
 lib/python_version.lua          version parsing and installed-name matching
 lib/detect_python.lua           the Detect hook's sources and filtering
@@ -23,7 +24,6 @@ tests/*_test.lua                offline hook tests, run by vfox plugin test
 tests/windows_install_layouts.lua  the Windows command paths, with stubbed processes
 tests/e2e/                      Go end-to-end suites for Linux and Windows; see e2e.md
 tests/fixtures/                 .python-version files used by the legacy-file test
-bin/WiX/                        the WiX tools used to extract Windows EXE installers
 .github/workflows/              test, lint, license, e2e and publish
 docs/, docs/zh-CN/              documentation in English and Chinese
 Injection.lua                   type hints for what vfox injects, never loaded
@@ -85,9 +85,10 @@ directory (`path`) and name (`version`).
 
 - On Linux and macOS, pyenv is cloned into `ctx.rootPath .. "/pyenv"` and
   `python-build <version> <path>` runs. The clone is removed afterwards.
-- On Windows, a CPython EXE is extracted with `bin/WiX/dark.exe`, its MSIs are
-  installed into `path`, and `ensurepip` bootstraps pip. An MSI is installed
-  directly. Alias executables are copied next to `python.exe`.
+- On Windows, a CPython EXE's MSIs are unpacked from the cabinet inside the
+  installer with `expand.exe`. The MSIs are installed into `path`, the scratch
+  folder is removed, and `ensurepip` bootstraps pip. An MSI is installed directly. Alias executables
+  are copied next to `python.exe`.
 - A GraalPy archive is already unpacked by vfox. The hook finds the payload
   under its `graalpy*-<platform>` directory and runs the bundled `ensurepip`.
   On Unix it repairs shebangs; on Windows it runs `bin/python.exe` and creates
@@ -280,8 +281,7 @@ reads `.luarc.json`, which declares the vfox globals and disables only
 `duplicate-set-field` (tests intentionally replace `io.popen` and friends).
 
 The license check reads `.licenserc.yaml`; `.license.tpl` is the plain-text
-copy. Markdown, JSON, `LICENSE`, `.tool-versions`, `tests/fixtures/**` and the
-third-party WiX files under `bin/` are ignored. New Lua, YAML, TOML, Python
+copy. Markdown, JSON, `LICENSE`, `.tool-versions` and `tests/fixtures/**` are ignored. New Lua, YAML, TOML, Python
 and ignore files need the header; `license-eye` prints the fix command when one
 is missing.
 

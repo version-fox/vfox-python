@@ -16,6 +16,7 @@ hooks/parse_legacy_file.lua     .python-version
 hooks/detect.lua                vfox link --detect：找出本机已有的 Python
 lib/util.lua                    版本、下载、Windows 安装、uv-build、shebang
 lib/windows_command.lua         base64 PowerShell 命令和 MSI junction
+lib/bundle.lua                  读取 python.org EXE 的附加 CAB 和 manifest
 lib/pep514.lua                  Windows Python 启动器注册
 lib/python_version.lua          版本解析和已安装名字匹配
 lib/detect_python.lua           Detect 钩子的来源和过滤
@@ -23,7 +24,6 @@ tests/*_test.lua                离线的钩子测试，由 vfox plugin test 运
 tests/windows_install_layouts.lua  Windows 命令路径，进程调用用 stub 代替
 tests/e2e/                      Go 端到端套件，覆盖 Linux 和 Windows，见 e2e.md
 tests/fixtures/                 .python-version 测试用的文件
-bin/WiX/                        解 Windows EXE 安装包用的 WiX 工具
 .github/workflows/              test、lint、license、e2e 和 publish
 docs/, docs/zh-CN/              中英文文档
 Injection.lua                   vfox 注入对象的类型提示，不会被加载
@@ -77,8 +77,8 @@ vfox 加载 `metadata.lua`，命令需要时调用相应的钩子，并向钩子
 
 - Linux 和 macOS 上，把 pyenv 克隆到 `ctx.rootPath .. "/pyenv"`，运行
   `python-build <版本> <path>`，结束后删掉克隆。
-- Windows 上，CPython 的 EXE 用 `bin/WiX/dark.exe` 解开，把里面的 MSI 安装进
-  `path`，再用 `ensurepip` 装 pip。MSI 直接安装。别名可执行文件复制到
+- Windows 上，CPython 的 EXE 用 Windows 自带的 `expand.exe` 从里面解出 MSI，把 MSI 安装进
+  `path`，删除临时目录，再用 `ensurepip` 装 pip。MSI 直接安装。别名可执行文件复制到
   `python.exe` 旁边。
 - GraalPy 压缩包已经由 vfox 解压；钩子在 `graalpy*-<平台>` 目录下找 payload，
   运行包里自带的 `ensurepip`。Unix 上修 shebang；Windows 上用
@@ -236,8 +236,7 @@ LF，这样 Windows 上的检查和 Linux 一致。LuaLS 读 `.luarc.json`，里
 vfox 的全局变量，只关闭 `duplicate-set-field`（测试会有意替换 `io.popen` 等）。
 
 许可证检查读 `.licenserc.yaml`，`.license.tpl` 是纯文本副本。Markdown、JSON、
-`LICENSE`、`.tool-versions`、`tests/fixtures/**` 和 `bin/` 下的第三方 WiX
-文件被忽略。新增的 Lua、YAML、TOML、Python 和 ignore 文件都要有头；
+`LICENSE`、`.tool-versions` 和 `tests/fixtures/**` 被忽略。新增的 Lua、YAML、TOML、Python 和 ignore 文件都要有头；
 缺少时 `license-eye` 会打印修复命令。
 
 ## CI

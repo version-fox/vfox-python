@@ -119,7 +119,7 @@ jobs:
           $policy = 'HKLM:\Software\Policies\Microsoft\Windows\Installer'
           New-Item -Path $policy -Force | Out-Null
           New-ItemProperty -Path $policy -Name Logging -Value 'voicewarmupx' -PropertyType String -Force | Out-Null
-      - name: Install Python through WiX and embedded MSI packages
+      - name: Install Python from the installer layout and MSI packages
         run: |
           $ErrorActionPreference = 'Stop'
           $PSNativeCommandUseErrorActionPreference = $true
@@ -130,13 +130,13 @@ jobs:
           [System.IO.Directory]::CreateDirectory($env:VFOX_HOME) | Out-Null
           $env:VFOX_PYTHON_USE_UV_BUILD = '0'
           $archive = Join-Path $env:RUNNER_TEMP 'python-plugin.zip'
-          Compress-Archive -Path metadata.lua,hooks,lib,bin -DestinationPath $archive
+          Compress-Archive -Path metadata.lua,hooks,lib -DestinationPath $archive
           & $env:VFOX_TEST_CLI add --source $archive
           $junctionsBefore = @(Get-ChildItem -LiteralPath ([IO.Path]::GetTempPath()) -Filter 'vfox-python-msi-*' | ForEach-Object FullName)
           $install = Start-Process -FilePath $env:VFOX_TEST_CLI -ArgumentList @('install', 'python@3.14.5') -NoNewWindow -PassThru
           if (-not $install.WaitForExit(300000)) {
             Get-CimInstance Win32_Process |
-              Where-Object { $_.Name -match '^(vfox|msiexec|powershell|dark)\.exe$' } |
+              Where-Object { $_.Name -match '^(vfox|msiexec|powershell)\.exe$' } |
               Select-Object ProcessId,ParentProcessId,Name,CommandLine | Format-List
             foreach ($directory in @($env:TEMP, (Join-Path $env:WINDIR 'Temp'))) {
               Get-ChildItem -LiteralPath $directory -Filter 'MSI*.log' -ErrorAction SilentlyContinue |

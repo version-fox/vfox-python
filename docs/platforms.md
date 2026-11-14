@@ -17,7 +17,7 @@ The CPython source build takes the pyenv tag and version list, clones pyenv at
 that tag, and runs its `python-build`. It needs a C toolchain and the headers
 Python links against. The Windows path downloads the python.org installer,
 installs its MSIs into the `python-<version>` directory and runs `ensurepip`; for an EXE,
-the bundled WiX tools extract the MSIs first. It needs no compiler. GraalPy is
+the MSIs are unpacked from the installer with `expand.exe` first. It needs no compiler. GraalPy is
 downloaded from Oracle's releases on every supported platform and unpacked; it
 needs no compiler. Linux and macOS have amd64 and arm64 assets; Windows only
 amd64.
@@ -162,10 +162,11 @@ python.org:
 | 3.12.10 | `python-3.12.10-amd64.exe`, no MSI | EXE |
 | 2.7.18 | `python-2.7.18.amd64.msi`, no EXE | MSI |
 
-- **EXE:** the file is a bundle. The plugin extracts its MSIs with the bundled
-  WiX `dark.exe`, deletes `launcher.msi`, `path.msi`, `appendpath.msi` and
-  `pip.msi`, and installs the remaining MSIs into the `python-<version>` directory with
-  `msiexec /quiet /a <msi> TargetDir=<dir>`. It then runs `ensurepip`. Because
+- **EXE:** the file is a bundle. The plugin unpacks its MSIs from the cabinet inside
+  the bundle with `expand.exe`, deletes `launcher.msi`, `path.msi`, `appendpath.msi`
+  and `pip.msi`, and installs the remaining MSIs into the `python-<version>` directory
+  with `msiexec /quiet /a <msi> TargetDir=<dir>`. It then removes the scratch folder
+  and runs `ensurepip`. Because
   the launcher, PATH and pip MSIs are skipped, a vfox install adds no `py.exe`,
   does not change `PATH`, and gets pip from `ensurepip`.
 - **MSI:** the plugin installs the MSI the same way, with

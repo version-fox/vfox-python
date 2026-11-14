@@ -16,7 +16,7 @@ local command = {}
 
 local alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
 local function base64(value)
-    local result = {}
+    local chunks, result = {}, {}
     for i = 1, #value, 3 do
         local a, b, c = value:byte(i, i + 2)
         local number = a * 65536 + (b or 0) * 256 + (c or 0)
@@ -28,8 +28,14 @@ local function base64(value)
             .. alphabet:sub(second, second)
             .. (b and alphabet:sub(third, third) or "=")
             .. (c and alphabet:sub(fourth, fourth) or "=")
+        -- GopherLua runs out of registry space when one table holds a whole long script.
+        if #result >= 256 then
+            chunks[#chunks + 1] = table.concat(result)
+            result = {}
+        end
     end
-    return table.concat(result)
+    chunks[#chunks + 1] = table.concat(result)
+    return table.concat(chunks)
 end
 
 -- Encode UTF-8 values separately so even non-ASCII paths produce an ASCII
@@ -227,6 +233,27 @@ function command.registryDeleteIfOwned(subkey, expectedPath)
         "exit 0",
     }
     return powershell(table.concat(lines, "\n"))
+end
+
+function command.removeTree(path)
+    return powershell(
+        "if (Test-Path -LiteralPath "
+            .. literal(path)
+            .. ") { Remove-Item -LiteralPath "
+            .. literal(path)
+            .. " -Recurse -Force }"
+    )
+end
+
+-- Unpacks a cabinet into a folder with expand.exe, which ships with Windows. The argument is
+-- passed as a value, so PowerShell does not expand the wildcard in -F:*.
+function command.expand(cabinetPath, folderPath)
+    return command.native("expand.exe", { "-F:*", cabinetPath, folderPath })
+end
+
+-- Creates a folder and any missing parents.
+function command.makeDirectory(path)
+    return powershell("New-Item -ItemType Directory -Force -Path " .. literal(path) .. " | Out-Null")
 end
 
 return command

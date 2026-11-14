@@ -147,7 +147,7 @@ is used only when there is no EXE. For example, python.org publishes only an EXE
 for 3.12.10, and only an MSI for 2.7.18. See [platforms.md](platforms.md#windows)
 for the order of the checks.
 
-- `.exe` installers are extracted with the bundled WiX `dark.exe`. The MSIs
+- `.exe` installers are unpacked with `expand.exe`. The MSIs
   inside are installed into the `python-<version>` directory with `msiexec /quiet /a`; the
   launcher, PATH and pip MSIs are skipped, and pip is bootstrapped with
   `ensurepip`.

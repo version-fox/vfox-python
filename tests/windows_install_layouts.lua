@@ -42,6 +42,14 @@ package.preload.json = function()
     return {}
 end
 local oldExecute, oldPopen, oldOpen, oldClose, oldRemove = os.execute, io.popen, io.open, io.close, os.remove
+local oldGetenv = os.getenv
+-- The layout goes under TEMP, so the tests give TEMP a plain Windows path.
+os.getenv = function(name)
+    if name == "TEMP" then
+        return "C:\\Users\\Runner\\AppData\\Local\\Temp"
+    end
+    return oldGetenv(name)
+end
 
 -- Decode the command independently so the test inspects what PowerShell will
 -- execute, rather than only checking a command string prefix.
@@ -161,9 +169,143 @@ os.remove = function()
     return true
 end
 require("util")
+local windowsCommand = require("windows_command")
+local bundle = require("bundle")
+-- The installer is not on disk here, so the packages step is stubbed. It issues the same
+-- expand.exe command as the real step, and the bundle tests further down cover the parsing.
+local stubbedScratch = ""
+extractBundlePackages = function(installerPath, scratchPath)
+    stubbedScratch = scratchPath
+    if os.execute(windowsCommand.expand(scratchPath .. "\\packages.cab", scratchPath .. "\\packages")) ~= 0 then
+        error("could not unpack the packages")
+    end
+end
 local path = "C:\\Users\\Mechael Jackson's & %USERNAME% !\\python-3.14.5"
 windowsInstallExe(path, "https://example.invalid/python.exe", "3.14.5", "python.exe")
 assert(#state.commands >= 7, "installer, enumeration, MSI, pip and aliases must be exercised")
+-- The packages are unpacked by expand.exe under TEMP, and removed when the install is done.
+local function literalArguments(command)
+    local values = {}
+    for encoded in decodeCommand(command):gmatch("FromBase64String%('([A-Za-z0-9+/=]*)'%)") do
+        values[#values + 1] = decodeBase64(encoded)
+    end
+    return values
+end
+local extractArguments = literalArguments(state.commands[1])
+local scratchDir = stubbedScratch
+assert(
+    scratchDir:find("C:\\Users\\Runner\\AppData\\Local\\Temp\\vfox-python-", 1, true) == 1
+        and not scratchDir:find("%", 1, true),
+    "the packages must be extracted under TEMP, where the installer path has no percent signs"
+)
+assert(
+    extractArguments[1] == "expand.exe" and extractArguments[2] == "-F:*",
+    "expand.exe must unpack the installer's cabinets, with its wildcard passed as a value"
+)
+local scratchRemoved = false
+for _, command in ipairs(state.commands) do
+    if decodeCommand(command):find("Remove-Item", 1, true) then
+        scratchRemoved = literalArguments(command)[1] == scratchDir
+    end
+end
+assert(scratchRemoved, "the extracted packages must be removed after installation")
+
+-- bundle.lua reads a synthetic installer laid out like a python.org EXE: an MZ/PE header, a
+-- .wixburn section, and a Burn header that places the UX container after the stub and the
+-- attached containers after the engine.
+local function u16(value)
+    return string.char(value % 256, math.floor(value / 256) % 256)
+end
+local function u32(value)
+    return string.char(
+        value % 256,
+        math.floor(value / 256) % 256,
+        math.floor(value / 65536) % 256,
+        math.floor(value / 16777216) % 256
+    )
+end
+local function zeros(count)
+    return string.rep("\0", count)
+end
+-- Built from a few large pieces: GopherLua's table.concat overflows on one piece per byte.
+local synthetic = table.concat({
+    "MZ",
+    zeros(0x3C - 2),
+    u32(0x80),
+    zeros(0x80 - 0x40),
+    "PE\0\0",
+    zeros(2),
+    u16(1),
+    zeros(12),
+    u16(0xE0),
+    zeros(2),
+    zeros(0xE0),
+    ".wixburn",
+    zeros(12),
+    u32(0x400),
+    zeros(0x400 - 0x190),
+    u32(0x00F14300),
+    u32(2),
+    zeros(16),
+    u32(0x1000),
+    u32(0),
+    u32(0),
+    u32(0),
+    u32(1),
+    u32(2),
+    u32(0x100),
+    u32(0x200),
+    zeros(0x1000 - 0x438),
+    zeros(0x100 + 0x200),
+})
+assert(#synthetic == 0x1300, "the synthetic installer has the layout the tests expect")
+local function fakeFile(content)
+    local position = 0
+    return {
+        seek = function(_, _, offset)
+            position = offset
+        end,
+        read = function(_, count)
+            local data = content:sub(position + 1, position + count)
+            position = position + #data
+            if #data == 0 then
+                return nil
+            end
+            return data
+        end,
+    }
+end
+local ranges = bundle.containers(fakeFile(synthetic))
+assert(ranges[0].offset == 0x1000 and ranges[0].size == 0x100, "the UX container follows the stub")
+assert(ranges[1].offset == 0x1100 and ranges[1].size == 0x200, "attached containers follow the engine")
+assert(not pcall(bundle.containers, fakeFile("XX" .. string.rep("\0", 0x200))), "a file without MZ is rejected")
+
+local manifest = bundle.parseManifest(
+    '<BurnManifest xmlns="http://schemas.microsoft.com/wix/2008/Burn">'
+        .. '<Container Id="UXContainer" FilePath="u.exe" Attached="yes" AttachedIndex="0" />'
+        .. '<Container Id="WixAttachedContainer" FilePath="python.exe" AttachedIndex="1" Attached="yes" Primary="yes" />'
+        .. '<Payload Id="core_AllUsers" FilePath="core.msi" Packaging="embedded" SourcePath="a0" Container="WixAttachedContainer" />'
+        .. '<Payload Id="core_AllUsers_pdb" FilePath="core_pdb.msi" Packaging="external" DownloadUrl="https://example.invalid/core_pdb.msi" SourcePath="core_pdb.msi" />'
+        .. '<Payload Id="core_JustForMe" FilePath="core.msi" Packaging="embedded" SourcePath="a1" Container="WixAttachedContainer" />'
+        .. "</BurnManifest>"
+)
+assert(manifest.attachedIndex == 1, "the primary attached container is container 1")
+assert(
+    #manifest.payloads == 2 and manifest.payloads[1].file == "core.msi" and manifest.payloads[1].source == "a0",
+    "embedded payloads map their MSI name to their cabinet member, and external ones are skipped"
+)
+local expandArguments = literalArguments(windowsCommand.expand("C:\\a\\x.cab", "C:\\a\\out"))
+assert(
+    expandArguments[1] == "expand.exe"
+        and expandArguments[2] == "-F:*"
+        and expandArguments[3] == "C:\\a\\x.cab"
+        and expandArguments[4] == "C:\\a\\out",
+    "expand.exe takes -F:*, the cabinet and the folder"
+)
+assert(
+    decodeCommand(windowsCommand.makeDirectory("C:\\a")):find("New-Item", 1, true),
+    "folders are created with New-Item"
+)
 reset()
 windowsInstallMsi(path, "https://example.invalid/python.msi", "3.4.4", "python.msi")
 -- The MSI, ensurepip, six python aliases and six venv launcher aliases.
@@ -196,9 +338,9 @@ state.failOn = 3
 local msiOk, msiErr = pcall(windowsInstallMsi, path, "https://example.invalid/python.msi", "3.4.4", "python.msi")
 assert(not msiOk and tostring(msiErr):find("Failed to create Python executable alias", 1, true), tostring(msiErr))
 for _, failure in ipairs({
-    { 1, "Extract failed: dark.exe exited with code 1" },
+    { 1, "Extracting installer packages failed" },
     { 3, "Install msi failed" },
-    { 6, "executable alias" },
+    { 7, "executable alias" },
 }) do
     reset()
     state.failOn = failure[1]
@@ -207,21 +349,6 @@ for _, failure in ipairs({
     end)
     assert(not ok and tostring(err):find(failure[2], 1, true), tostring(err))
 end
--- A missing dark.exe (antivirus quarantine) must fail before any command runs.
-reset()
-local stubOpen = io.open
-io.open = function(name, mode)
-    if name:find("dark.exe", 1, true) then
-        return nil
-    end
-    return stubOpen(name, mode)
-end
-local darkOk, darkErr = pcall(function()
-    windowsInstallExe(path, "https://example.invalid/python.exe", "3.14.5", "python.exe")
-end)
-io.open = stubOpen
-assert(not darkOk and tostring(darkErr):find("WiX dark.exe is missing", 1, true), tostring(darkErr))
-assert(#state.commands == 0, "no installer command may run without dark.exe")
 for _, failure in ipairs({
     {
         name = "partial listing exits nonzero",
@@ -382,4 +509,5 @@ assert(junction:find("; exit $exitCode", 1, true), "cleanup must precede the MSI
 assert(not pcall(windows.msi, 'C:\\bad"path\\python.msi', path), "invalid Windows quote must fail")
 assert(not pcall(windows.native, "bad\nprogram", {}), "control characters must fail")
 os.execute, io.popen, io.open, io.close, os.remove = oldExecute, oldPopen, oldOpen, oldClose, oldRemove
+os.getenv = oldGetenv
 print("Windows installer command paths and shell expansion regression passed")
