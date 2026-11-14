@@ -107,6 +107,9 @@ jobs:
           $seconds = $watch.Elapsed.TotalSeconds
           if ($seconds -lt 3) { throw "the retries did not wait: the search took $seconds seconds" }
           Write-Output "Index retries waited for $([math]::Round($seconds, 1)) seconds in all"
+          # The search above is meant to fail. Its exit code stays in $LASTEXITCODE, which
+          # the runner reads, so the step states its own result once every check holds.
+          exit 0
 
   layouts:
     name: Windows installer command layouts
